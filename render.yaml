@@ -2,8 +2,7 @@ services:
   - type: web
     name: real-life-among-us-beta
     runtime: docker
-    rootDir: server
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./server/Dockerfile
     dockerContext: .
     plan: free
     region: frankfurt
