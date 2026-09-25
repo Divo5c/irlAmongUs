@@ -4,8 +4,18 @@ import 'package:real_life_amongus_app/core/network/socket_client.dart';
 
 void main() {
   group('serverUrlConfigurationError', () {
-    test('the build-time SERVER_URL has no localhost fallback', () {
-      expect(defaultServerUrl, isEmpty);
+    test('defaults to the Render beta server and accepts it for release', () {
+      expect(defaultServerUrl, renderBetaServerUrl);
+      expect(
+        serverUrlConfigurationError(defaultServerUrl, requireHttps: true),
+        isNull,
+      );
+    });
+
+    test('a LAN server can still override the beta default', () {
+      const lanUrl = 'http://192.168.1.5:3000';
+      expect(SocketClient(serverUrl: lanUrl).serverUrl, lanUrl);
+      expect(serverUrlConfigurationError(lanUrl), isNull);
     });
 
     test('rejects missing or malformed server configuration', () {

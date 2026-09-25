@@ -4,7 +4,12 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'server_url.dart';
 
-const defaultServerUrl = String.fromEnvironment('SERVER_URL', defaultValue: '');
+/// The beta backend is the default; `--dart-define=SERVER_URL=...` keeps
+/// local/LAN builds configurable.
+const defaultServerUrl = String.fromEnvironment(
+  'SERVER_URL',
+  defaultValue: renderBetaServerUrl,
+);
 
 abstract interface class RoomSocketClient {
   /// Public room updates (never contains player roles).

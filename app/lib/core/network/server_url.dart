@@ -1,3 +1,5 @@
+const renderBetaServerUrl = 'https://real-life-among-us-beta.onrender.com';
+
 String? serverUrlConfigurationError(
   String configuredUrl, {
   bool requireHttps = false,
