@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "room.schema.json",
+  "title": "Room",
+  "description": "A multiplayer game room and its current participants.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "code",
+    "hostId",
+    "players",
+    "status"
+  ],
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "The six-character room code shared by the host.",
+      "pattern": "^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$"
+    },
+    "hostId": {
+      "type": "string",
+      "description": "Identifier of the player hosting the room."
+    },
+    "players": {
+      "type": "array",
+      "description": "Players currently associated with the room.",
+      "items": {
+        "$ref": "player.schema.json"
+      }
+    },
+    "status": {
+      "$ref": "enums.schema.json#/$defs/RoomStatus"
+    },
+    "config": {
+      "$ref": "game-config.schema.json",
+      "description": "PUBLIC: active match settings (host-managed, server-validated)."
+    },
+    "map": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "map.schema.json"
+        }
+      ],
+      "description": "PUBLIC: authoritative 2D map once the host has started/finished map setup. null before that."
+    },
+    "meetingPhase": {
+      "$ref": "enums.schema.json#/$defs/MeetingPhase",
+      "description": "PUBLIC during MEETING status only."
+    },
+    "killReadyAt": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "PUBLIC during IN_GAME only. Epoch ms when the impostor's next kill unlocks; 0 = ready now."
+    },
+    "tasks": {
+      "type": "array",
+      "description": "Tasks for the current game. Only sent to the assigned player; public room views contain taskProgress instead.",
+      "items": {
+        "$ref": "task.schema.json"
+      }
+    },
+    "taskProgress": {
+      "type": "object",
+      "description": "Public aggregate of task completion, safe to broadcast.",
+      "additionalProperties": false,
+      "required": [
+        "completed",
+        "total"
+      ],
+      "properties": {
+        "completed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "winner": {
+      "$ref": "enums.schema.json#/$defs/PlayerRole",
+      "description": "Set once the game is over; indicates which role side won."
+    },
+    "reporterId": {
+      "type": "string",
+      "description": "During a meeting: ID of the player who reported the body."
+    },
+    "votingDeadline": {
+      "type": "string",
+      "format": "date-time",
+      "description": "During a meeting: ISO timestamp at which voting ends automatically."
+    },
+    "votedCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "During a meeting: aggregate number of cast votes (individual votes stay secret until game:meeting_result)."
+    },
+    "ejectedPlayerIds": {
+      "type": "array",
+      "description": "IDs of players who have been ejected during meetings.",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp at which the room was created."
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of the most recent room update."
+    }
+  }
+}

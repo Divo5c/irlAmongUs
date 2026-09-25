@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "player.schema.json",
+  "title": "Player",
+  "description": "A player participating in a room.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "role"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable player identifier, such as a UUID."
+    },
+    "name": {
+      "type": "string",
+      "description": "The display name selected by the player."
+    },
+    "role": {
+      "$ref": "enums.schema.json#/$defs/PlayerRole",
+      "description": "The assigned role. SECRET: never included in public room broadcasts; only sent privately to the owning player (and revealed in game:over)."
+    },
+    "isAlive": {
+      "type": "boolean",
+      "description": "Whether the player is active in the current game.",
+      "default": true
+    },
+    "isHost": {
+      "type": "boolean",
+      "description": "Whether the player created and administers the room.",
+      "default": false
+    },
+    "joinedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp at which the player joined the room."
+    }
+  }
+}

@@ -1,0 +1,70 @@
+# Environment files and credentials. Keep example templates in the repository.
+.env
+.env.*
+!.env.example
+!.env.*.example
+**/config.env
+**/secrets/
+**/credentials.json
+**/*credentials*.json
+**/*secret*.json
+
+# Private signing keys and certificates.
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Flutter / Dart generated files and build output.
+**/.dart_tool/
+**/.pub-cache/
+**/.pub/
+**/.packages
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/build/
+**/coverage/
+**/Flutter/ephemeral/
+**/Generated.xcconfig
+**/flutter_export_environment.sh
+**/local.properties
+*.symbols
+*.map.json
+
+# Android / Gradle local state.
+**/.gradle/
+**/.kotlin/
+**/.cxx/
+**/captures/
+**/key.properties
+
+# Node dependencies and debug logs.
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build products and runtime logs.
+*.apk
+*.aab
+*.ap_
+*.log
+
+# IDE and editor state.
+**/.idea/
+**/.vscode/
+*.iml
+*.ipr
+*.iws
+*.swp
+
+# OS metadata and temporary files.
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp

@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "map.schema.json",
+  "title": "GameMap",
+  "description": "Server-authoritative 2D single-floor map of the real play area. PUBLIC: distributed to every player. World coordinates are free floating-point units (not screen pixels); clients scale/pan for their display.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "nodes", "corridors", "rooms", "connections"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Incremented by the server on every saved change. Used for reconnect/cache/debugging."
+    },
+    "width": {
+      "type": "number",
+      "description": "Optional bounding width in world units (informational; clients auto-fit)."
+    },
+    "height": {
+      "type": "number",
+      "description": "Optional bounding height in world units."
+    },
+    "nodes": {
+      "type": "array",
+      "maxItems": 300,
+      "description": "Corridor waypoints set by the host while walking the real corridor network.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "x", "y"],
+        "properties": {
+          "id": { "$ref": "#/$defs/Id" },
+          "x": { "$ref": "#/$defs/Coord" },
+          "y": { "$ref": "#/$defs/Coord" }
+        }
+      }
+    },
+    "corridors": {
+      "type": "array",
+      "maxItems": 600,
+      "description": "Straight connections between two nodes; consecutive waypoints form the walkable corridor graph.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "a", "b"],
+        "properties": {
+          "id": { "$ref": "#/$defs/Id" },
+          "a": { "$ref": "#/$defs/Id" },
+          "b": { "$ref": "#/$defs/Id" }
+        }
+      }
+    },
+    "rooms": {
+      "type": "array",
+      "maxItems": 30,
+      "description": "Named rooms with a game function, drawn as closed polygons.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "type", "polygon"],
+        "properties": {
+          "id": { "$ref": "#/$defs/Id" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "Real-world room name chosen by the host (e.g. 'Chemistry Room')."
+          },
+          "type": {
+            "$ref": "enums.schema.json#/$defs/RoomType"
+          },
+          "polygon": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 40,
+            "description": "Corner points of the room in world coordinates; implicitly closed (last -> first).",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["x", "y"],
+              "properties": {
+                "x": { "$ref": "#/$defs/Coord" },
+                "y": { "$ref": "#/$defs/Coord" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections": {
+      "type": "array",
+      "maxItems": 120,
+      "description": "Door-level links between a room and a corridor node: this room is reachable from that corridor point.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["roomId", "nodeId"],
+        "properties": {
+          "roomId": { "$ref": "#/$defs/Id" },
+          "nodeId": { "$ref": "#/$defs/Id" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 24,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "Coord": {
+      "type": "number",
+      "minimum": -50000,
+      "maximum": 50000
+    }
+  }
+}

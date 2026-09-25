@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task.schema.json",
+  "title": "Task",
+  "description": "A single in-game task assigned to one player.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "assignedTo", "completed"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable task identifier within the round: <type>-<playerNr>-<taskNr>."
+    },
+    "type": {
+      "type": "string",
+      "description": "Catalog type of the task (e.g. fix_wiring). Lets clients render dedicated task UIs later."
+    },
+    "assignedTo": {
+      "type": "string",
+      "description": "ID of the player who owns this task."
+    },
+    "title": {
+      "type": "string",
+      "description": "Human readable task name shown to the assigned player."
+    },
+    "completed": {
+      "type": "boolean",
+      "description": "Whether the task has been marked as done.",
+      "default": false
+    },
+    "completedAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Timestamp at which the task was completed."
+    }
+  }
+}

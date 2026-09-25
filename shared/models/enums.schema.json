@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "enums.schema.json",
+  "title": "Real Life Among Us enumerations",
+  "$defs": {
+    "PlayerRole": {
+      "type": "string",
+      "description": "The assigned role of a player. New specialized roles can be added here.",
+      "enum": ["CREWMATE", "IMPOSTOR"]
+    },
+    "RoomStatus": {
+      "type": "string",
+      "description": "The current lifecycle state of a room. LOBBY is the initial state before the first map exists. MAP_SETUP: the host is creating/editing the map. MAP_READY: a valid map has been saved and the game can start. ENDED is kept for backwards compatibility with earlier drafts; new games use GAME_OVER.",
+      "enum": [
+        "LOBBY",
+        "MAP_SETUP",
+        "MAP_READY",
+        "IN_GAME",
+        "MEETING",
+        "GAME_OVER",
+        "ENDED"
+      ]
+    },
+    "MeetingPhase": {
+      "type": "string",
+      "description": "Sub-state of an active meeting. DISCUSSION: no voting yet. VOTING: votes accepted until deadline or quorum.",
+      "enum": ["DISCUSSION", "VOTING"]
+    },
+    "RoomType": {
+      "type": "string",
+      "description": "Game function the host assigns to a real room on the map. These are metadata for now; special mechanics may be implemented per type later.",
+      "enum": [
+        "NORMAL",
+        "CAFETERIA",
+        "MEDBAY",
+        "SECURITY",
+        "REACTOR",
+        "ELECTRICAL",
+        "STORAGE",
+        "ADMIN",
+        "O2",
+        "WEAPONS"
+      ]
+    }
+  }
+}

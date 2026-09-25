@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "game-config.schema.json",
+  "title": "GameConfig",
+  "description": "Server-authoritative match settings. PUBLIC: part of every room projection so all clients can display the rules. Only the host may change it and only while the room is in LOBBY; the server validates every value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "impostorCount",
+    "tasksPerCrewmate",
+    "killCooldownMs",
+    "discussionDurationMs",
+    "votingDurationMs",
+    "confirmEjects",
+    "anonymousVoting"
+  ],
+  "properties": {
+    "impostorCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "Number of impostors. Additionally validated against the player count at game start: impostors must be strictly fewer than crewmates (max = floor((players - 1) / 2))."
+    },
+    "tasksPerCrewmate": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8,
+      "description": "Tasks generated for every crewmate at game start."
+    },
+    "killCooldownMs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 180000,
+      "description": "Minimum time in ms between two kills. 0 disables the cooldown."
+    },
+    "discussionDurationMs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 180000,
+      "description": "Duration of the DISCUSSION phase of a meeting before voting opens. 0 skips discussion."
+    },
+    "votingDurationMs": {
+      "type": "integer",
+      "minimum": 5000,
+      "maximum": 300000,
+      "description": "Maximum duration of the VOTING phase. Voting ends early once all alive players have voted."
+    },
+    "confirmEjects": {
+      "type": "boolean",
+      "description": "When true, meeting results include the ejected player's name; otherwise only the fact that someone was ejected is revealed."
+    },
+    "anonymousVoting": {
+      "type": "boolean",
+      "description": "When true, the vote tally is omitted from meeting results."
+    }
+  }
+}
