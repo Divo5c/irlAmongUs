@@ -1,5 +1,6 @@
-/* App shell cache: install (add to home screen) + offline start. */
-const CACHE = 'rlaus-shell-v1';
+/* App shell: install (add to home screen). Network-first so deploys land
+   immediately; cache only as offline fallback. */
+const CACHE = 'rlaus-shell-v4';
 const ASSETS = [
   '/',
   '/index.html',
@@ -29,11 +30,17 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  // Never cache Socket.IO / realtime traffic or cross-origin requests.
   if (url.origin !== self.location.origin || url.pathname.startsWith('/socket.io')) {
     return;
   }
+  // Network first: deploy == instant update for every reload.
   event.respondWith(
-    caches.match(event.request).then((cached) => cached ?? fetch(event.request)),
+    fetch(event.request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        return response;
+      })
+      .catch(() => caches.match(event.request)),
   );
 });
