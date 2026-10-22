@@ -31,7 +31,7 @@ const App = (() => {
   const editor = new MapEditor($('map-canvas'), {
     onSelectionChanged: (count) => {
       $('btn-build-streets').disabled = count === 0;
-      $('map-status').textContent = `${count} Stra\u00DFen ausgew\u00E4hlt`;
+      $('map-status').textContent = `${count} Abschnitte ausgew\u00E4hlt`;
     },
   });
 
@@ -335,9 +335,12 @@ const App = (() => {
       }
       if (!streets) throw lastError;
       const candidates = OSM.toCandidates(streets, { lat: latitude, lon: longitude });
-      editor.setCandidates(candidates);
-      $('map-status').textContent = `${candidates.length} Stra\u00DFen geladen \u2014 antippen zum Ausw\u00e4hlen`;
-      if (!candidates.length) $('map-status').textContent = 'Keine Stra\u00DFen gefunden \u2014 Radius erh\u00f6hen?';
+      // Whole OSM ways are too long to select: split at real junctions so
+      // tapping picks street blocks instead of an entire through street.
+      const pieces = OSM.splitCandidatesAtJunctions(candidates);
+      editor.setCandidates(pieces);
+      $('map-status').textContent = `${pieces.length} Abschnitte aus ${candidates.length} Stra\u00DFen geladen \u2014 antippen zum Ausw\u00e4hlen`;
+      if (!pieces.length) $('map-status').textContent = 'Keine Stra\u00DFen gefunden \u2014 Radius erh\u00f6hen?';
     } catch (error) {
       $('map-status').textContent = `Fehler: ${error.message}`;
     } finally {

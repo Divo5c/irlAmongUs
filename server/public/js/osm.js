@@ -100,6 +100,140 @@ const OSM = (() => {
   }
 
   /**
+   * Splits OSM candidate polylines into selectable pieces at real junctions
+   * (proper crossings with other candidates and T-ends of other candidates
+   * landing on the polyline). Pieces are plain candidates again, so the
+   * editor taps/selects single blocks instead of whole long OSM ways.
+   */
+  function splitCandidatesAtJunctions(candidates, options = {}) {
+    const epsilon = options.epsilon ?? 1.2;
+    const snapDistM = options.snapDistM ?? 1.0;
+
+    const chains = [];
+    for (const candidate of candidates) {
+      const pts = (candidate.points ?? []).filter(
+        ([x, y]) => Number.isFinite(x) && Number.isFinite(y),
+      );
+      if (pts.length < 2) continue;
+      const simplified = simplifyPolyline(pts, epsilon);
+      if (simplified.length < 2) continue;
+      chains.push({ source: candidate, pts: simplified });
+    }
+
+    let pieceSeq = 0;
+    const pieces = [];
+    for (const chain of chains) {
+      const cuts = collectCuts(chain, chains);
+      for (const piece of sliceIntoPieces(chain, cuts)) pieces.push(piece);
+    }
+    return pieces;
+
+    function collectCuts(chain, all) {
+      const cuts = [];
+      for (const other of all) {
+        if (other === chain) continue;
+        collectChainCuts(chain, other, cuts);
+      }
+      cuts.sort((p, q) => p.seg - q.seg || p.t - q.t);
+      const deduped = [];
+      for (const cut of cuts) {
+        const last = deduped[deduped.length - 1];
+        if (
+          last &&
+          last.seg === cut.seg &&
+          Math.hypot(last.x - cut.x, last.y - cut.y) < 0.5
+        ) {
+          continue;
+        }
+        deduped.push(cut);
+      }
+      return deduped;
+    }
+
+    function collectChainCuts(chain, other, cuts) {
+      const A = chain.pts;
+      const B = other.pts;
+      for (let i = 0; i < A.length - 1; i++) {
+        const [ax, ay] = A[i];
+        const [bx, by] = A[i + 1];
+        for (let j = 0; j < B.length - 1; j++) {
+          const [cx, cy] = B[j];
+          const [dx, dy] = B[j + 1];
+          if (shareEndpoint(ax, ay, bx, by, cx, cy, dx, dy)) continue;
+          const rX = bx - ax;
+          const rY = by - ay;
+          const sX = dx - cx;
+          const sY = dy - cy;
+          const denom = rX * sY - rY * sX;
+          if (Math.abs(denom) < 1e-9) continue;
+          const t = ((cx - ax) * sY - (cy - ay) * sX) / denom;
+          const u = ((cx - ax) * rY - (cy - ay) * rX) / denom;
+          const segEps = 0.002;
+          if (t <= segEps || t >= 1 - segEps || u <= segEps || u >= 1 - segEps) {
+            continue;
+          }
+          cuts.push({ seg: i, t, x: ax + t * rX, y: ay + t * rY });
+        }
+        // Other's endpoint lands on my segment interior: cut me there so
+        // the T-street visibly terminates on my pieces.
+        for (const [ex, ey] of [B[0], B[B.length - 1]]) {
+          const rX = bx - ax;
+          const rY = by - ay;
+          const len2 = rX * rX + rY * rY || 1e-9;
+          const t = ((ex - ax) * rX + (ey - ay) * rY) / len2;
+          if (t <= 0.02 || t >= 0.98) continue;
+          const px = ax + t * rX;
+          const py = ay + t * rY;
+          if (Math.hypot(ex - px, ey - py) > snapDistM) continue;
+          if (Math.hypot(ex - ax, ey - ay) < 0.8) continue;
+          if (Math.hypot(ex - bx, ey - by) < 0.8) continue;
+          cuts.push({ seg: i, t, x: ex, y: ey });
+        }
+      }
+    }
+
+    function shareEndpoint(ax, ay, bx, by, cx, cy, dx, dy) {
+      const tol = 0.05;
+      return (
+        (Math.hypot(ax - cx, ay - cy) < tol ||
+          Math.hypot(ax - dx, ay - dy) < tol ||
+          Math.hypot(bx - cx, by - cy) < tol ||
+          Math.hypot(bx - dx, by - dy) < tol)
+      );
+    }
+
+    function sliceIntoPieces(chain, cuts) {
+      const out = [];
+      let cur = [chain.pts[0]];
+      for (let i = 0; i < chain.pts.length - 1; i++) {
+        const [ax, ay] = chain.pts[i];
+        const [bx, by] = chain.pts[i + 1];
+        for (const cut of cuts) {
+          if (cut.seg !== i) continue;
+          cur.push([cut.x, cut.y]);
+          out.push(makePiece(cur, chain));
+          cur = [[cut.x, cut.y]];
+        }
+        cur.push([bx, by]);
+      }
+      out.push(makePiece(cur, chain));
+      return out;
+    }
+
+    function makePiece(pts, chain) {
+      if (pts.length < 2) return null;
+      pieceSeq++;
+      return {
+        id: `${chain.source.id}~${pieceSeq}`,
+        name: chain.source.name,
+        osmId: chain.source.osmId,
+        points: pts,
+        parent: chain.source.id,
+      };
+    }
+  }
+
+  /**
    * Ramer-Douglas-Peucker simplification (epsilon in meters, like the
    * mobile app's buildMapFromTrace).
    */
@@ -349,6 +483,7 @@ const OSM = (() => {
     buildOverpassQuery,
     fetchStreets,
     toCandidates,
+    splitCandidatesAtJunctions,
     buildMapFromCandidates,
     simplifyPolyline,
   };
