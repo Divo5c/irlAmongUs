@@ -1,0 +1,14 @@
+{
+  "name": "Real Life Among Us",
+  "short_name": "RL Among Us",
+  "description": "Among Us drau\u00dfen: echte Stra\u00dfen als Spielfeld, Lobby mit Freunden, Tasks und Kill-Runden.",
+  "start_url": "/",
+  "display": "fullscreen",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "lang": "de",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

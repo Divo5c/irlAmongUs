@@ -1,4 +1,6 @@
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
   HttpError,
@@ -8,6 +10,45 @@ const {
 } = require('./api/roomsController');
 const { sendJson } = require('./utils/http');
 
+/** Static assets for the PWA are served from public/ (same origin, no CORS). */
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+};
+
+function serveStaticFile(response, relativePath) {
+  const resolved = path.normalize(path.join(PUBLIC_DIR, relativePath));
+  if (!resolved.startsWith(PUBLIC_DIR)) {
+    sendJson(response, 404, { error: 'Route not found.' });
+    return;
+  }
+  fs.readFile(resolved, (error, data) => {
+    if (error) {
+      sendJson(response, 404, { error: 'Route not found.' });
+      return;
+    }
+    const ext = path.extname(resolved).toLowerCase();
+    // Immutable shell assets; index/sw stay fresh so deploys land fast.
+    const cache =
+      ext === '.html' || resolved.endsWith('.webmanifest') || resolved.endsWith('sw.js')
+        ? 'no-cache'
+        : 'public, max-age=300';
+    response.writeHead(200, {
+      'Content-Type': MIME_TYPES[ext] ?? 'application/octet-stream',
+      'Cache-Control': cache,
+      'Service-Worker-Allowed': '/',
+    });
+    response.end(data);
+  });
+}
+
 function createHttpServer(roomStore) {
   return http.createServer(async (request, response) => {
     try {
@@ -15,6 +56,23 @@ function createHttpServer(roomStore) {
       if (request.method === 'GET' && url.pathname === '/health') {
         sendJson(response, 200, { status: 'ok' });
         return;
+      }
+
+      // PWA shell: "/" plus every static asset inside public/.
+      if (request.method === 'GET') {
+        if (url.pathname === '/') {
+          serveStaticFile(response, 'index.html');
+          return;
+        }
+        if (url.pathname === '/manifest.webmanifest' || url.pathname === '/sw.js') {
+          serveStaticFile(response, url.pathname.slice(1));
+          return;
+        }
+        const asset = path.normalize(url.pathname).replace(/^([/\\])+/, '');
+        if (asset.startsWith('css/') || asset.startsWith('js/') || asset.startsWith('icons/')) {
+          serveStaticFile(response, asset);
+          return;
+        }
       }
 
       const roomMatch = url.pathname.match(/^\/rooms\/([A-Z2-9]+)$/);
