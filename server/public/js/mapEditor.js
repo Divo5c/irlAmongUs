@@ -115,6 +115,8 @@ class MapEditor {
     event.preventDefault();
     this.canvas.setPointerCapture(event.pointerId);
     this._pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    this._downAt = { x: event.clientX, y: event.clientY };
+    this._moved = false;
     if (this._pointers.size === 2) this._pinchStart = this._pinchDistance();
   }
 
@@ -135,6 +137,7 @@ class MapEditor {
       const after = this._pinchDistance();
       if (before > 0) this.zoomBy(after / before);
       this._pinchStart = after;
+      this._moved = true;
       this.render();
       return;
     }
@@ -145,25 +148,25 @@ class MapEditor {
       const dy = (record.y - prev.y) / this.pxPerMeter;
       this.offset.x -= dx;
       this.offset.y -= dy;
-      this._panned = true;
+      this._moved = true;
       this.render();
       void rect;
     }
   }
 
   _onPointerUp(event) {
-    const wasTap = this._pointers.has(event.pointerId) && !this._pannedDown(event);
+    // A tap is a press-release without meaningful movement (finger jitter
+    // of a few pixels must still count as a tap, otherwise deselect died).
+    const start = this._downAt;
     const pos = this._pointers.get(event.pointerId);
+    const isTap =
+      start && pos && Math.hypot(pos.x - start.x, pos.y - start.y) < 10;
     this._pointers.delete(event.pointerId);
+    this._downAt = null;
     if (this._pointers.size < 2) this._pinchStart = null;
-    if (this._pointers.size === 0) this._panned = false;
-    if (!wasTap || !pos) return;
+    if (!isTap || !pos) return;
     const rect = this.canvas.getBoundingClientRect();
     this._handleTap(event.clientX - rect.left, event.clientY - rect.top);
-  }
-
-  _pannedDown() {
-    return this._panned === true;
   }
 
   _onWheel(event) {
@@ -174,15 +177,25 @@ class MapEditor {
   /** Toggle the closest street candidate within the tap tolerance. */
   _handleTap(px, py) {
     const [wx, wy] = this._worldFromScreen(px, py);
-    const toleranceScreenPx = 30;
+    const toleranceScreenPx = 30 / this.pxPerMeter; // meters around the tap
     let best = null;
     let bestDist = Infinity;
     for (const candidate of this.candidates) {
-      const dist = candidate.points.reduce((acc, [cx, cy]) => {
-        const d = Math.hypot(cx - wx, cy - wy) * this.pxPerMeter;
-        return Math.min(acc, d);
-      }, Infinity);
-      if (dist < bestDist) {
+      // Distance to every SEGMENT (not just vertices), so long straight
+      // streets are also pickable in the middle.
+      const pts = candidate.points;
+      let dist = Infinity;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const [ax, ay] = pts[i];
+        const [bx, by] = pts[i + 1];
+        const dx = bx - ax;
+        const dy = by - ay;
+        const len2 = dx * dx + dy * dy || 1e-9;
+        const t = Math.max(0, Math.min(1, ((wx - ax) * dx + (wy - ay) * dy) / len2));
+        const d = Math.hypot(ax + t * dx - wx, ay + t * dy - wy);
+        if (d < dist) dist = d;
+      }
+      if (dist > bestDist) {
         bestDist = dist;
         best = candidate;
       }
@@ -243,11 +256,27 @@ class MapEditor {
         else ctx.lineTo(sx, sy);
       }
       ctx.stroke();
-      if (active || ppm > 2.2) {
+      if (active) {
         const mid = candidate.points[Math.floor(candidate.points.length / 2)];
         const [mx, my] = toScreen(mid[0], mid[1]);
-        ctx.fillStyle = active ? '#9ecfff' : '#8b949e';
-        ctx.font = 'bold 11px system-ui';
+        const label = isNumericName(candidate.name) ? '' : candidate.name;
+        ctx.fillStyle = '#9ecfff';
+        ctx.font = 'bold 12px system-ui';
+        // Outline keeps labels readable over street lines.
+        ctx.strokeStyle = 'rgba(13, 17, 23, 0.85)';
+        ctx.lineWidth = 3;
+        if (label) {
+          ctx.strokeText(label, mx + 4, my - 4);
+          ctx.fillText(label, mx + 4, my - 4);
+        }
+      } else if (!isNumericName(candidate.name) && ppm > 2.4) {
+        const mid = candidate.points[Math.floor(candidate.points.length / 2)];
+        const [mx, my] = toScreen(mid[0], mid[1]);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.font = '11px system-ui';
+        ctx.strokeStyle = 'rgba(13, 17, 23, 0.85)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(candidate.name, mx + 4, my - 4);
         ctx.fillText(candidate.name, mx + 4, my - 4);
       }
     }
@@ -255,3 +284,9 @@ class MapEditor {
 }
 
 window.MapEditor = MapEditor;
+
+/** Unnamed OSM ways fall back to their numeric id — never render that. */
+function isNumericName(name) {
+  return /^-?\d+$/.test(String(name).trim());
+}
+

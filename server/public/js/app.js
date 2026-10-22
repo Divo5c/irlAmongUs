@@ -318,8 +318,22 @@ const App = (() => {
       editor.setAnchor(latitude, longitude);
       const radius = Number($('map-radius').value);
       // Browser fetches Overpass directly (Render egress is unreliable);
-      // osm.js handles the mirror fallback + 40s timeouts.
-      const streets = await OSM.fetchStreets(latitude, longitude, radius);
+      // osm.js handles the mirror fallback + 40s timeouts. Overpass is
+      // often overloaded, so retry automatically up to three rounds.
+      let streets = null;
+      let lastError = null;
+      for (let attempt = 1; attempt <= 3 && !streets; attempt++) {
+        $('map-status').textContent =
+          attempt === 1
+            ? 'Stra\u00DFen laden (dauert 10\u201340\u2009s, Bildschirm offen halten)\u2026'
+            : `Versuch ${attempt}: Overpass ist \u00fcberlastet, nochmal\u2026`;
+        try {
+          streets = await OSM.fetchStreets(latitude, longitude, radius);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (!streets) throw lastError;
       const candidates = OSM.toCandidates(streets, { lat: latitude, lon: longitude });
       editor.setCandidates(candidates);
       $('map-status').textContent = `${candidates.length} Stra\u00DFen geladen \u2014 antippen zum Ausw\u00e4hlen`;
