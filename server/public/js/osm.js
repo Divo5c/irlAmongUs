@@ -197,11 +197,151 @@ const OSM = (() => {
       }
     }
 
+    // Junction passes: split streets where they properly cross another
+    // selected street, and glue T-endpoints onto the street they touch.
+    // Same rule as the Flutter trace pipeline, so the game graph branches
+    // like the real street network instead of running over intersections.
+    let pieceId = 0;
+
+    function pieceCorridorId(from, to) {
+      pieceId++;
+      return `s${pieceId}_${from}_${to}`;
+    }
+
+    function nodeOfCache() {
+      const map = new Map();
+      for (const node of outNodes) map.set(node.id, node);
+      return map;
+    }
+
+    splitAtProperIntersections();
+    snapLooseEndpoints();
+
     return {
       version: (base.version ?? 0) + 1,
       nodes: outNodes,
       corridors: outCorridors,
     };
+
+    /** Strict crossing of two segment-corridors that share no endpoint. */
+    function segmentCross(A, B, lookup) {
+      // A corridor is always a single segment (a -> b).
+      const a = lookup.get(A.a);
+      const b = lookup.get(A.b);
+      const c = lookup.get(B.a);
+      const d = lookup.get(B.b);
+      if (!a || !b || !c || !d) return null;
+      // Already joined anywhere: the graph is connected there.
+      if (A.a === B.a || A.a === B.b || A.b === B.a || A.b === B.b) return null;
+      const rX = b.x - a.x;
+      const rY = b.y - a.y;
+      const sX = d.x - c.x;
+      const sY = d.y - c.y;
+      const denom = rX * sY - rY * sX;
+      if (Math.abs(denom) < 1e-9) return null;
+      const t = ((c.x - a.x) * sY - (c.y - a.y) * sX) / denom;
+      const u = ((c.x - a.x) * rY - (c.y - a.y) * rX) / denom;
+      const eps = 0.002;
+      if (t <= eps || t >= 1 - eps || u <= eps || u >= 1 - eps) return null;
+      return [a.x + t * rX, a.y + t * rY];
+    }
+
+    /** Replaces a corridor with two pieces through the junction point. */
+    function splitCorridorAt(corridor, x, y) {
+      const a = outNodes.find((n) => n.id === corridor.a);
+      const b = outNodes.find((n) => n.id === corridor.b);
+      if (!a || !b) return false;
+      const rX = b.x - a.x;
+      const rY = b.y - a.y;
+      const denom = rX * rX + rY * rY || 1e-9;
+      let t = ((x - a.x) * rX + (y - a.y) * rY) / denom;
+      t = Math.max(0, Math.min(1, t));
+      // Reject splits that are not (almost) exactly on the segment.
+      if (Math.hypot(a.x + t * rX - x, a.y + t * rY - y) > 2) return false;
+      const junction = findOrAddNode(x, y);
+      const drop = outCorridors.indexOf(corridor);
+      if (drop < 0) return false;
+      outCorridors.splice(drop, 1);
+      for (const [from, to] of [
+        [corridor.a, junction.id],
+        [junction.id, corridor.b],
+      ]) {
+        const pairKey = from < to ? `${from}|${to}` : `${to}|${from}`;
+        if (existingPairs.has(pairKey)) continue;
+        existingPairs.add(pairKey);
+        outCorridors.push({ id: pieceCorridorId(from, to), a: from, b: to });
+      }
+      return true;
+    }
+
+    function splitAtProperIntersections() {
+      const maxSplits = 400;
+      let splits = 0;
+      let pass = 0;
+      let changed = true;
+      while (changed && splits < maxSplits && pass < 80) {
+        pass++;
+        changed = false;
+        const lookup = nodeOfCache();
+        outer: for (let i = 0; i < outCorridors.length; i++) {
+          for (let j = i + 1; j < outCorridors.length; j++) {
+            const cross = segmentCross(outCorridors[i], outCorridors[j], lookup);
+            if (!cross) continue;
+            splitCorridorAt(outCorridors[i], cross[0], cross[1]);
+            splitCorridorAt(outCorridors[j], cross[0], cross[1]);
+            splits++;
+            changed = true;
+            break outer;
+          }
+        }
+      }
+    }
+
+    /** Glues a street endpoint that lies on top of another street there. */
+    function snapLooseEndpoints() {
+      const maxSnaps = 300;
+      let snaps = 0;
+      const snapshot = outCorridors.slice();
+      for (const corridor of snapshot) {
+        if (snaps >= maxSnaps) break;
+        if (!outCorridors.includes(corridor)) continue;
+        for (const endpoint of [corridor.a, corridor.b]) {
+          const node = outNodes.find((n) => n.id === endpoint);
+          if (!node) continue;
+          const target = outCorridors.find((other) => {
+            if (other === corridor) return false;
+            if (other.a === node.id || other.b === node.id) return false;
+            const a = outNodes.find((n) => n.id === other.a);
+            const b = outNodes.find((n) => n.id === other.b);
+            if (!a || !b) return false;
+            // Too close to the target's own ends: useless split.
+            const dEnd = Math.min(
+              Math.hypot(a.x - node.x, a.y - node.y),
+              Math.hypot(b.x - node.x, b.y - node.y),
+            );
+            if (dEnd < 0.8) return false;
+            return pointSegmentDistance(node.x, node.y, a.x, a.y, b.x, b.y) <= 1.0;
+          });
+          if (!target) continue;
+          const junction = findOrAddNode(node.x, node.y);
+          if (junction.id !== node.id) {
+            if (corridor.a === node.id) corridor.a = junction.id;
+            else corridor.b = junction.id;
+          }
+          splitCorridorAt(target, node.x, node.y);
+          snaps++;
+          if (snaps >= maxSnaps) break;
+        }
+      }
+    }
+
+    function pointSegmentDistance(px, py, ax, ay, bx, by) {
+      const rX = bx - ax;
+      const rY = by - ay;
+      const len2 = rX * rX + rY * rY || 1e-9;
+      const t = Math.max(0, Math.min(1, ((px - ax) * rX + (py - ay) * rY) / len2));
+      return Math.hypot(ax + t * rX - px, ay + t * rY - py);
+    }
   }
 
   return {
