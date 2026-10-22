@@ -118,14 +118,14 @@ const App = (() => {
         // Stored map available -> straight into load + save (skip Overpass).
         const cached = readSavedLocalMap();
         if (cached) {
-          ensureSocket().emit('map:update', {
-            code: state.code,
-            map: { version: cached.version + 1, nodes: cached.nodes, corridors: cached.corridors, rooms: [], connections: [] },
-          });
-          ensureSocket().emit('map:save', {
-            code: state.code,
-            map: { version: cached.version + 2, nodes: cached.nodes, corridors: cached.corridors, rooms: [], connections: [] },
-          });
+    ensureSocket().emit('map:update', {
+      code: state.code,
+      map: { version: cached.version + 1, nodes: cached.nodes, corridors: cached.corridors, rooms: cached.rooms ?? [], connections: [] },
+    });
+    ensureSocket().emit('map:save', {
+      code: state.code,
+      map: { version: cached.version + 2, nodes: cached.nodes, corridors: cached.corridors, rooms: cached.rooms ?? [], connections: [] },
+    });
           showToast('Gespeicherte Karte \u00fcbernommen.');
         } else {
           showToast('Keine gespeicherte Karte auf dem Ger\u00e4t \u2014 Stra\u00dfen laden.');
@@ -364,6 +364,8 @@ const App = (() => {
     show('map');
     $('map-status').textContent = 'Position suchen\u2026';
     refreshCachedMapButton();
+    // Rooms aus dem letzten Stand \u00fcbernehmen, wenn schon welche existieren.
+    editor.setRooms(state.room?.map?.rooms ?? []);
   });
   $('btn-map-back').addEventListener('click', () => show(state.room.status === 'MAP_READY' || state.room.status === 'MAP_SETUP' ? 'lobby' : 'home'));
   $('btn-start-game').addEventListener('click', () => {
@@ -424,6 +426,7 @@ const App = (() => {
       corridors: cached.corridors,
     };
     editor.setWorking(working);
+    editor.setRooms(cached.rooms ?? []);
     editor.selected.clear();
     $('btn-build-streets').disabled = true;
     ensureSocket().emit('map:update', {
@@ -505,7 +508,7 @@ const App = (() => {
       code: state.code,
       map: {
         ...working,
-        rooms: [],
+        rooms: editor.rooms,
         connections: [],
       },
     });
@@ -516,6 +519,60 @@ const App = (() => {
     $('btn-build-streets').disabled = true;
   });
 
+  // ------------------------------------------------------------- rooms //
+
+  editor.onRoomDraft = (polygonPts) => {
+    if (polygonPts.length < 3) {
+      editor.discardRoom();
+      showToast('Raum braucht mindestens 3 Punkte.');
+      return;
+    }
+    $('room-name-input').value = '';
+    $('room-type-select').value = 'NORMAL';
+    $('room-form').classList.remove('hidden');
+    $('room-name-input').focus();
+  };
+
+  $('btn-room-mode').addEventListener('click', () => {
+    editor.setRoomMode(!editor.roomMode);
+    $('room-form').classList.add('hidden');
+    $('btn-room-mode').classList.toggle('primary', editor.roomMode);
+    $('btn-room-mode').textContent = editor.roomMode
+      ? 'Raummodus beenden'
+      : 'Raum zeichnen';
+    $('map-hint').textContent = editor.roomMode
+      ? 'Tippe Punkte f\u00fcr den Raum. Tippe den ersten Punkt erneut, um zu schlie\u00dfen.'
+      : 'Tippe eine Stra\u00dfe an, um sie auszuw\u00e4hlen.';
+  });
+
+  $('btn-room-undo').addEventListener('click', () => editor.undoRoomPoint());
+  $('btn-room-discard').addEventListener('click', () => {
+    editor.discardRoom();
+    $('room-form').classList.add('hidden');
+  });
+  $('btn-room-confirm').addEventListener('click', () => {
+    const name = $('room-name-input').value.trim() || 'Raum';
+    const type = $('room-type-select').value || 'NORMAL';
+    const room = editor.commitRoom(name, type);
+    if (!room) {
+      showToast('Raum braucht mindestens 3 Punkte.');
+      return;
+    }
+    $('room-form').classList.add('hidden');
+    $('btn-room-mode').classList.remove('primary');
+    $('btn-room-mode').textContent = 'Raum zeichnen';
+    $('map-hint').textContent = `Raum "${room.name}" angelegt (${editor.rooms.length} total).`;
+    ensureSocket().emit('map:update', {
+      code: state.code,
+      map: {
+        ...editor.working,
+        rooms: editor.rooms,
+        connections: [],
+      },
+    });
+    beep(880);
+  });
+
   $('btn-map-save').addEventListener('click', () => {
     const working = editor.working;
     if (!working.nodes.length) {
@@ -524,7 +581,7 @@ const App = (() => {
     }
     ensureSocket().emit('map:save', {
       code: state.code,
-      map: { ...working, rooms: [], connections: [] },
+      map: { ...working, rooms: editor.rooms, connections: [] },
     });
     // Local copy for the next round: skip Overpass entirely.
     try {
@@ -534,6 +591,7 @@ const App = (() => {
           version: working.version,
           nodes: working.nodes,
           corridors: working.corridors,
+          rooms: editor.rooms,
           anchor: editor.anchor,
           savedAt: new Date().toISOString(),
         }),
@@ -548,6 +606,7 @@ const App = (() => {
   $('btn-map-clear').addEventListener('click', () => {
     if (!confirm('Alle Stra\u00DFen und Knoten l\u00f6schen?')) return;
     editor.clearWorking();
+    editor.setRooms([]);
     ensureSocket().emit('map:update', {
       code: state.code,
       map: { version: 1, nodes: [], corridors: [], rooms: [], connections: [] },

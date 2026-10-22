@@ -96,6 +96,25 @@
       </select>
       <button id="btn-load-streets" class="secondary">Stra&szlig;en laden</button>
       <button id="btn-load-cached" class="ghost"></button>
+      <button id="btn-room-mode" class="secondary">Raum zeichnen</button>
+      <button id="btn-room-undo" class="ghost">&#8630; Punkt zur&uuml;ck</button>
+      <div id="room-form" class="hidden">
+        <input id="room-name-input" type="text" maxlength="24" placeholder="Raumname (z.B. Cafeteria)" autocomplete="off" />
+        <select id="room-type-select">
+          <option value="NORMAL">Normal</option>
+          <option value="CAFETERIA">Kantine / Meeting</option>
+          <option value="MEDBAY">Medbay</option>
+          <option value="SECURITY">Security</option>
+          <option value="REACTOR">Reactor</option>
+          <option value="ELECTRICAL">Electrical</option>
+          <option value="STORAGE">Lager</option>
+          <option value="ADMIN">Admin</option>
+          <option value="O2">O2</option>
+          <option value="WEAPONS">Weapons</option>
+        </select>
+        <button id="btn-room-confirm" class="primary small">Raum anlegen</button>
+        <button id="btn-room-discard" class="ghost small">Verwerfen</button>
+      </div>
     </div>
     <div class="map-frame">
       <canvas id="map-canvas"></canvas>
@@ -153,8 +172,8 @@
   </section>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=13"></script>
-  <script src="/js/mapEditor.js?v=13"></script>
-  <script src="/js/app.js?v=13"></script>
+  <script src="/js/osm.js?v=14"></script>
+  <script src="/js/mapEditor.js?v=14"></script>
+  <script src="/js/app.js?v=14"></script>
 </body>
 </html>

@@ -17,6 +17,10 @@ class MapEditor {
     this.candidates = [];
     this.selected = new Set();
     this.working = { version: 0, nodes: [], corridors: [] };
+    this.rooms = [];
+    this.roomMode = false;
+    this.draftPts = [];
+    this.onRoomDraft = null;
 
     this.zoom = 1; // meters per screen px inverted: pxPerMeter
     this.pxPerMeter = 3;
@@ -56,6 +60,45 @@ class MapEditor {
 
   setWorking(working) {
     this.working = working;
+    this.render();
+  }
+
+  setRooms(rooms = []) {
+    this.rooms = rooms;
+    this.render();
+  }
+
+  /** Toggles the room-drawing mode; reset any pending draft. */
+  setRoomMode(active) {
+    this.roomMode = !!active;
+    this.draftPts = this.roomMode ? this.draftPts : [];
+    this.render();
+  }
+
+  undoRoomPoint() {
+    this.draftPts.pop();
+    this.render();
+  }
+
+  /** Finishes the draft permanently (called from the room-name form). */
+  commitRoom(name, type) {
+    if (this.draftPts.length < 3) return null;
+    const room = {
+      id: `room-${Date.now().toString(36)}${Math.floor(Math.random() * 100)}`,
+      name: String(name || 'Raum').trim(),
+      type,
+      polygon: this.draftPts.map(([x, y]) => ({ x, y })),
+    };
+    this.rooms = [...this.rooms, room];
+    this.draftPts = [];
+    this.roomMode = false;
+    this.render();
+    return room;
+  }
+
+  discardRoom() {
+    this.draftPts = [];
+    this.roomMode = false;
     this.render();
   }
 
@@ -177,6 +220,23 @@ class MapEditor {
   /** Toggle the closest street candidate within the tap tolerance. */
   _handleTap(px, py) {
     const [wx, wy] = this._worldFromScreen(px, py);
+    // Room mode: taps collect polygon points; tapping near the first point
+    // closes the shape (needs at least 3 points).
+    if (this.roomMode) {
+      if (this.draftPts.length >= 3) {
+        const first = this.draftPts[0];
+        const closeTolerance = 26 / this.pxPerMeter;
+        if (Math.hypot(first[0] - wx, first[1] - wy) < closeTolerance) {
+          this.roomMode = false;
+          this.onRoomDraft?.(this.draftPts.map(([x, y]) => ({ x, y })));
+          this.render();
+          return;
+        }
+      }
+      this.draftPts.push([wx, wy]);
+      this.render();
+      return;
+    }
     const toleranceScreenPx = 30 / this.pxPerMeter; // meters around the tap
     let best = null;
     let bestDist = Infinity;
@@ -278,6 +338,64 @@ class MapEditor {
         ctx.lineWidth = 3;
         ctx.strokeText(candidate.name, mx + 4, my - 4);
         ctx.fillText(candidate.name, mx + 4, my - 4);
+      }
+    }
+
+    // Rooms (committed) — translucent amber with centroid label.
+    for (const room of this.rooms) {
+      if (room.polygon?.length < 3) continue;
+      ctx.beginPath();
+      room.polygon.forEach((pt, i) => {
+        const [sx, sy] = toScreen(pt.x, pt.y);
+        if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+      });
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255, 209, 102, 0.12)';
+      ctx.strokeStyle = '#ffd166';
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
+      const cx = room.polygon.reduce((s, p) => s + p.x, 0) / room.polygon.length;
+      const cy = room.polygon.reduce((s, p) => s + p.y, 0) / room.polygon.length;
+      const [rx, ry] = toScreen(cx, cy);
+      ctx.fillStyle = '#ffd166';
+      ctx.font = 'bold 12px system-ui';
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = 'rgba(13, 17, 23, 0.85)';
+      ctx.lineWidth = 3;
+      if (room.name) {
+        ctx.strokeText(room.name, rx, ry);
+        ctx.fillText(room.name, rx, ry);
+      }
+      ctx.textAlign = 'left';
+    }
+
+    // Room draft — dotted white polygon with closing hint on first point.
+    if (this.roomMode && this.draftPts.length) {
+      ctx.beginPath();
+      this.draftPts.forEach((pt, i) => {
+        const [sx, sy] = toScreen(pt[0], pt[1]);
+        if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+      });
+      ctx.strokeStyle = '#e6edf3';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (const pt of this.draftPts) {
+        const [sx, sy] = toScreen(pt[0], pt[1]);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#e6edf3';
+        ctx.fill();
+      }
+      if (this.draftPts.length >= 3) {
+        const [fx, fy] = toScreen(...this.draftPts[0]);
+        ctx.beginPath();
+        ctx.arc(fx, fy, 8, 0, Math.PI * 2);
+        ctx.strokeStyle = '#ffd166';
+        ctx.lineWidth = 2;
+        ctx.stroke();
       }
     }
   }
