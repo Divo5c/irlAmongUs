@@ -246,6 +246,13 @@ const App = (() => {
     $('btn-share').textContent = 'Kopiert!';
     setTimeout(() => ($('btn-share').textContent = 'Code kopieren'), 1200);
   });
+  $('btn-bot-add').addEventListener('click', () => {
+    ensureSocket().emit('game:bot_add', { code: state.code, count: 1 });
+  });
+  $('btn-bot-remove').addEventListener('click', () => {
+    ensureSocket().emit('game:bot_remove', { code: state.code });
+  });
+
   $('btn-leave').addEventListener('click', () => {
     localStorage.removeItem('rlaus_session');
     state.socket?.disconnect();
@@ -269,8 +276,14 @@ const App = (() => {
     list.innerHTML = '';
     for (const player of room.players) {
       const li = document.createElement('li');
-      const badge = player.id === room.hostId ? 'Host' : player.isAlive ? 'bereit' : 'ausgeschieden';
-      li.innerHTML = `<span>${escapeHtml(player.name)}</span><span class="badge">${badge}</span>`;
+      const badge = player.id === room.hostId
+        ? 'Host'
+        : player.isBot
+          ? 'Bot'
+          : player.isAlive
+            ? 'bereit'
+            : 'ausgeschieden';
+      li.innerHTML = `<span>${escapeHtml(player.name)}${player.isBot ? ' \u{1F916}' : ''}</span><span class="badge">${badge}</span>`;
       list.appendChild(li);
     }
   }

@@ -38,6 +38,10 @@
     <h2>Lobby</h2>
     <ul id="lobby-players" class="player-list"></ul>
     <div class="card" id="host-controls">
+      <div class="bot-row">
+        <button id="btn-bot-add" class="secondary">&plus; Bot hinzuf&uuml;gen</button>
+        <button id="btn-bot-remove" class="ghost">&minus; Bot entfernen</button>
+      </div>
       <button id="btn-edit-map" class="primary big">Karte bearbeiten / neue Stra&szlig;en laden</button>
       <button id="btn-start-game" class="primary big">Spiel starten</button>
     </div>
@@ -109,8 +113,8 @@
   </section>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=7"></script>
-  <script src="/js/mapEditor.js?v=7"></script>
-  <script src="/js/app.js?v=7"></script>
+  <script src="/js/osm.js?v=8"></script>
+  <script src="/js/mapEditor.js?v=8"></script>
+  <script src="/js/app.js?v=8"></script>
 </body>
 </html>

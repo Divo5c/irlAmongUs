@@ -145,12 +145,13 @@ class RoomStore {
     return {
       code: room.code,
       hostId: room.hostId,
-      players: room.players.map(({ id, name, isAlive, isHost, joinedAt }) => ({
+      players: room.players.map(({ id, name, isAlive, isHost, joinedAt, isBot }) => ({
         id,
         name,
         isAlive,
         isHost,
         joinedAt,
+        isBot: !!isBot,
       })),
       status: room.status,
       config: { ...room.config },

@@ -1,9 +1,11 @@
 const { Server } = require('socket.io');
 
 const { RoomStoreError } = require('../rooms/roomStore');
+const { createBotEngine } = require('../game/bots');
 
 function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 } = {}) {
   const io = new Server(httpServer);
+  const bots = createBotEngine(roomStore);
   const meetingTimers = new Map();
   const pendingDisconnects = new Map();
 
@@ -236,6 +238,38 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
         const publicRoom = roomStore.resetToLobby(code);
         io.to(code).emit('room:updated', publicRoom);
         io.to(code).emit('game:reset_done', { code, status: 'LOBBY' });
+      } catch (error) {
+        emitRoomError(socket, error);
+      }
+    });
+
+    // ----------------------------------------------------------- bots //
+    // Solo testing: bots are regular players that walk, vote and complete
+    // their crew tasks server-side without ever owning a socket.
+
+    socket.on('game:bot_add', (payload) => {
+      try {
+        const { code, count } = payload ?? {};
+        assertSocketInRoom(socket, code);
+        assertHost(socket, code);
+        const publicRoom = bots.addBots(code, Number(count) || 1);
+        io.to(code).emit('room:updated', publicRoom);
+      } catch (error) {
+        emitRoomError(socket, error);
+      }
+    });
+
+    socket.on('game:bot_remove', (payload) => {
+      try {
+        const { code } = payload ?? {};
+        assertSocketInRoom(socket, code);
+        assertHost(socket, code);
+        const outcome = bots.removeLastBot(code);
+        if (outcome.deleted) {
+          bots.stop(code);
+        } else if (outcome.removed && outcome.room) {
+          io.to(code).emit('room:updated', roomStore.toPublicRoom(outcome.room));
+        }
       } catch (error) {
         emitRoomError(socket, error);
       }
@@ -537,6 +571,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
       const outcome = roomStore.removePlayer(roomCode, playerId);
       if (outcome.deleted) {
         clearMeetingTimer(roomCode);
+        bots.stop(roomCode);
       } else if (outcome.removed && outcome.room) {
         io.to(roomCode).emit('room:updated', outcome.room);
       }
