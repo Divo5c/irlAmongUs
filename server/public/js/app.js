@@ -110,6 +110,14 @@ const App = (() => {
       Object.assign(state, { code, playerId, token });
       localStorage.setItem('rlaus_session', JSON.stringify({ code, playerId, token, name: state.name }));
     });
+    // The server only sends room:created to the host's own socket
+    // (no broadcast), so it routes hosts into the lobby directly.
+    socket.on('room:created', (room) => {
+      state.room = room;
+      state.isHost = room.hostId === state.playerId;
+      renderLobby(room);
+      show('lobby');
+    });
     socket.on('room:error', ({ code: _error, message }) => {
       if (!screens.home.classList.contains('active')) {
         alert(`Server: ${message ?? 'Unbekannter Fehler'}`);
@@ -306,11 +314,16 @@ const App = (() => {
         });
       });
       const { latitude, longitude } = position.coords;
-      $('map-status').textContent = `\u00b1${Math.round(position.coords.accuracy)}m Genauigkeit \u2014 Stra\u00DFen laden\u2026`;
+      $('map-status').textContent = `\u00b1${Math.round(position.coords.accuracy)}m Genauigkeit \u2014 Stra\u00DFen laden (dauert 10\u201340s, Bildschirm offen halten)\u2026`;
       editor.setAnchor(latitude, longitude);
       const radius = Number($('map-radius').value);
-      const streets = await OSM.fetchStreets(latitude, longitude, radius);
-      const candidates = OSM.toCandidates(streets, { lat: latitude, lon: longitude });
+      // Server does the Overpass queries (no CORS, mirror fallback built in).
+      const response = await fetch(`/osm/streets?lat=${latitude}&lon=${longitude}&radius=${radius}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? 'Straßendaten konnten nicht geladen werden.');
+      }
+      const candidates = OSM.toCandidates(data.streets, { lat: latitude, lon: longitude });
       editor.setCandidates(candidates);
       $('map-status').textContent = `${candidates.length} Stra\u00DFen geladen \u2014 antippen zum Ausw\u00e4hlen`;
       if (!candidates.length) $('map-status').textContent = 'Keine Stra\u00DFen gefunden \u2014 Radius erh\u00f6hen?';

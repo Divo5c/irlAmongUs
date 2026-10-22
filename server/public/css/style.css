@@ -1,12 +1,72 @@
-/* Real Life Among Us PWA shell — dark, thumb-sized controls, no build step. */
+/* =============================================================================
+   Real Life Among Us — PWA-Shell
+   Design-System nach Design.md ("Dark Glass, Akzent Rot").
+   Tokens + Komponenten-Rezepte; keine hartkodierenden Einzelfarben.
+   Fonts: self-hosted Fallbacks (kein CDN) — Georgia-serif / system-grotesk.
+============================================================================= */
+:root {
+  /* Text */
+  --ink: #ffffff;
+  --muted: rgba(255, 255, 255, 0.68);
+  --faint: rgba(255, 255, 255, 0.48);
+  /* Akzent ROT */
+  --accent: #ff4757;
+  --accent-light: #ff8d98;
+  --accent-deep: #c92030;
+  --accent-pastel: #ffd7dc;
+  --accent-rgb: 255, 71, 87;
+  --success: #4ade80;
+  /* Basis (dunkel, rot getont) */
+  --bg0: #1a0a0f;
+  --bg1: #2a1018;
+  --card: rgba(32, 12, 20, 0.78);
+  --card-border: rgba(255, 255, 255, 0.14);
+  --rule: rgba(255, 255, 255, 0.23);
+  --btn-ink: #2a1018;
+  /* Form */
+  --radius-lg: 22px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --radius-pill: 999px;
+  --shadow-lg: 0 18px 45px rgba(0, 0, 0, 0.55);
+  /* Fonts (Fallbacks bis self-hosted WOFF2 liegen) */
+  --font-serif: 'Prata', Georgia, serif;
+  --font-body: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-logo: 'Poppins', system-ui, sans-serif;
+  --font-tech: 'Orbitron', ui-monospace, monospace;
+}
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   margin: 0; padding: 0; height: 100%;
-  background: #0d1117; color: #e6edf3;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+html {
+  background: linear-gradient(var(--bg0), var(--bg1) 55%, var(--bg0)) fixed;
+}
+body::before {
+  /* Rechter radialer Akzent-Schein + feines Linien-Grid (Kap. 6) */
+  content: '';
+  position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(1100px 500px at 50% -10%, rgba(var(--accent-rgb), 0.14), transparent 60%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: auto, 44px 44px, 44px 44px;
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
 }
 body { overscroll-behavior: none; }
 
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 8px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ------------------------------- Screens -------------------------------- */
 .screen {
   display: none;
   flex-direction: column;
@@ -17,70 +77,148 @@ body { overscroll-behavior: none; }
 }
 .screen.active { display: flex; }
 
-.hero { text-align: center; margin: 28px 0 18px; }
-.hero h1 { font-size: 34px; line-height: 1.15; margin: 0; letter-spacing: 1px; }
-.accent { color: #ff5c5c; }
-.tagline { color: #8b949e; margin: 10px 0 0; }
+.hero { text-align: center; margin: 30px 0 20px; }
+.hero h1 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 32px;
+  line-height: 1.2;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+.hero .accent {
+  color: var(--accent-light);
+  text-shadow: 0 0 14px rgba(var(--accent-rgb), 0.35);
+}
+.tagline {
+  color: var(--muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin: 12px 0 0;
+}
 
+/* Glas-Karte (Rezept 5.4) */
 .card {
-  background: #161b22; border: 1px solid #30363d; border-radius: 14px;
-  padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
 }
-label { font-size: 13px; color: #8b949e; }
-input, select {
-  background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
-  border-radius: 10px; padding: 12px; font-size: 16px; width: 100%;
-}
-input:focus { outline: 2px solid #58a6ff; }
 
-button {
-  font: inherit; border: none; border-radius: 10px; padding: 12px;
-  cursor: pointer; color: #e6edf3; background: #21262d;
+label {
+  font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--accent-light);
 }
-button:disabled { opacity: 0.45; cursor: default; }
-button.primary { background: #238636; font-weight: 600; }
-button.secondary { background: #1f6feb; color: #fff; }
-button.danger { background: #da3633; color: #fff; font-weight: 600; }
-button.ghost { background: transparent; border: 1px solid #30363d; }
-button.ghost.danger { color: #ff7b72; }
-button.big { padding: 14px; font-size: 17px; }
-button.small { padding: 6px 10px; font-size: 13px; }
+input, select {
+  height: 50px; padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff; font-size: 16px; outline: none;
+  font-family: var(--font-body);
+}
+select { height: 44px; }
+input::placeholder { color: var(--faint); }
+input:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.2);
+}
+
+/* ------------------------------- Buttons -------------------------------- */
+/* Primär-CTA = glänzendes Weiß-Pill (Rezept 5.1). */
+button {
+  font: inherit; border: none; border-radius: var(--radius-pill);
+  padding: 12px 20px; cursor: pointer; min-height: 46px;
+  color: #fff; background: rgba(255, 255, 255, 0.08);
+  font-weight: 600; font-size: 0.9rem;
+  transition: transform 0.15s ease, filter 0.15s ease, background 0.15s ease;
+}
+button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.05); }
+button:disabled { opacity: 0.55; cursor: default; }
+button.primary {
+  background: linear-gradient(180deg, #ffffff 0%, #f1e2e5 5%, #f6eaec 72%, #ffffff 100%);
+  color: var(--btn-ink); font-weight: 700;
+  box-shadow:
+    0 10px 18px -8px rgba(255, 255, 255, 0.5),
+    0 0 26px rgba(255, 255, 255, 0.14),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+button.secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+button.secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
+/* Danger = flaches Dunkelrot, kein Glow (Rezept 5.3). */
+button.danger { background: var(--accent-deep); color: #fff; font-weight: 700; }
+button.ghost {
+  background: transparent; border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 0.82rem; padding: 10px 16px;
+}
+button.ghost.danger { color: var(--accent-light); }
+button.big { padding: 14px 22px; font-size: 0.95rem; font-weight: 700; }
+button.small { padding: 7px 14px; font-size: 0.8rem; min-height: 40px; }
 button.round {
-  width: 44px; height: 44px; border-radius: 50%;
-  font-size: 20px; background: #21262d;
+  width: 44px; height: 44px; padding: 0; border-radius: var(--radius-pill);
+  font-size: 20px; background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 10px; gap: 8px;
+  margin-bottom: 12px; gap: 8px;
 }
 .room-code {
-  font-family: ui-monospace, monospace; font-size: 24px; font-weight: 700;
-  letter-spacing: 6px; color: #58a6ff;
+  font-family: var(--font-tech);
+  font-size: 24px; font-weight: 700; letter-spacing: 6px;
+  color: #fff;
+  text-shadow: 0 0 12px rgba(var(--accent-rgb), 0.4);
 }
 .room-code.small { font-size: 16px; letter-spacing: 3px; }
-.hint { color: #8b949e; font-size: 13px; }
-.legal { color: #6e7681; font-size: 11px; text-align: center; margin-top: 18px; }
-.error { color: #ff7b72; font-size: 13px; margin: 0; }
+.hint { color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
+.legal {
+  color: var(--faint); font-size: 0.78rem; text-align: center;
+  margin-top: 18px; line-height: 1.4;
+}
+.error { color: var(--accent-light); font-size: 0.82rem; margin: 0; }
 .hidden { display: none !important; }
 
-.player-list { list-style: none; padding: 0; margin: 0 0 14px; display: flex; flex-direction: column; gap: 8px; }
-.player-list li {
-  background: #161b22; border: 1px solid #30363d; border-radius: 10px;
-  padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;
+/* Listen-Items (Rezept 5.9) */
+.player-list {
+  list-style: none; padding: 0; margin: 0 0 14px;
+  display: flex; flex-direction: column; gap: 8px;
 }
-.player-list li .badge {
-  font-size: 11px; background: #21262d; border-radius: 6px; padding: 2px 8px; color: #8b949e;
+.player-list li {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
 }
 .player-list li.dead { opacity: 0.45; text-decoration: line-through; }
+.player-list li .badge {
+  font-size: 0.6rem; font-weight: 800; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--accent-light);
+  border: 1px solid rgba(var(--accent-rgb), 0.6);
+  background: rgba(var(--accent-rgb), 0.12);
+  border-radius: var(--radius-pill); padding: 1px 7px; white-space: nowrap;
+}
 
-/* ------------------------------- map editor --------------------------- */
-.map-toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
-.map-toolbar select { width: auto; flex: 1; }
-.map-frame { position: relative; flex: 1; min-height: 320px; }
+/* ------------------------------ Map-Editor ------------------------------- */
+.map-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+.map-toolbar select { width: auto; flex: 1; height: 46px; }
+.map-frame { position: relative; flex: 1; min-height: 330px; }
 #map-canvas {
   width: 100%; height: 100%; display: block;
-  background: #0d1117; border: 1px solid #30363d; border-radius: 14px;
+  background: #060b16;
+  border: 1px solid var(--card-border); border-radius: 18px;
+  box-shadow: var(--shadow-lg);
   touch-action: none;
 }
 .map-controls {
@@ -90,37 +228,65 @@ button.round {
 .spinner {
   position: absolute; left: 50%; top: 50%;
   width: 34px; height: 34px; margin: -17px 0 0 -17px;
-  border: 3px solid #30363d; border-top-color: #58a6ff; border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.14);
+  border-top-color: var(--accent);
+  border-radius: 50%;
   animation: spin 0.9s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .editor-actions { display: flex; gap: 8px; margin: 10px 0 0; }
 .editor-actions button { flex: 1; }
 
-/* --------------------------------- game ------------------------------- */
+/* --------------------------------- Game --------------------------------- */
 #role-banner {
-  text-align: center; padding: 18px; border-radius: 14px;
-  font-weight: 800; font-size: 20px; letter-spacing: 1px; margin-bottom: 12px;
+  text-align: center; padding: 18px; border-radius: var(--radius-lg);
+  font-family: var(--font-tech);
+  font-weight: 700; font-size: 17px; letter-spacing: 0.12em; margin-bottom: 14px;
 }
-.role-crew { background: #173f1f; color: #7ee787; border: 1px solid #2ea043; }
-.role-impostor { background: #3f1618; color: #ff7b72; border: 1px solid #da3633; }
-
-.task-list { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.role-crew {
+  background: rgba(74, 222, 128, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(74, 222, 128, 0.45);
+}
+.role-impostor {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-light);
+  border: 1px solid rgba(var(--accent-rgb), 0.6);
+  text-shadow: 0 0 14px rgba(var(--accent-rgb), 0.4);
+}
+.task-list {
+  list-style: none; margin: 0 0 14px; padding: 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
 .task-list li {
-  background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
   padding: 12px; display: flex; justify-content: space-between; gap: 8px; align-items: center;
 }
 
 .game-actions { display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
 
+/* Modal-Overlay (Rezept 5.7) */
 .overlay {
-  position: fixed; inset: 0; background: rgba(1, 4, 9, 0.82);
-  display: flex; align-items: center; justify-content: center; padding: 18px; z-index: 30;
+  position: fixed; inset: 0; z-index: 30;
+  background: rgba(var(--bg0-rgb, 26, 10, 15), 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center; padding: 18px;
 }
-.overlay .card { width: 100%; max-width: 420px; max-height: 82dvh; overflow: auto; }
+.overlay .card {
+  width: 100%; max-width: 420px; max-height: calc(100dvh - 40px);
+  overflow-y: auto; overscroll-behavior: contain; text-align: center;
+}
 
 #meeting-hint { margin: 0 0 6px; }
 
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; animation-duration: 0.01ms !important; }
+}
 @media (min-width: 700px) {
   .screen { justify-content: flex-start; padding-top: 40px; }
 }
