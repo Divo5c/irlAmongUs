@@ -317,13 +317,10 @@ const App = (() => {
       $('map-status').textContent = `\u00b1${Math.round(position.coords.accuracy)}m Genauigkeit \u2014 Stra\u00DFen laden (dauert 10\u201340s, Bildschirm offen halten)\u2026`;
       editor.setAnchor(latitude, longitude);
       const radius = Number($('map-radius').value);
-      // Server does the Overpass queries (no CORS, mirror fallback built in).
-      const response = await fetch(`/osm/streets?lat=${latitude}&lon=${longitude}&radius=${radius}`);
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error ?? 'Straßendaten konnten nicht geladen werden.');
-      }
-      const candidates = OSM.toCandidates(data.streets, { lat: latitude, lon: longitude });
+      // Browser fetches Overpass directly (Render egress is unreliable);
+      // osm.js handles the mirror fallback + 40s timeouts.
+      const streets = await OSM.fetchStreets(latitude, longitude, radius);
+      const candidates = OSM.toCandidates(streets, { lat: latitude, lon: longitude });
       editor.setCandidates(candidates);
       $('map-status').textContent = `${candidates.length} Stra\u00DFen geladen \u2014 antippen zum Ausw\u00e4hlen`;
       if (!candidates.length) $('map-status').textContent = 'Keine Stra\u00DFen gefunden \u2014 Radius erh\u00f6hen?';

@@ -35,12 +35,12 @@ const OSM = (() => {
     const radius = Math.round(radiusM);
     return (
       `[out:json][timeout:20];way(around:${radius},${lat.toFixed(6)},` +
-      `${lon.toFixed(6)})["highway"];out geom;`
+      `${lon.toFixed(6)})["highway"];out geom 1500;`
     );
   }
 
-  /** POST query; tries main endpoint first, then the kumi mirror. */
-  async function fetchOverpass(query, timeoutMs = 25000) {
+  /** POST query directly from the browser; main endpoint first, then mirrors. */
+  async function fetchOverpass(query, timeoutMs = 40000) {
     let lastError = null;
     for (const endpoint of ENDPOINTS) {
       const controller = new AbortController();
@@ -54,11 +54,7 @@ const OSM = (() => {
         });
         const body = await response.text();
         if (!response.ok) {
-          lastError = `Overpass-Antwort: HTTP ${response.status}${
-            body.includes('capacity') || body.includes('Timeout')
-              ? ' (Server voll, versuche es gleich erneut)'
-              : ''
-          }`;
+          lastError = `Overpass-Server \u00fcberlastet (HTTP ${response.status})`;
           continue;
         }
         const data = JSON.parse(body);
@@ -79,7 +75,7 @@ const OSM = (() => {
       } catch (error) {
         lastError =
           error.name === 'AbortError'
-            ? 'Overpass-Antwort dauert zu lange — nochmal versuchen.'
+            ? 'Overpass-Antwort dauerte zu lange \u2014 nochmal versuchen.'
             : `Netzwerkfehler: ${error.message}`;
       } finally {
         clearTimeout(timer);
