@@ -106,6 +106,12 @@ test('bots vote in meetings so games advance without humans', async () => {
   store.startMapSetup(code);
   store.saveMap(code, validMap());
   store.startGame(code);
+  // Real-life discovery gate: a reported body must exist nearby.
+  const roomWithCorpse = store.getRoom(code);
+  roomWithCorpse.corpses = [
+    { playerId: 'dead-1', x: 5, y: 0, corridorId: 'c1', roomId: null, deadAt: new Date().toISOString() },
+  ];
+  store.updatePosition(code, hostId, { x: 5, y: 0, confidence: 1 });
   store.reportBody(code, hostId);
   store.advanceMeeting(code); // DISCUSSION -> VOTING
 

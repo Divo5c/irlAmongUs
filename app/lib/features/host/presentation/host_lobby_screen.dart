@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:real_life_amongus_app/core/network/server_wake.dart';
 import 'package:real_life_amongus_app/core/network/socket_client.dart';
 import 'package:real_life_amongus_app/core/utils/room_code.dart';
 
@@ -18,6 +21,9 @@ class HostLobbyScreen extends StatefulWidget {
 class _HostLobbyScreenState extends State<HostLobbyScreen> {
   String? _errorMessage;
   bool _creating = true;
+  ServerWakePhase _wakePhase = ServerWakePhase.checking;
+  Duration _wakeElapsed = Duration.zero;
+  Timer? _wakeTicker;
 
   @override
   void initState() {
@@ -25,12 +31,47 @@ class _HostLobbyScreenState extends State<HostLobbyScreen> {
     _createRoom();
   }
 
+  void _disposeWakeTicker() {
+    _wakeTicker?.cancel();
+    _wakeTicker = null;
+  }
+
+  void _tickWakeElapsed() {
+    final start = _wakeStart;
+    if (start == null) return;
+    setState(() {
+      _wakeElapsed = DateTime.now().difference(start);
+    });
+  }
+
+  DateTime? _wakeStart;
+
   Future<void> _createRoom() async {
     setState(() {
       _creating = true;
       _errorMessage = null;
+      _wakePhase = ServerWakePhase.checking;
+      _wakeElapsed = Duration.zero;
+      _wakeStart = DateTime.now();
     });
+    _wakeTicker?.cancel();
+    _wakeTicker = Timer.periodic(const Duration(seconds: 1), (_) => _tickWakeElapsed());
     try {
+      await ServerWakeService(serverUrl: widget.socketClient.serverUrl)
+          .waitUntilAwake(
+        onProgress: (progress) {
+          if (mounted) {
+            setState(() {
+              _wakePhase = progress.phase;
+              _wakeElapsed = progress.elapsed;
+            });
+          }
+        },
+      );
+      if (!mounted) return;
+      _disposeWakeTicker();
+      setState(() => _wakePhase = ServerWakePhase.awake);
+
       final code = RoomCode.generate();
       final room = await widget.socketClient.createRoom(
         code: code,
@@ -48,6 +89,13 @@ class _HostLobbyScreenState extends State<HostLobbyScreen> {
           ),
         ),
       );
+    } on ServerUnreachableException catch (error) {
+      if (mounted) {
+        setState(() {
+          _creating = false;
+          _errorMessage = error.message;
+        });
+      }
     } on RoomSocketException catch (error) {
       if (mounted) {
         setState(() {
@@ -55,7 +103,26 @@ class _HostLobbyScreenState extends State<HostLobbyScreen> {
           _errorMessage = error.message;
         });
       }
+    } finally {
+      _disposeWakeTicker();
     }
+  }
+
+  String get _wakeStatusText {
+    switch (_wakePhase) {
+      case ServerWakePhase.checking:
+        return 'Connecting to the game server…';
+      case ServerWakePhase.waking:
+        return 'The free server is waking up… this can take up to a minute.';
+      case ServerWakePhase.awake:
+        return 'Server awake — creating room…';
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeWakeTicker();
+    super.dispose();
   }
 
   @override
@@ -69,14 +136,23 @@ class _HostLobbyScreenState extends State<HostLobbyScreen> {
             if (_creating) ...[
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
-              const Text('Connecting to game server…'),
-              const SizedBox(height: 6),
-              const Text('A free server may take up to a minute to wake up.'),
+              Text(_wakeStatusText, textAlign: TextAlign.center),
+              if (_wakePhase == ServerWakePhase.waking) ...[
+                const SizedBox(height: 8),
+                Text('${_wakeElapsed.inSeconds}s',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
             ],
             if (!_creating) ...[
               const Icon(Icons.error_outline_rounded, size: 48),
               const SizedBox(height: 12),
-              Text(_errorMessage ?? 'Could not create the room.'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  _errorMessage ?? 'Could not create the room.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _createRoom,

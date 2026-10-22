@@ -13,6 +13,35 @@ let server;
 let io;
 let shortServer;
 let baseUrl;
+let roomStore;
+
+/**
+ * Real-life kill gate: both players need believable GPS positions first.
+ * Places the victim 1 m away from the killer on street c1.
+ */
+function placePlayersTogether(code, killerId, victimId) {
+  roomStore.updatePosition(code, victimId, { x: 1, y: 0, confidence: 1 });
+  roomStore.updatePosition(code, killerId, { x: 0, y: 0, confidence: 1 });
+}
+
+/** Plants a discovered corpse so meeting suites can report without a kill. */
+function plantCorpseNear(store, code, playerId, x = 21, y = 50) {
+  const room = store.getRoom(code);
+  room.corpses ??= [];
+  room.corpses.push({
+    playerId,
+    x,
+    y,
+    corridorId: 'c1',
+    roomId: null,
+    deadAt: new Date().toISOString(),
+  });
+}
+
+/** Puts a player on street c1 in meter space. */
+function placeOnStreet(store, code, playerId, x = 21, y = 50) {
+  return store.updatePosition(code, playerId, { x, y, confidence: 1 });
+}
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -181,7 +210,7 @@ async function startGameFor({ host, player, code }) {
 }
 
 before(async () => {
-  const roomStore = new RoomStore();
+  roomStore = new RoomStore();
   server = createHttpServer(roomStore);
   io = createSocketServer(server, roomStore, { disconnectGraceMs: 150 });
   await new Promise((resolve) => server.listen(0, resolve));
@@ -341,6 +370,9 @@ describe('socket flow security & gameplay', () => {
       const impostor = impostorIsHost ? host : player;
       const crewmate = impostorIsHost ? player : host;
       const victimId = impostorIsHost ? 'player-2' : 'host-1';
+      const impostorId = impostorIsHost ? 'host-1' : 'player-2';
+
+      placePlayersTogether(code, impostorId, victimId);
 
       let crewCooldownEvents = 0;
       crewmate.on('game:kill_cooldown', () => {
@@ -451,6 +483,8 @@ describe('socket flow security & gameplay', () => {
       ]);
 
       const meetingSeen = waitForEvent(player, 'game:meeting_started');
+      plantCorpseNear(roomStore, code, 'host-1');
+      placeOnStreet(roomStore, code, 'player-2');
       player.emit('game:report', { code });
       const meeting = await meetingSeen;
 
@@ -533,6 +567,9 @@ describe('socket flow security & gameplay', () => {
         waitForEvent(player, 'game:role_assigned'),
       ]);
 
+      // In the short-timer server everything routes through its own store.
+      plantCorpseNear(shortStore, code, 'host-1');
+      placeOnStreet(shortStore, code, 'player-2');
       player.emit('game:report', { code });
       const [votingStarted] = await Promise.all([
         waitForEvent(host, 'game:voting_started', 9000),
@@ -571,6 +608,7 @@ describe('socket flow security & gameplay', () => {
       assert.equal((await earlyReject).code, 'NOT_ROOM_HOST');
 
       // Finish the round (1v1 kill -> impostor win):
+      placePlayersTogether(code, impostorIsHost ? 'host-1' : 'player-2', victimId);
       impostor.emit('game:kill', { code, targetPlayerId: victimId });
       await waitForEvent(player, 'game:over');
 

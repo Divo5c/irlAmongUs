@@ -414,6 +414,35 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
           onCorridor: result.onCorridor,
         });
 
+        // Discovered corpses (same street): these light up the Report
+        // button and are drawn on the in-game map.
+        if (result.bodies?.length) {
+          socket.emit('game:bodies_nearby', { code, bodies: result.bodies });
+        } else {
+          socket.emit('game:bodies_nearby', { code, bodies: [] });
+        }
+
+        // Boundary watch: warn the player directly, escalate to the host.
+        if (result.boundary?.outOfBounds) {
+          socket.emit('game:boundary_warning', {
+            code,
+            distanceM: result.boundary.distanceM,
+            limitM: result.boundary.limitM,
+            strikes: result.boundary.strikes,
+          });
+        }
+        if (result.boundary?.adminAlert) {
+          const room = roomStore.getRoom(code);
+          const player = room?.players.find((p) => p.id === socket.data.playerId);
+          emitToPlayer(code, room?.hostId, 'admin:player_out_of_bounds', {
+            code,
+            playerId: socket.data.playerId,
+            name: player?.name ?? socket.data.playerId,
+            distanceM: result.boundary.distanceM,
+            strikes: result.boundary.strikes,
+          });
+        }
+
         // Broadcast to admin room if any admin is tracking
         if (roomStore.isAdmin(code, socket.data.playerId) || io.sockets.adapter.rooms.has(`admin:${code}`)) {
           const positions = roomStore.getAdminPositions(code);

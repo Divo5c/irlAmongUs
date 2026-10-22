@@ -187,8 +187,21 @@ function sanitizeGameMap(raw) {
   const width = isFiniteNumber(raw.width) ? raw.width : undefined;
   const height = isFiniteNumber(raw.height) ? raw.height : undefined;
 
+  // GPS anchor of the editor session (needed to project live client GPS
+  // fixes into the map's meter space during the game).
+  const anchorLat = raw.anchor?.lat;
+  const anchorLon = raw.anchor?.lon;
+  const anchor =
+    isFiniteNumber(anchorLat) &&
+    anchorLat >= -90 && anchorLat <= 90 &&
+    isFiniteNumber(anchorLon) &&
+    anchorLon >= -180 && anchorLon <= 180
+      ? { lat: anchorLat, lon: anchorLon }
+      : undefined;
+
   return {
     version: 1, // the store assigns the authoritative version on save
+    ...(anchor ? { anchor } : {}),
     ...(width !== undefined ? { width } : {}),
     ...(height !== undefined ? { height } : {}),
     nodes,

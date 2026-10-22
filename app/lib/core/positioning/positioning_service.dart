@@ -12,6 +12,8 @@ import 'package:real_life_amongus_app/core/models/game_map.dart';
 import 'package:real_life_amongus_app/core/models/position_estimate.dart';
 
 import 'calibration_service.dart';
+import 'gps_projector.dart';
+import 'gps_provider.dart';
 import 'heading_fusion.dart';
 import 'heading_snapper.dart';
 import 'motion_classifier.dart';
@@ -260,64 +262,137 @@ class PositioningService {
   bool get isSensorMode => _sensorMode;
 
   SensorStatus get sensorStatus => SensorStatus(
-        capabilities: _sensorProvider?.capabilities ?? const SensorCapabilities(),
-        isRunning: _sensorMode,
-        stepCount: _pdr.totalSteps,
-        totalDistance: _pdr.totalDistance,
-        calibrationState: _calibration.state,
-        calibrationResult: _calibration.result,
-        headingDeg: _heading.headingDeg,
-        headingConfidence: _heading.confidence,
-        lastPosition: _currentPosition,
-        isStationary: _motion.isStill,
-        lastStepConfidence: _pdr.lastConfidence,
-        lastIntervalMs: _pdr.lastIntervalMs,
-        motionState: _motion.state,
-        stepSource: _lastStepSource,
-        walkingConfidence: _lastWalkingConfidence,
-        lastStepReason: _lastStepReason,
-        useHardwareStepDetector: _useHardware,
-        motionAccelMean: _motion.accelMean,
-        motionAccelVar: _motion.accelVariance,
-        motionGyroMean: _motion.gyroMean,
-        motionGyroVar: _motion.gyroVariance,
-        validatorConsecutive: _validator.consecutivePlausible,
-        validatorInterval: _validator.lastCandidateTime != null ? DateTime.now().millisecondsSinceEpoch - _validator.lastCandidateTime! : null,
-        headingRaw: _heading.lastRawMagHeading,
-        gyroDeltaDeg: _heading.lastGyroDeltaDeg,
-        magX: _heading.lastMx,
-        magY: _heading.lastMy,
-        magZ: _heading.lastMz,
-        pdrDx: _pdr.lastDx,
-        pdrDy: _pdr.lastDy,
-        lastStride: _pdr.lastStride,
-        hardwareStepCount: _hardwareStepCount,
-        lastHardwareStepTime: _lastHardwareStepTime,
-        lastAccel: _lastAccelReading,
-        lastGyro: _lastGyroReading,
-        lastMag: _lastMagReading,
-        lastUserAccel: _lastUserAccelReading,
-        buildVersion: kBuildVersion,
-        fallbackActive: _fallbackActive,
-        failoverReason: _failoverReason,
-        stepDetectorError: _stepDetectorErrorMsg,
-        pdrCandidates: _pdr.candidatesTotal,
-        pdrRejected: _pdr.droppedTotal,
-        pdrLastReject: _pdr.lastRejectReason,
-        pdrLastFilt: _pdr.lastFilteredMag,
-        pdrLastRaw: _pdr.lastRawMag,
-        pdrLastCandidateTs: _pdr.lastCandidateTimeMs,
-        accelSamples: _accelSampleCount,
-        fallbackSamples: _fallbackSampleCount,
-        validatorValidated: _validator.validatedTotal,
-        validatorAccepted: _validator.acceptedTotal,
-        validatorRejected: _validator.rejectedTotal,
-        validatorLastReject: _validator.lastRejectReason,
-        lastAcceptedStepMs: _lastAcceptedStepMs,
-      );
+    capabilities: _sensorProvider?.capabilities ?? const SensorCapabilities(),
+    isRunning: _sensorMode,
+    stepCount: _pdr.totalSteps,
+    totalDistance: _pdr.totalDistance,
+    calibrationState: _calibration.state,
+    calibrationResult: _calibration.result,
+    headingDeg: _heading.headingDeg,
+    headingConfidence: _heading.confidence,
+    lastPosition: _currentPosition,
+    isStationary: _motion.isStill,
+    lastStepConfidence: _pdr.lastConfidence,
+    lastIntervalMs: _pdr.lastIntervalMs,
+    motionState: _motion.state,
+    stepSource: _lastStepSource,
+    walkingConfidence: _lastWalkingConfidence,
+    lastStepReason: _lastStepReason,
+    useHardwareStepDetector: _useHardware,
+    motionAccelMean: _motion.accelMean,
+    motionAccelVar: _motion.accelVariance,
+    motionGyroMean: _motion.gyroMean,
+    motionGyroVar: _motion.gyroVariance,
+    validatorConsecutive: _validator.consecutivePlausible,
+    validatorInterval: _validator.lastCandidateTime != null
+        ? DateTime.now().millisecondsSinceEpoch - _validator.lastCandidateTime!
+        : null,
+    headingRaw: _heading.lastRawMagHeading,
+    gyroDeltaDeg: _heading.lastGyroDeltaDeg,
+    magX: _heading.lastMx,
+    magY: _heading.lastMy,
+    magZ: _heading.lastMz,
+    pdrDx: _pdr.lastDx,
+    pdrDy: _pdr.lastDy,
+    lastStride: _pdr.lastStride,
+    hardwareStepCount: _hardwareStepCount,
+    lastHardwareStepTime: _lastHardwareStepTime,
+    lastAccel: _lastAccelReading,
+    lastGyro: _lastGyroReading,
+    lastMag: _lastMagReading,
+    lastUserAccel: _lastUserAccelReading,
+    buildVersion: kBuildVersion,
+    fallbackActive: _fallbackActive,
+    failoverReason: _failoverReason,
+    stepDetectorError: _stepDetectorErrorMsg,
+    pdrCandidates: _pdr.candidatesTotal,
+    pdrRejected: _pdr.droppedTotal,
+    pdrLastReject: _pdr.lastRejectReason,
+    pdrLastFilt: _pdr.lastFilteredMag,
+    pdrLastRaw: _pdr.lastRawMag,
+    pdrLastCandidateTs: _pdr.lastCandidateTimeMs,
+    accelSamples: _accelSampleCount,
+    fallbackSamples: _fallbackSampleCount,
+    validatorValidated: _validator.validatedTotal,
+    validatorAccepted: _validator.acceptedTotal,
+    validatorRejected: _validator.rejectedTotal,
+    validatorLastReject: _validator.lastRejectReason,
+    lastAcceptedStepMs: _lastAcceptedStepMs,
+  );
 
-  final _positionStreamController = StreamController<PositionEstimate>.broadcast();
-  Stream<PositionEstimate> get positionStream => _positionStreamController.stream;
+  final _positionStreamController =
+      StreamController<PositionEstimate>.broadcast();
+  Stream<PositionEstimate> get positionStream =>
+      _positionStreamController.stream;
+
+  // ---------------- GPS mode (outdoors primary source) ----------------
+
+  GpsProvider? _gpsProvider;
+  StreamSubscription<GpsFix>? _gpsSub;
+  GpsQualityPolicy _gpsPolicy = const GpsQualityPolicy();
+  GeoProjector? _gpsProjector;
+  bool _gpsMode = false;
+  int _gpsFixCount = 0;
+  int _gpsRejectedCount = 0;
+  double? _lastGpsAccuracyM;
+
+  bool get isGpsMode => _gpsMode;
+  int get gpsFixCount => _gpsFixCount;
+  int get gpsRejectedCount => _gpsRejectedCount;
+  double? get lastGpsAccuracyM => _lastGpsAccuracyM;
+
+  /// Activates GPS as the position source. Resolves to false when the
+  /// provider cannot start (no permission / location service off); the
+  /// service state is unchanged in that case.
+  Future<bool> enableGpsMode({
+    required GpsProvider provider,
+    GpsQualityPolicy policy = const GpsQualityPolicy(),
+  }) async {
+    final ready = await provider.isReady();
+    if (!ready) return false;
+    _gpsMode = true;
+    _gpsPolicy = policy;
+    _gpsProvider = provider;
+    _debugMode = false;
+    _sensorMode = false;
+    _stopSensorListening();
+    provider.start();
+    _gpsSub = provider.fixes.listen(_onGpsFix);
+    return true;
+  }
+
+  void disableGpsMode() {
+    _gpsMode = false;
+    _gpsSub?.cancel();
+    _gpsSub = null;
+    _gpsProvider?.stop();
+  }
+
+  void _onGpsFix(GpsFix fix) {
+    if (!_gpsMode) return;
+    if (_gpsProjector == null) {
+      _gpsProjector = GeoProjector.anchoredAt(fix.lat, fix.lon);
+    }
+    if (fix.accuracyM > _gpsPolicy.maxAccuracyM || !fix.hasUsableAccuracy) {
+      _gpsRejectedCount++;
+      return; // weak fix: keep the last known position (freeze)
+    }
+    _gpsFixCount++;
+    _lastGpsAccuracyM = fix.accuracyM;
+    final (x, y) = _gpsProjector!.project(fix.lat, fix.lon);
+    final accuracy = fix.accuracyM.clamp(0.5, _gpsPolicy.maxAccuracyM);
+    final confidence = (1.0 - accuracy / _gpsPolicy.maxAccuracyM) * 0.7 + 0.25;
+    var est = PositionEstimate(
+      x: x,
+      y: y,
+      heading: fix.headingDeg,
+      confidence: confidence,
+      source: PositionSource.gps,
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+    );
+    est = _applyMapSnap(est);
+    _updatePosition(est);
+  }
 
   /// Live fused heading (degrees, 0=north) from HeadingFusion/Sensor-Updates.
   /// Read-only view of the existing heading state — updated on every gyro/
@@ -354,19 +429,41 @@ class PositioningService {
   void enableDebugMode() {
     _debugMode = true;
     _sensorMode = false;
+    _gpsMode = false;
+    _stopGpsListening();
     _stopSensorListening();
   }
 
   void enableSensorMode() {
     _sensorMode = true;
     _debugMode = false;
+    _gpsMode = false;
+    _stopGpsListening();
     _startSensorListening();
   }
 
   void disable() {
     _debugMode = false;
     _sensorMode = false;
+    _gpsMode = false;
+    _stopGpsListening();
     _stopSensorListening();
+  }
+
+  /// Pauses all positioning (sensors stay idle, no steps are counted).
+  /// Use while the host focuses on non-position flows, e.g. OSM street
+  /// picking. Resume with [enableSensorMode] or [enableGpsMode].
+  void pause() {
+    _sensorMode = false;
+    _gpsMode = false;
+    _stopGpsListening();
+    _stopSensorListening();
+  }
+
+  void _stopGpsListening() {
+    _gpsSub?.cancel();
+    _gpsSub = null;
+    _gpsProvider?.stop();
   }
 
   void setInitialPosition(double x, double y, {double headingDeg = 0}) {
@@ -428,7 +525,11 @@ class PositioningService {
     _lastSendTime = DateTime.now();
     _positionStreamController.add(confirmed);
     if (_pdr.isInitialized) {
-      _pdr.setPosition(confirmed.x, confirmed.y, headingDeg: confirmed.heading ?? 0);
+      _pdr.setPosition(
+        confirmed.x,
+        confirmed.y,
+        headingDeg: confirmed.heading ?? 0,
+      );
     }
   }
 
@@ -442,14 +543,16 @@ class PositioningService {
     final distance = math.sqrt(dx * dx + dy * dy);
     if (distance >= thresholds.minDistanceMoved) return true;
     if (candidate.heading != null && _lastSentPosition!.heading != null) {
-      var headingDiff = (candidate.heading! - _lastSentPosition!.heading!).abs();
+      var headingDiff = (candidate.heading! - _lastSentPosition!.heading!)
+          .abs();
       if (headingDiff > 180) headingDiff = 360 - headingDiff;
       if (headingDiff >= thresholds.minHeadingChangeDeg) return true;
     }
     return false;
   }
 
-  void startCalibration(double targetDistance) => _calibration.start(targetDistance);
+  void startCalibration(double targetDistance) =>
+      _calibration.start(targetDistance);
   CalibrationResult completeCalibration(double actualDistance) {
     final result = _calibration.complete(actualDistance);
     _pdr.calibrate(actualDistance, result.stepsDetected, result.avgMagnitude);
@@ -502,13 +605,22 @@ class PositioningService {
     for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       final xi = poly[i].$1, yi = poly[i].$2;
       final xj = poly[j].$1, yj = poly[j].$2;
-      final intersect = ((yi > py) != (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+      final intersect =
+          ((yi > py) != (yj > py)) &&
+          (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
       if (intersect) inside = !inside;
     }
     return inside;
   }
 
-  (double, double) _closestPointOnSegment(double px, double py, double ax, double ay, double bx, double by) {
+  (double, double) _closestPointOnSegment(
+    double px,
+    double py,
+    double ax,
+    double ay,
+    double bx,
+    double by,
+  ) {
     final abx = bx - ax, aby = by - ay;
     final apx = px - ax, apy = py - ay;
     final ab2 = abx * abx + aby * aby;
@@ -583,8 +695,8 @@ class PositioningService {
     final lastAccepted = _lastAcceptedStepMs;
     final acceptRef =
         (lastAccepted != null && lastAccepted > _firstWalkingTsMs!)
-            ? lastAccepted
-            : _firstWalkingTsMs!;
+        ? lastAccepted
+        : _firstWalkingTsMs!;
     if (now - acceptRef > _hwAcceptGraceMs) return 'no-accepted-steps';
     return null;
   }
@@ -609,7 +721,8 @@ class PositioningService {
       _lastAcceptedStepMs = reading.timestampMs;
       _lastStepSource = StepSource.fallback;
       _lastWalkingConfidence = update.confidence;
-      _lastStepReason = 'ACCEPT fallback conf=${update.confidence.toStringAsFixed(2)}';
+      _lastStepReason =
+          'ACCEPT fallback conf=${update.confidence.toStringAsFixed(2)}';
       var est = PositionEstimate(
         x: update.x,
         y: update.y,
@@ -623,20 +736,22 @@ class PositioningService {
         _pdr.setPosition(est.x, est.y, headingDeg: moveHeading);
       }
       _updatePosition(est);
-      _stepLog.add(StepDiagnostic(
-        stepNumber: update.stepsDetected,
-        timestampMs: reading.timestampMs,
-        headingDeg: moveHeading,
-        stride: update.strideLength,
-        dx: update.dx,
-        dy: update.dy,
-        worldX: est.x,
-        worldY: est.y,
-        motionState: _motion.state,
-        validatorReason: _lastStepReason,
-        source: StepSource.fallback,
-        confidence: update.confidence,
-      ));
+      _stepLog.add(
+        StepDiagnostic(
+          stepNumber: update.stepsDetected,
+          timestampMs: reading.timestampMs,
+          headingDeg: moveHeading,
+          stride: update.strideLength,
+          dx: update.dx,
+          dy: update.dy,
+          worldX: est.x,
+          worldY: est.y,
+          motionState: _motion.state,
+          validatorReason: _lastStepReason,
+          source: StepSource.fallback,
+          confidence: update.confidence,
+        ),
+      );
       if (_stepLog.length > 50) _stepLog.removeAt(0);
     }
   }
@@ -670,7 +785,12 @@ class PositioningService {
 
     _magnetSub = _sensorProvider!.magnetometer.listen((reading) {
       _lastMagReading = reading;
-      _heading.updateFromMagnetometer(reading.x, reading.y, reading.timestampMs, reading.z);
+      _heading.updateFromMagnetometer(
+        reading.x,
+        reading.y,
+        reading.timestampMs,
+        reading.z,
+      );
       _maybeEmitHeading();
     });
 
@@ -694,39 +814,45 @@ class PositioningService {
             if (_motion.isStill) _validator.notifyStill();
             return;
           }
-        // Snapped heading drives PDR displacement only; the raw heading
-        // stays on the estimate, arrow and diagnostics.
-        final moveHeading = _snapper.snap(heading).toDouble();
-        final upd = _pdr.onHardwareStep(event.timestampMs, moveHeading, vr.confidence);
-        if (upd != null) {
-          _lastAcceptedStepMs = event.timestampMs;
-          var est = PositionEstimate(
+          // Snapped heading drives PDR displacement only; the raw heading
+          // stays on the estimate, arrow and diagnostics.
+          final moveHeading = _snapper.snap(heading).toDouble();
+          final upd = _pdr.onHardwareStep(
+            event.timestampMs,
+            moveHeading,
+            vr.confidence,
+          );
+          if (upd != null) {
+            _lastAcceptedStepMs = event.timestampMs;
+            var est = PositionEstimate(
               x: upd.x,
               y: upd.y,
               heading: heading,
               confidence: upd.confidence * _heading.confidence,
               source: PositionSource.fused,
               timestamp: event.timestampMs,
-          );
-          est = _applyMapSnap(est);
-          if ((est.x - upd.x).abs() > 0.01 || (est.y - upd.y).abs() > 0.01) {
-            _pdr.setPosition(est.x, est.y, headingDeg: moveHeading);
-          }
-          _updatePosition(est);
-          _stepLog.add(StepDiagnostic(
-            stepNumber: upd.stepsDetected,
-            timestampMs: event.timestampMs,
-            headingDeg: moveHeading,
-              stride: upd.strideLength,
-              dx: upd.dx,
-              dy: upd.dy,
-              worldX: est.x,
-              worldY: est.y,
-              motionState: _motion.state,
-              validatorReason: vr.reason,
-              source: StepSource.hardware,
-              confidence: vr.confidence,
-            ));
+            );
+            est = _applyMapSnap(est);
+            if ((est.x - upd.x).abs() > 0.01 || (est.y - upd.y).abs() > 0.01) {
+              _pdr.setPosition(est.x, est.y, headingDeg: moveHeading);
+            }
+            _updatePosition(est);
+            _stepLog.add(
+              StepDiagnostic(
+                stepNumber: upd.stepsDetected,
+                timestampMs: event.timestampMs,
+                headingDeg: moveHeading,
+                stride: upd.strideLength,
+                dx: upd.dx,
+                dy: upd.dy,
+                worldX: est.x,
+                worldY: est.y,
+                motionState: _motion.state,
+                validatorReason: vr.reason,
+                source: StepSource.hardware,
+                confidence: vr.confidence,
+              ),
+            );
             if (_stepLog.length > 50) _stepLog.removeAt(0);
           }
         },
@@ -813,6 +939,12 @@ class PositioningService {
     _currentPosition = null;
     _lastSentPosition = null;
     _lastSendTime = null;
+    _gpsMode = false;
+    _stopGpsListening();
+    _gpsProjector = null;
+    _gpsFixCount = 0;
+    _gpsRejectedCount = 0;
+    _lastGpsAccuracyM = null;
     _stopSensorListening();
     _pdr.reset();
     _heading.reset();
@@ -836,6 +968,7 @@ class PositioningService {
   }
 
   void dispose() {
+    _stopGpsListening();
     _stopSensorListening();
     _positionStreamController.close();
     _headingStreamController.close();

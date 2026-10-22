@@ -12,6 +12,9 @@ const defaultServerUrl = String.fromEnvironment(
 );
 
 abstract interface class RoomSocketClient {
+  /// Base URL of the game server this client is configured with.
+  String get serverUrl;
+
   /// Public room updates (never contains player roles).
   Stream<Map<String, dynamic>> get roomUpdates;
 

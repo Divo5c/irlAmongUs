@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:real_life_amongus_app/core/network/server_wake.dart';
 import 'package:real_life_amongus_app/core/network/socket_client.dart';
 import 'package:real_life_amongus_app/features/game/presentation/game_screen.dart';
 import 'package:real_life_amongus_app/features/map/presentation/map_ready_view.dart';
@@ -17,6 +18,9 @@ class FakeRoomSocketClient implements RoomSocketClient {
   final _errors = StreamController<RoomSocketException>.broadcast();
   final _connectionStateChanges = StreamController<bool>.broadcast();
   bool connected = true;
+
+  @override
+  String get serverUrl => 'https://example.test';
 
   final completedTaskIds = <String>[];
   final killedTargets = <String>[];
@@ -287,6 +291,10 @@ class FakeRoomSocketClient implements RoomSocketClient {
 }
 
 void main() {
+  setUpAll(() {
+    ServerWakeService.testProbe = (url, timeout) async => true;
+  });
+
   testWidgets('shows the home screen actions', (tester) async {
     await tester.pumpWidget(
       RealLifeAmongUsApp(socketClient: FakeRoomSocketClient()),
@@ -395,6 +403,12 @@ void main() {
 
     expect(find.byType(MapSetupScreen), findsOneWidget);
     expect(find.byKey(const Key('map-canvas')), findsOneWidget);
+
+    // The editor opens in Streets mode; switch to Corridor for this flow.
+    await tester.tap(find.byKey(const Key('more-modes-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Corridor'));
+    await tester.pumpAndSettle();
 
     // Scan origin is published immediately: diagnostics shows (0.0, 0.0).
     expect(find.textContaining('(0.0, 0.0)'), findsOneWidget);

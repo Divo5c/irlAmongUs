@@ -146,6 +146,25 @@ function snapToCorridor(px, py, map) {
 }
 
 /**
+ * Straight distance to the nearest corridor segment (unbounded, used for
+ * the out-of-game-area boundary check). Returns Infinity without a map.
+ */
+function nearestCorridorDistanceM(px, py, nodes, corridors) {
+  if (!corridors?.length || !nodes?.length) return Infinity;
+  const nodeMap = new Map();
+  for (const node of nodes) nodeMap.set(node.id, node);
+  let best = Infinity;
+  for (const corridor of corridors) {
+    const a = nodeMap.get(corridor.a);
+    const b = nodeMap.get(corridor.b);
+    if (!a || !b) continue;
+    const result = pointToSegmentDistance(px, py, a.x, a.y, b.x, b.y);
+    if (result.distance < best) best = result.distance;
+  }
+  return best;
+}
+
+/**
  * Resolves which room a position falls in, or if it's on a corridor.
  *
  * @returns {{ roomId: string|null, onCorridor: boolean, snappedX: number, snappedY: number }}
@@ -281,6 +300,7 @@ module.exports = {
   sanitizePositionEstimate,
   distance,
   isPositionPlausible,
+  nearestCorridorDistanceM,
   MAX_SNAP_DISTANCE,
   MAX_POSITION_AGE_MS,
   MAX_SPEED_MPS,

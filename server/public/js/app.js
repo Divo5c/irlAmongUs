@@ -99,6 +99,10 @@ const App = (() => {
       if (room.status === 'GAME_OVER' || room.status === 'IN_GAME' || room.status === 'MEETING') {
         if (active !== 'screen-game') show('game');
       }
+      // GPS-Sender nur während des echten Spiels (Kill-Gates brauchen Positionen).
+      if (room.status === 'IN_GAME') ensureGpsLoop();
+      else stopGpsLoop();
+      renderTeamProgress(room);
       // MAP_READY: the host may go back to the lobby and start the game.
       const startGame = $('btn-start-game');
       startGame.disabled = !(room.status === 'MAP_READY' && state.isHost);
@@ -131,10 +135,38 @@ const App = (() => {
       show('game');
       beep(520);
     });
+    socket.on('game:bodies_nearby', ({ bodies }) => {
+      state.nearbyBodies = bodies ?? [];
+      renderGameHud();
+    });
+    socket.on('position:confirmed', (pos) => {
+      state.selfPos = pos;
+      state.anchorOk = !!pos.onCorridor || !!pos.onRoom;
+      drawGameMap();
+      renderGameHud();
+    });
+    socket.on('position:error', ({ code }) => {
+      if (code === 'POSITION_NOT_ALLOWED') return; // Meeting etc. – ruhig ignorieren
+      $('game-phase-hint').textContent = `Position abgelehnt: ${code}`;
+    });
+    socket.on('game:boundary_warning', ({ distanceM, limitM, strikes }) => {
+      const banner = $('boundary-banner');
+      banner.textContent = `Geh zur\u00fcck aufs Spielfeld! (${Math.round(distanceM)}m > ${Math.round(limitM)}m) Warnung ${strikes}/3`;
+      banner.classList.remove('hidden');
+      vibrate([60, 40, 60, 40, 120]);
+    });
+    socket.on('admin:player_out_of_bounds', ({ name, distanceM }) => {
+      const banner = $('boundary-banner');
+      banner.textContent = `ADMIN: ${name} ist ${Math.round(distanceM)}m drau\u00dfen!`;
+      banner.classList.remove('hidden');
+      vibrate([200, 100, 200]);
+    });
     socket.on('game:role_assigned', (payload) => {
       state.role = payload;
       state.killReadyAt = payload.killReadyAt ?? 0;
+      state.teammates = payload.teammates ?? [];
       renderRole(payload);
+      ensureGpsLoop();
       vibrate([40]);
     });
     socket.on('game:kill_cooldown', ({ killReadyAt }) => {
@@ -168,9 +200,12 @@ const App = (() => {
       } else {
         $('game-phase-hint').textContent = 'Niemand wurde rausgew\u00e4hlt (Skip).';
       }
-      if (status === 'GAME_OVER') hideOverlaysNot();
+      if (status === 'GAME_OVER') stopGpsLoop();
+      else if (status === 'IN_GAME') ensureGpsLoop();
     });
     socket.on('game:over', ({ winner, players }) => {
+      stopGpsLoop();
+      $('boundary-banner').classList.add('hidden');
       $('gameover-overlay').classList.remove('hidden');
       $('gameover-title').textContent =
         winner === 'CREWMATE' ? 'Crewmates haben gewonnen!' : 'Impostoren haben gewonnen!';
@@ -265,7 +300,8 @@ const App = (() => {
   function renderLobby(room) {
     const isHost = room.hostId === state.playerId;
     state.isHost = isHost;
-    $('host-controls').classList.toggle('hidden', !isHost);
+      $('host-controls').classList.toggle('hidden', !isHost);
+      applyLobbyConfig(room);
     $('lobby-waiting').classList.toggle('hidden', isHost);
     $('lobby-code').textContent = room.code;
     renderLobbyPlayers(room);
@@ -283,7 +319,8 @@ const App = (() => {
           : player.isAlive
             ? 'bereit'
             : 'ausgeschieden';
-      li.innerHTML = `<span>${escapeHtml(player.name)}${player.isBot ? ' \u{1F916}' : ''}</span><span class="badge">${badge}</span>`;
+      const isMate = (state.teammates ?? []).some((m) => m.id === player.id);
+      li.innerHTML = `<span${isMate ? ' class="imp-name"' : ''}>${escapeHtml(player.name)}${player.isBot ? ' \u{1F916}' : ''}</span><span class="badge">${badge}</span>`;
       list.appendChild(li);
     }
   }
@@ -471,6 +508,33 @@ const App = (() => {
   $('btn-zoom-out').addEventListener('click', () => editor.zoomBy(1 / 1.4));
   $('map-radius').addEventListener('change', () => {});
 
+  // ------------------------------------------------------- settings (host) //
+
+  function applyLobbyConfig(room) {
+    const cfg = room.config ?? {};
+    $('cfg-impostors').value = `${cfg.impostorCount ?? 1}`;
+    $('cfg-tasks').value = `${cfg.tasksPerCrewmate ?? 4}`;
+    $('cfg-kill-radius').value = `${cfg.killRadiusM ?? 2}`;
+    $('cfg-cooldown').value = `${Math.round((cfg.killCooldownMs ?? 0) / 1000)}`;
+    $('cfg-discuss').value = `${Math.round((cfg.discussionDurationMs ?? 0) / 1000)}`;
+    $('cfg-vote').value = `${Math.round((cfg.votingDurationMs ?? 60_000) / 1000)}`;
+  }
+
+  $('cfg-apply').addEventListener('click', () => {
+    ensureSocket().emit('game:update_config', {
+      code: state.code,
+      config: {
+        impostorCount: Number($('cfg-impostors').value),
+        tasksPerCrewmate: Number($('cfg-tasks').value),
+        killRadiusM: Number($('cfg-kill-radius').value),
+        killCooldownMs: Number($('cfg-cooldown').value) * 1000,
+        discussionDurationMs: Number($('cfg-discuss').value) * 1000,
+        votingDurationMs: Number($('cfg-vote').value) * 1000,
+      },
+    });
+    beep(660);
+  });
+
   // ---------------------------------------------------------------- game //
 
   function renderRole(payload) {
@@ -501,16 +565,187 @@ const App = (() => {
       button.addEventListener('click', () => {
         ensureSocket().emit('task:complete', { code: state.code, taskId: task.id });
         button.disabled = true;
+        button.textContent = '\u2713';
         beep(880);
         vibrate(30);
       });
       li.appendChild(button);
       list.appendChild(li);
     }
+    $('task-count').textContent = `${payload.tasks?.length ?? 0}`;
     if (!payload.tasks?.length) {
       list.innerHTML = '<li><span>Keine Tasks \u2014 als Impostor sabotier, als Geist beobachte.</span></li>';
     }
+    renderGameHud();
   }
+
+  /** Team-Fortschritt im Live-Map-Header (aus room.taskProgress). */
+  function renderTeamProgress(room) {
+    const progress = room.taskProgress ?? { completed: 0, total: 0 };
+    const total = progress.total || 0;
+    const pct = total ? Math.round((progress.completed / total) * 100) : 0;
+    $('team-progress-bar').style.width = `${pct}%`;
+  }
+
+  /** Report/Kill-Buttons je nach Leichen-Nähe + Cooldown aktivieren. */
+  function renderGameHud() {
+    const room = state.room;
+    if (!room || room.status !== 'IN_GAME') return;
+    const imAlive = room.players.find((p) => p.id === state.playerId)?.isAlive;
+    const bodies = state.nearbyBodies ?? [];
+    const reportBtn = $('btn-report');
+    reportBtn.disabled = !(bodies.length && imAlive !== false);
+    reportBtn.textContent = bodies.length
+      ? `Report (${bodies.length})`
+      : 'Report';
+    const killBtn = $('btn-kill');
+    if (killBtn.classList.contains('hidden')) return;
+    const cooldownLeft = Math.max(0, state.killReadyAt - Date.now());
+    killBtn.disabled = cooldownLeft > 0;
+    killBtn.textContent = cooldownLeft
+      ? `Kill in ${Math.ceil(cooldownLeft / 1000)}s`
+      : 'Kill';
+  }
+  setInterval(renderGameHud, 500);
+
+  // ------------------------------------------------------------ gps loop //
+
+  /** GPS->Meter Projektion auf Basis des gespeicherten Karten-Ankers. */
+  function projectorFor(key = null) {
+    if (key) return key === state.projKey ? state.proj : null;
+    const anchor = state.room?.map?.anchor;
+    if (!anchor || typeof anchor.lat !== 'number') return null;
+    const cacheKey = `${anchor.lat}:${anchor.lon}`;
+    if (state.projKey !== cacheKey) {
+      state.projKey = cacheKey;
+      state.proj = OSM.createProjector(anchor.lat, anchor.lon);
+    }
+    return state.proj;
+  }
+
+  ensureGpsLoop.started = false;
+  function ensureGpsLoop() {
+    if (!('geolocation' in navigator) || ensureGpsLoop.started) return;
+    ensureGpsLoop.started = true;
+    navigator.geolocation.watchPosition((pos) => {
+      state.gpsFix = pos.coords;
+      state.gpsFixAt = Date.now();
+    }, () => {}, { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
+  }
+
+  function stopGpsLoop() {
+    // Watcher bleibt billig aktiv; der Sendetakt prüft den Status selbst.
+    state.nearbyBodies = [];
+  }
+
+  setInterval(() => {
+    const room = state.room;
+    if (!room || room.status !== 'IN_GAME' || !state.gpsFixAt) return;
+    if (Date.now() - state.gpsFixAt > 10000) return;
+    const proj = projectorFor();
+    if (!proj) return;
+    const [x, y] = proj.project(state.gpsFix.latitude, state.gpsFix.longitude);
+    const confidence = Math.min(1, Math.max(0, (60 - (state.gpsFix.accuracy ?? 60)) / 60));
+    emitPosition({ x, y, confidence });
+  }, 2000);
+
+  function emitPosition({ x, y, confidence }) {
+    const last = state.lastSent;
+    if (last && Date.now() - last.at < 1000) return;
+    state.lastSent = { at: Date.now() };
+    const socket = ensureSocket();
+    socket.emit('position:update', {
+      code: state.code,
+      x,
+      y,
+      confidence,
+      source: 'GPS',
+    });
+  }
+
+  // --------------------------------------------------------- live map draw //
+
+  function drawGameMap() {
+    const canvas = $('game-map');
+    const map = state.room?.map;
+    if (!canvas || !map?.nodes?.length) return;
+    const wrap = canvas.parentElement;
+    canvas.width = wrap.clientWidth * 2;
+    canvas.height = wrap.clientHeight * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const nodes = Object.fromEntries(map.nodes.map((n) => [n.id, n]));
+    const pts = [...map.nodes.map((n) => [n.x, n.y])];
+    if (state.selfPos) pts.push([state.selfPos.x, state.selfPos.y]);
+    const minX = Math.min(...pts.map((p) => p[0]));
+    const maxX = Math.max(...pts.map((p) => p[0]));
+    const minY = Math.min(...pts.map((p) => p[1]));
+    const maxY = Math.max(...pts.map((p) => p[1]));
+    const w = maxX - minX || 50;
+    const h = maxY - minY || 50;
+    const pad = 20;
+    const scale = Math.min((canvas.width / 2 - pad * 2) / w, (canvas.height / 2 - pad * 2) / h);
+    const toPx = (x, y) => [
+      pad + (x - minX) * scale,
+      pad + (y - minY) * scale,
+    ];
+
+    // corry corridors
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#2e3242';
+    for (const c of map.corridors ?? []) {
+      const poly = c.points ?? [(nodes[c.from]?.x ?? 0), 0];
+      if (!poly) continue;
+      ctx.beginPath();
+      (c.points ?? []).forEach((pt, i) => {
+        const [px, py] = toPx(pt.x ?? nodes[c.from]?.x ?? pt[0], pt.y ?? nodes[c.from]?.y ?? pt[1]);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+    }
+
+    // rooms polygons
+    ctx.lineWidth = 2;
+    for (const r of map.rooms ?? []) {
+      const poly = r.polygon ?? r.points ?? [];
+      if (poly.length < 3) continue;
+      ctx.strokeStyle = 'rgba(255,209,102,0.5)';
+      ctx.strokePath?.();
+      ctx.beginPath();
+      poly.forEach((pt, i) => {
+        const [px, py] = toPx(pt.x, pt.y);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    // corpses the player has discovered
+    for (const body of state.nearbyBodies ?? []) {
+      const [bx, by] = toPx(body.x, body.y);
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(bx, by, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // self marker
+    if (state.selfPos) {
+      const [sx, sy] = toPx(state.selfPos.x, state.selfPos.y);
+      ctx.fillStyle = '#4ade80';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(74,222,128,0.3)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, state.selfPos.onRoom || state.selfPos.onCorridor ? 14 : 20, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  window.addEventListener('resize', () => drawGameMap());
 
   function renderPhaseHint(room) {
     if (!state.role) return;
@@ -573,8 +808,9 @@ const App = (() => {
     list.innerHTML = '';
     $('meeting-hint').textContent = title;
     for (const player of candidates) {
+      const isMate = (state.teammates ?? []).some((m) => m.id === player.id);
       const li = document.createElement('li');
-      li.innerHTML = `<span>${escapeHtml(player.name)}</span>`;
+      li.innerHTML = `<span${isMate ? ' class="imp-name"' : ''}>${escapeHtml(player.name)}</span>`;
       const button = document.createElement('button');
       button.textContent = 'W\u00e4hlen';
       button.className = 'secondary small';

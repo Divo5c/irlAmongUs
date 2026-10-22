@@ -40,6 +40,11 @@ void main() {
         ),
       );
       await tester.pump();
+      // The editor opens in Streets mode; corridor tests switch manually.
+      await tester.tap(find.byKey(const Key('more-modes-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Corridor'));
+      await tester.pumpAndSettle();
     }
 
     MapCanvas canvasOf(WidgetTester tester) =>
@@ -146,7 +151,6 @@ void main() {
       await tester.pump();
       for (var i = 0; i < 12; i++) {
         fake.pushGyroscope(0, 0, 2.0);
-        await tester.pump();
       }
       await tester.pump();
 

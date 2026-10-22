@@ -15,6 +15,10 @@ const DEFAULT_GAME_CONFIG = Object.freeze({
   votingDurationMs: 30000,
   confirmEjects: true,
   anonymousVoting: false,
+  // Real-life layer: the impostor must physically reach the target.
+  killRadiusM: 2,
+  // Sqlders further than this from every street get boundary warnings.
+  boundaryWarnM: 4,
 });
 
 const NUMERIC_BOUNDS = Object.freeze({
@@ -23,6 +27,8 @@ const NUMERIC_BOUNDS = Object.freeze({
   killCooldownMs: { min: 0, max: 180000 },
   discussionDurationMs: { min: 0, max: 180000 },
   votingDurationMs: { min: 5000, max: 300000 },
+  killRadiusM: { min: 1, max: 5 },
+  boundaryWarnM: { min: 1, max: 30 },
 });
 
 const NUMERIC_KEYS = Object.freeze(Object.keys(NUMERIC_BOUNDS));

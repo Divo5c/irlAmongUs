@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/models/game_map.dart';
+import '../../../core/positioning/osm_streets.dart';
 import '../../../core/utils/room_roles.dart';
 import 'heading_arrow.dart';
 
@@ -15,6 +16,8 @@ import 'heading_arrow.dart';
   required GameMapData map,
   required List<Offset> pendingPoints,
   required Offset? hostPosition,
+  List<Offset> tracePoints = const [],
+  List<List<Offset>> extraPolylines = const [],
 }) {
   double minX = double.infinity, minY = double.infinity;
   double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
@@ -40,6 +43,16 @@ import 'heading_arrow.dart';
   for (final p in pendingPoints) {
     expand(p.dx, p.dy);
     hasAny = true;
+  }
+  for (final p in tracePoints) {
+    expand(p.dx, p.dy);
+    hasAny = true;
+  }
+  for (final line in extraPolylines) {
+    for (final p in line) {
+      expand(p.dx, p.dy);
+      hasAny = true;
+    }
   }
   if (hostPosition != null) {
     expand(hostPosition.dx, hostPosition.dy);
@@ -78,6 +91,10 @@ class MapCanvas extends StatelessWidget {
     this.pendingPoints = const <Offset>[],
     this.pendingModeIsRoom = false,
     this.showGrid = true,
+    this.tracePoints = const <Offset>[],
+    this.traceWidthM = 6.0,
+    this.osmCandidates = const <OsmStreetCandidate>[],
+    this.selectedOsmIds = const <int>{},
     this.hostPosition,
     this.hostHeadingDeg,
     this.pixelsPerMeter = 8.0,
@@ -89,6 +106,19 @@ class MapCanvas extends StatelessWidget {
   final List<Offset> pendingPoints;
   final bool pendingModeIsRoom;
   final bool showGrid;
+
+  /// Live recorded GPS trace (world meters) drawn as a wide band whose
+  /// thickness is the configured street/corridor width.
+  final List<Offset> tracePoints;
+
+  /// Trace band width in world meters (visual rendering only).
+  final double traceWidthM;
+
+  /// OSM street candidates (world meters) shown as selectable lines.
+  final List<OsmStreetCandidate> osmCandidates;
+
+  /// Ids of the currently selected OSM streets.
+  final Set<int> selectedOsmIds;
 
   /// Current host position (live PDR) shown as a "YOU" marker.
   final Offset? hostPosition;
@@ -111,6 +141,11 @@ class MapCanvas extends StatelessWidget {
           map: map,
           pendingPoints: pendingPoints,
           hostPosition: hostPosition,
+          tracePoints: tracePoints,
+          extraPolylines: [
+            for (final c in osmCandidates)
+              [for (final p in c.points) Offset(p.$1, p.$2)],
+          ],
         );
         final hasContent = mapBounds != null;
 
@@ -146,6 +181,10 @@ class MapCanvas extends StatelessWidget {
                   pendingPoints: pendingPoints,
                   pendingModeIsRoom: pendingModeIsRoom,
                   showGrid: showGrid,
+                  tracePoints: tracePoints,
+                  traceWidthM: traceWidthM,
+                  osmCandidates: osmCandidates,
+                  selectedOsmIds: selectedOsmIds,
                   hostPosition: hostPosition,
                   hostHeadingDeg: hostHeadingDeg,
                   ppm: pixelsPerMeter,
@@ -170,6 +209,10 @@ class _MapPainter extends CustomPainter {
     required this.pendingPoints,
     required this.pendingModeIsRoom,
     required this.showGrid,
+    required this.tracePoints,
+    required this.traceWidthM,
+    required this.osmCandidates,
+    required this.selectedOsmIds,
     required this.hostPosition,
     required this.hostHeadingDeg,
     required this.ppm,
@@ -183,6 +226,10 @@ class _MapPainter extends CustomPainter {
   final List<Offset> pendingPoints;
   final bool pendingModeIsRoom;
   final bool showGrid;
+  final List<Offset> tracePoints;
+  final double traceWidthM;
+  final List<OsmStreetCandidate> osmCandidates;
+  final Set<int> selectedOsmIds;
   final Offset? hostPosition;
   final double? hostHeadingDeg;
   final double ppm;
@@ -200,10 +247,80 @@ class _MapPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (showGrid) _paintGrid(canvas, size);
+    _paintOsmCandidates(canvas);
+    _paintTraceBand(canvas);
     _paintRooms(canvas);
     _paintCorridors(canvas);
     _paintHostMarker(canvas);
     if (pendingPoints.isNotEmpty) _paintPending(canvas);
+  }
+
+  /// OSM street candidates: unselected thin + dimmed, selected highlighted.
+  void _paintOsmCandidates(Canvas canvas) {
+    if (osmCandidates.isEmpty) return;
+    final dimPaint = Paint()
+      ..color = scheme.onSurface.withValues(alpha: 0.35)
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final selectedPaint = Paint()
+      ..color = scheme.primary.withValues(alpha: 0.85)
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    for (final candidate in osmCandidates) {
+      final selected = selectedOsmIds.contains(candidate.id);
+      final path = Path();
+      final first = _w2c(candidate.points.first.$1, candidate.points.first.$2);
+      path.moveTo(first.dx, first.dy);
+      for (final p in candidate.points.skip(1)) {
+        final c = _w2c(p.$1, p.$2);
+        path.lineTo(c.dx, c.dy);
+      }
+      canvas.drawPath(path, selected ? selectedPaint : dimPaint);
+
+      if (selected) {
+        final mid = candidate.points[candidate.points.length ~/ 2];
+        final tp = TextPainter(
+          text: TextSpan(
+            text: candidate.name,
+            style: defaultTextStyle.copyWith(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: scheme.primary,
+            ),
+          ),
+          textAlign: TextAlign.center,
+          textDirection: textDirection,
+        )..layout(maxWidth: 160);
+        final midCanvas = _w2c(mid.$1, mid.$2);
+        tp.paint(
+          canvas,
+          midCanvas - Offset(tp.width / 2, tp.height + 4),
+        );
+      }
+    }
+  }
+
+  /// Wide semi-transparent band along the recorded GPS trace. Its thickness
+  /// is the configured street width — the visual preview of what will
+  /// become walkable corridor area.
+  void _paintTraceBand(Canvas canvas) {
+    if (tracePoints.length < 2) return;
+    final bandPaint = Paint()
+      ..color = scheme.primary.withValues(alpha: 0.30)
+      ..strokeWidth = math.max(traceWidthM * ppm, 2)
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final path = Path();
+    final first = _w2c(tracePoints.first.dx, tracePoints.first.dy);
+    path.moveTo(first.dx, first.dy);
+    for (final p in tracePoints.skip(1)) {
+      final c = _w2c(p.dx, p.dy);
+      path.lineTo(c.dx, c.dy);
+    }
+    canvas.drawPath(path, bandPaint);
   }
 
   // ──────────────────────────────────────────── Grid (world-space) ──────
@@ -415,6 +532,10 @@ class _MapPainter extends CustomPainter {
     return oldDelegate.map != map ||
         !listEquals(oldDelegate.pendingPoints, pendingPoints) ||
         oldDelegate.pendingModeIsRoom != pendingModeIsRoom ||
+        !listEquals(oldDelegate.tracePoints, tracePoints) ||
+        oldDelegate.traceWidthM != traceWidthM ||
+        !listEquals(oldDelegate.osmCandidates, osmCandidates) ||
+        !setEquals(oldDelegate.selectedOsmIds, selectedOsmIds) ||
         oldDelegate.showGrid != showGrid ||
         oldDelegate.hostPosition != hostPosition ||
         oldDelegate.hostHeadingDeg != hostHeadingDeg ||

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:real_life_amongus_app/core/network/server_wake.dart';
 import 'package:real_life_amongus_app/core/network/socket_client.dart';
 import 'package:real_life_amongus_app/core/utils/room_code.dart';
 
@@ -19,6 +22,9 @@ class _JoinLobbyScreenState extends State<JoinLobbyScreen> {
   late final String _playerId;
   String? _validationMessage;
   bool _isJoiningRoom = false;
+  ServerWakePhase _wakePhase = ServerWakePhase.checking;
+  Duration _wakeElapsed = Duration.zero;
+  Timer? _wakeTicker;
 
   @override
   void initState() {
@@ -29,6 +35,7 @@ class _JoinLobbyScreenState extends State<JoinLobbyScreen> {
   @override
   void dispose() {
     _roomCodeController.dispose();
+    _wakeTicker?.cancel();
     super.dispose();
   }
 
@@ -44,9 +51,34 @@ class _JoinLobbyScreenState extends State<JoinLobbyScreen> {
       return;
     }
 
-    setState(() => _isJoiningRoom = true);
+    setState(() {
+      _isJoiningRoom = true;
+      _wakePhase = ServerWakePhase.checking;
+      _wakeElapsed = Duration.zero;
+    });
+    _wakeTicker?.cancel();
+    _wakeTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() => _wakeElapsed += const Duration(seconds: 1));
+      }
+    });
 
     try {
+      await ServerWakeService(serverUrl: widget.socketClient.serverUrl)
+          .waitUntilAwake(
+        onProgress: (progress) {
+          if (mounted) {
+            setState(() {
+              _wakePhase = progress.phase;
+              _wakeElapsed = progress.elapsed;
+            });
+          }
+        },
+      );
+      if (!mounted) return;
+      _wakeTicker?.cancel();
+      setState(() => _wakePhase = ServerWakePhase.awake);
+
       final room = await widget.socketClient.joinRoom(
         code: roomCode,
         playerId: _playerId,
@@ -64,14 +96,36 @@ class _JoinLobbyScreenState extends State<JoinLobbyScreen> {
           ),
         );
       }
+    } on ServerUnreachableException catch (error) {
+      if (mounted) {
+        setState(() {
+          _validationMessage = error.message;
+          _isJoiningRoom = false;
+        });
+      }
     } on RoomSocketException catch (error) {
       if (mounted) {
-        setState(() => _validationMessage = error.message);
+        setState(() {
+          _validationMessage = error.message;
+          _isJoiningRoom = false;
+        });
       }
     } finally {
-      if (mounted) {
+      _wakeTicker?.cancel();
+      if (mounted && _isJoiningRoom) {
         setState(() => _isJoiningRoom = false);
       }
+    }
+  }
+
+  String get _wakeStatusText {
+    switch (_wakePhase) {
+      case ServerWakePhase.checking:
+        return 'Connecting…';
+      case ServerWakePhase.waking:
+        return 'The free server is waking up… this can take up to a minute.';
+      case ServerWakePhase.awake:
+        return 'Server awake — joining…';
     }
   }
 
@@ -134,21 +188,35 @@ class _JoinLobbyScreenState extends State<JoinLobbyScreen> {
                   FilledButton(
                     onPressed: _isJoiningRoom ? null : _joinRoom,
                     child: _isJoiningRoom
-                        ? const Row(
+                        ? Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              SizedBox.square(
+                              const SizedBox.square(
                                 dimension: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                 ),
                               ),
-                              SizedBox(width: 10),
-                              Text('Connecting…'),
+                              const SizedBox(width: 10),
+                              if (_wakePhase == ServerWakePhase.waking) ...[
+                                Text(
+                                  'Waking server… ${_wakeElapsed.inSeconds}s',
+                                ),
+                              ] else
+                                const Text('Connecting…'),
                             ],
                           )
                         : const Text('Join Room'),
                   ),
+                  if (_isJoiningRoom &&
+                      _wakePhase == ServerWakePhase.waking) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _wakeStatusText,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ],
               ),
             ),

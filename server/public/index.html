@@ -43,6 +43,37 @@
         <button id="btn-bot-remove" class="ghost">&minus; Bot entfernen</button>
       </div>
       <button id="btn-edit-map" class="primary big">Karte bearbeiten / neue Stra&szlig;en laden</button>
+      <details id="host-settings">
+        <summary>Regeln einstellen</summary>
+        <div class="settings-grid">
+          <label>Impostoren
+            <select id="cfg-impostors"><option>1</option><option>2</option><option>3</option></select>
+          </label>
+          <label>Tasks/Crewmate
+            <select id="cfg-tasks"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select>
+          </label>
+          <label>Kill-Radius (m)
+            <select id="cfg-kill-radius"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+          </label>
+          <label>Kill-Cooldown (s)
+            <select id="cfg-cooldown">
+              <option>0</option><option>10</option><option>20</option><option>30</option>
+              <option>45</option><option>60</option><option>90</option><option>120</option><option>180</option>
+            </select>
+          </label>
+          <label>Diskussion (s)
+            <select id="cfg-discuss">
+              <option>0</option><option>15</option><option>30</option><option>45</option><option>60</option><option>120</option>
+            </select>
+          </label>
+          <label>Abstimmung (s)
+            <select id="cfg-vote">
+              <option>30</option><option>45</option><option>60</option><option>90</option><option>120</option><option>180</option>
+            </select>
+          </label>
+        </div>
+        <button id="cfg-apply" class="primary">Speichern</button>
+      </details>
       <button id="btn-start-game" class="primary big">Spiel starten</button>
     </div>
     <p id="lobby-waiting" class="hint">Warte auf den Host&hellip; hier l&auml;uft gleich was.</p>
@@ -90,13 +121,19 @@
     </div>
     <div id="role-banner" class="role-crew">DU BIST CREWMATE</div>
     <div id="teammates" class="hint hidden"></div>
-    <h3>Deine Tasks</h3>
-    <ul id="task-list" class="task-list"></ul>
-    <div id="alive-hint" class="hint"></div>
+    <div id="live-map-wrap">
+      <canvas id="game-map"></canvas>
+      <div id="team-progress"><div id="team-progress-bar"></div></div>
+      <div id="boundary-banner" class="hidden">Geh zur&uuml;ck ins Spielfeld!</div>
+    </div>
     <div class="game-actions">
-      <button id="btn-report" class="secondary big">Leiche finden (Report)</button>
+      <button id="btn-report" class="secondary big" disabled>Report</button>
       <button id="btn-kill" class="danger big hidden">Kill</button>
     </div>
+    <details id="taskbox">
+      <summary>Deine Tasks (<span id="task-count">0</span>)</summary>
+      <ul id="task-list" class="task-list"></ul>
+    </details>
     <div id="meeting-overlay" class="overlay hidden">
       <div class="card">
         <h3 id="meeting-title">Meeting</h3>
@@ -114,8 +151,8 @@
   </section>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=9"></script>
-  <script src="/js/mapEditor.js?v=9"></script>
-  <script src="/js/app.js?v=9"></script>
+  <script src="/js/osm.js?v=10"></script>
+  <script src="/js/mapEditor.js?v=10"></script>
+  <script src="/js/app.js?v=10"></script>
 </body>
 </html>

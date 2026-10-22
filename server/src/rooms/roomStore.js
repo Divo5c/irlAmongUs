@@ -13,7 +13,10 @@ const {
   sanitizePositionEstimate,
   resolveRoomMembership,
   isPositionPlausible,
+  nearestCorridorDistanceM,
+  snapToCorridor,
 } = require('../game/positioning');
+const { canKill } = require('../game/proximity');
 
 const roomCodePattern = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
 const { PlayerRole, RoomStatus } = enumsSchema.$defs;
@@ -65,6 +68,15 @@ class RoomStore {
 
   /** Per-room player positions: code -> Map<playerId, positionState>. */
   #positions = new Map();
+
+  /** Boundary strike counters: `${code}|${playerId}` -> {strikes, alerted}. */
+  #boundaryStrikes = new Map();
+
+  #clearBoundaryStrikes(code) {
+    for (const key of [...this.#boundaryStrikes.keys()]) {
+      if (key.startsWith(`${code}|`)) this.#boundaryStrikes.delete(key);
+    }
+  }
 
   /** Admin tracking auth: code -> Map<playerId, bool> (authenticated). */
   #adminAuth = new Map();
@@ -308,6 +320,8 @@ class RoomStore {
     if (room.players.length === 0) {
       this.#roomsByCode.delete(code);
       this.#authTokens.delete(code);
+      this.#positions.delete(code);
+      this.#clearBoundaryStrikes(code);
       return { removed: true, deleted: true, room: null };
     }
 
@@ -416,6 +430,7 @@ class RoomStore {
     delete room.winner;
     room.ejectedPlayerIds = [];
     room.lastKillAt = 0;
+    room.corpses = [];
     delete room.meeting;
     room.status = getEnumValue(RoomStatus, 'IN_GAME');
     room.updatedAt = new Date().toISOString();
@@ -496,6 +511,16 @@ class RoomStore {
 
     if (!isPlayerAlive(room, reportingPlayerId)) {
       throw new GameError('PLAYER_DEAD', 'Dead players cannot report bodies.');
+    }
+
+    // A corpse must have been discovered from the same street (server
+    // computed during position updates); this is the discovery gate.
+    const visible = this.visibleCorpses(code, reportingPlayerId);
+    if (!visible.length) {
+      throw new GameError(
+        'NO_BODY_NEARBY',
+        'Keine Leiche entdeckt \u2014 du musst dich auf derselben Stra\u00dfe befinden.',
+      );
     }
 
     const now = Date.now();
@@ -705,8 +730,47 @@ class RoomStore {
       throw new GameError('INVALID_TARGET', 'The impostor cannot kill themselves.');
     }
 
+    // Real-life kill: the impostor must PHYSICALLY be at the target
+    // (both GPS positions verified by the server, radius configurable).
+    const killPositions = this.#positions.get(code);
+    const killerPos = killPositions?.get(killer.id);
+    const targetPos = killPositions?.get(target.id);
+    if (!killerPos || !targetPos) {
+      throw new GameError(
+        'POSITION_MISSING',
+        'Der Kill braucht GPS-Positionen von dir und dem Ziel.',
+        { field: 'positions' },
+      );
+    }
+    const check = canKill({
+      killerPos,
+      targetPos,
+      maxDistance: room.config.killRadiusM,
+    });
+    if (!check.allowed) {
+      throw new GameError(
+        check.reason === 'TOO_FAR' ? 'TARGET_TOO_FAR' : 'KILL_REJECTED',
+        check.reason === 'TOO_FAR'
+          ? `Ziel ist zu weit entfernt (${Math.round(check.distance)}m, Radius ${room.config.killRadiusM}m).`
+          : check.reason,
+        { distance: check.distance, maxDistance: room.config.killRadiusM },
+      );
+    }
+
     target.isAlive = false;
     room.lastKillAt = Date.now();
+
+    // Corpse stays exactly where it was killed; EVERY role that ends up on
+    // the same street can discover and report it (self-report possible).
+    room.corpses ??= [];
+    room.corpses.push({
+      playerId: target.id,
+      x: targetPos.x,
+      y: targetPos.y,
+      corridorId: targetPos.corridorId ?? null,
+      roomId: targetPos.roomId,
+      deadAt: new Date().toISOString(),
+    });
     room.updatedAt = new Date().toISOString();
 
     return {
@@ -742,12 +806,14 @@ class RoomStore {
     room.tasks = [];
     room.ejectedPlayerIds = [];
     room.lastKillAt = 0;
+    room.corpses = [];
     // A saved map survives rematches (the real building does not change):
     room.status = room.map ? STATUS_MAP_READY : STATUS_LOBBY;
     room.updatedAt = new Date().toISOString();
 
     // Clear positions and admin auth for privacy on rematch
     this.#positions.delete(code);
+    this.#clearBoundaryStrikes(code);
     this.revokeAllAdmin(code);
 
     return this.toPublicRoom(room);
@@ -895,6 +961,7 @@ class RoomStore {
     );
 
     // Store authoritative position
+    const snap = snapToCorridor(estimate.x, estimate.y, room.map);
     const positionState = {
       x: estimate.x,
       y: estimate.y,
@@ -905,6 +972,8 @@ class RoomStore {
       // Server-computed fields
       roomId: matching.roomId,
       onCorridor: matching.onCorridor,
+      // Street identity for the same-street corpse discovery rule.
+      corridorId: matching.roomId ? null : snap?.corridorId ?? null,
       snappedX: matching.snappedX,
       snappedY: matching.snappedY,
       updatedAt: Date.now(),
@@ -912,6 +981,36 @@ class RoomStore {
 
     roomPositions.set(playerId, positionState);
     room.updatedAt = new Date().toISOString();
+
+    const bodies = this.visibleCorpses(code, playerId);
+
+    // Boundary watch: how far outside every selected street is the player?
+    const distanceOutM =
+      room.map?.corridors?.length
+        ? nearestCorridorDistanceM(
+            positionState.x,
+            positionState.y,
+            room.map.nodes ?? [],
+            room.map.corridors,
+          )
+        : 0;
+    const boundaryKey = `${code}|${playerId}`;
+    const strikes = this.#boundaryStrikes.get(boundaryKey) ?? { strikes: 0, alerted: false };
+    if (
+      room.status === STATUS_IN_GAME &&
+      distanceOutM > room.config.boundaryWarnM
+    ) {
+      strikes.strikes += 1;
+    } else {
+      strikes.strikes = 0;
+      strikes.alerted = false;
+    }
+    const adminAlert =
+      room.status === STATUS_IN_GAME &&
+      strikes.strikes >= 3 &&
+      !strikes.alerted;
+    if (adminAlert) strikes.alerted = true;
+    this.#boundaryStrikes.set(boundaryKey, strikes);
 
     return {
       position: {
@@ -924,7 +1023,38 @@ class RoomStore {
       },
       roomId: positionState.roomId,
       onCorridor: positionState.onCorridor,
+      bodies,
+      boundary: {
+        outOfBounds: room.status === STATUS_IN_GAME && distanceOutM > room.config.boundaryWarnM,
+        distanceM: Math.round(distanceOutM * 10) / 10,
+        limitM: room.config.boundaryWarnM,
+        strikes: strikes.strikes,
+        adminAlert,
+      },
     };
+  }
+
+  /**
+   * Corpses the given player can discover: those lying on the same street
+   * (same corridor) or in the same map room. Shared by every role so
+   * impostors can self-report.
+   */
+  visibleCorpses(code, playerId) {
+    const room = this.getRoom(code);
+    if (!room) return [];
+    const corpses = room.corpses ?? [];
+    if (room.status !== STATUS_IN_GAME && room.status !== STATUS_MEETING) {
+      return [];
+    }
+    const own = this.#positions.get(code)?.get(playerId);
+    if (!own) return [];
+    return corpses
+      .filter(
+        (corpse) =>
+          (corpse.corridorId != null && corpse.corridorId === own.corridorId) ||
+          (corpse.roomId != null && corpse.roomId === own.roomId),
+      )
+      .map(({ playerId, x, y, deadAt }) => ({ playerId, x, y, deadAt }));
   }
 
   /**

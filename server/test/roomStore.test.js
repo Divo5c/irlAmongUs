@@ -55,6 +55,27 @@ function beginGame(store, code = 'ABC234') {
   return store.startGame(code);
 }
 
+/** Real-life kill gate: believable positions for the given players. */
+function placeNear(store, ids, x = 20, y = 50) {
+  for (const id of ids) {
+    store.updatePosition('ABC234', id, { x, y, confidence: 1 });
+  }
+}
+
+/** Plants a corpse on street c1 so meeting suites can report. */
+function plantCorpse(store, playerId, x = 21, y = 50, corridorId = 'c1') {
+  const room = store.getRoom('ABC234');
+  room.corpses ??= [];
+  room.corpses.push({
+    playerId,
+    x,
+    y,
+    corridorId,
+    roomId: null,
+    deadAt: new Date().toISOString(),
+  });
+}
+
 function impostorsOf(assignments) {
   return Object.keys(assignments).filter((id) => assignments[id] === 'IMPOSTOR');
 }
@@ -380,6 +401,7 @@ describe('kill & cooldown', () => {
 
   test('any impostor can kill alive targets; victim is public without role', () => {
     const { store, impostorIds, crewmateIds } = startedGame(6, { impostorCount: 2 });
+    placeNear(store, [impostorIds[0], crewmateIds[0], impostorIds[1], crewmateIds[1]]);
 
     const result = store.killPlayer('ABC234', impostorIds[0], crewmateIds[0]);
     assert.equal(result.killedPlayerId, crewmateIds[0]);
@@ -397,6 +419,7 @@ describe('kill & cooldown', () => {
 
   test('crewmates cannot kill; dead/self targets are rejected', () => {
     const { store, impostorIds, crewmateIds } = startedGame(3, { killCooldownMs: 0 });
+    placeNear(store, [impostorIds[0], crewmateIds[0]]);
 
     assertGameError(
       () => store.killPlayer('ABC234', crewmateIds[0], impostorIds[0]),
@@ -416,6 +439,7 @@ describe('kill & cooldown', () => {
 
   test('cooldown blocks with retryAfterMs and unlocks afterwards', async () => {
     const { store, impostorIds, crewmateIds } = startedGame(4, { killCooldownMs: 60 });
+    placeNear(store, [impostorIds[0], crewmateIds[0], crewmateIds[1]]);
 
     store.killPlayer('ABC234', impostorIds[0], crewmateIds[0]);
 
@@ -437,6 +461,7 @@ describe('kill & cooldown', () => {
       impostorCount: 1,
       killCooldownMs: 0,
     });
+    placeNear(store, [impostorIds[0], crewmateIds[0], crewmateIds[1]]);
 
     store.killPlayer('ABC234', impostorIds[0], crewmateIds[0]);
     const result = store.killPlayer('ABC234', impostorIds[0], crewmateIds[1]);
@@ -445,6 +470,7 @@ describe('kill & cooldown', () => {
 
   test('public projection exposes killReadyAt during IN_GAME only', async () => {
     const { store, impostorIds, crewmateIds } = startedGame(3, { killCooldownMs: 5000 });
+    placeNear(store, [impostorIds[0], crewmateIds[0], crewmateIds[1]]);
 
     let before = store.toPublicRoom(store.getRoom('ABC234')).killReadyAt;
     assert.equal(before, 0); // ready at start
@@ -470,6 +496,9 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
     const { assignments } = beginGame(store);
     const impostorIds = impostorsOf(assignments);
     const crewmateIds = crewmatesOf(assignments);
+    // Real-life discovery gate: corpse on the same street + position.
+    plantCorpse(store, impostorIds[0]);
+    store.updatePosition('ABC234', crewmateIds[0], { x: 21, y: 50, confidence: 1 });
     store.reportBody('ABC234', crewmateIds[0]);
     return { store, impostorIds, crewmateIds };
   }
@@ -480,6 +509,8 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
     const { assignments } = beginGame(store);
     const reporter = crewmatesOf(assignments)[0];
 
+    plantCorpse(store, 'reported-ghost');
+    store.updatePosition('ABC234', reporter, { x: 21, y: 50, confidence: 1 });
     const result = store.reportBody('ABC234', reporter);
 
     assert.equal(result.phase, 'DISCUSSION');
@@ -590,6 +621,8 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
     const impostorIds = impostorsOf(assignments);
     const crewmateIds = crewmatesOf(assignments);
 
+    plantCorpse(store, impostorIds[0]);
+    store.updatePosition('ABC234', crewmateIds[0], { x: 21, y: 50, confidence: 1 });
     store.reportBody('ABC234', crewmateIds[0]);
     store.advanceMeeting('ABC234');
     store.castVote('ABC234', impostorIds[0], { targetId: crewmateIds[0] });
@@ -611,7 +644,10 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
     const crewmateIds = crewmatesOf(assignments);
 
     store.getRoom('ABC234').config = { ...store.getRoom('ABC234').config, killCooldownMs: 0 };
+    placeNear(store, [impostorIds[0], crewmateIds[0]]);
     store.killPlayer('ABC234', impostorIds[0], crewmateIds[0]);
+    plantCorpse(store, 'ghost-2', 21, 50);
+    store.updatePosition('ABC234', crewmateIds[1], { x: 22, y: 50, confidence: 1 });
     store.reportBody('ABC234', crewmateIds[1]);
     store.advanceMeeting('ABC234');
 
@@ -665,6 +701,9 @@ describe('rematch / reset to lobby', () => {
       killCooldownMs: 0,
       votingDurationMs: 30000,
     };
+    placeNear(store, [impostorId, crewmateIds[0], crewmateIds[1]]);
+    plantCorpse(store, 'ghost-x', 21, 50);
+    store.updatePosition('ABC234', crewmateIds[1], { x: 22, y: 50, confidence: 1 });
     store.killPlayer('ABC234', impostorId, crewmateIds[0]);
     store.reportBody('ABC234', crewmateIds[1]);
     store.advanceMeeting('ABC234');
@@ -736,6 +775,8 @@ describe('win conditions (multi-impostor)', () => {
         (p) => p.isAlive && p.role === 'CREWMATE',
       );
 
+      plantCorpse(store, 'ghost-m', voters[0] === undefined ? 21 : 21, 50);
+      store.updatePosition('ABC234', voters[0].id, { x: 21, y: 50, confidence: 1 });
       store.reportBody('ABC234', voters[0].id);
       store.advanceMeeting('ABC234');
       for (const voter of voters) {
@@ -760,6 +801,7 @@ describe('win conditions (multi-impostor)', () => {
     room.config = { ...room.config, killCooldownMs: 0 };
 
     // 4 crew vs 2 imp -> kill two crew -> 2v2 parity.
+    placeNear(store, [impostorIds[0], crewmateIds[0], impostorIds[1], crewmateIds[1]]);
     store.killPlayer('ABC234', impostorIds[0], crewmateIds[0]);
     room.lastKillAt = 0;
     store.killPlayer('ABC234', impostorIds[1], crewmateIds[1]);
@@ -907,6 +949,7 @@ describe('map setup lifecycle', () => {
       ...store.getRoom('ABC234').config,
       killCooldownMs: 0,
     };
+    placeNear(store, [impostorId, crewIds[0], crewIds[1]]);
     store.killPlayer('ABC234', impostorId, crewIds[0]);
     store.killPlayer('ABC234', impostorId, crewIds[1]);
     store.endGame('ABC234', 'IMPOSTOR');
