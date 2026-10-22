@@ -112,6 +112,24 @@ const App = (() => {
       } else if (state.isHost) {
         startGame.textContent = room.status === 'LOBBY' ? 'Erst Karte laden' : 'Karte wird gebaut\u2026';
       }
+      if (room.status === 'MAP_SETUP' && state.pendingCachedLoad) {
+        state.pendingCachedLoad = false;
+        // Stored map available -> straight into load + save (skip Overpass).
+        const cached = readSavedLocalMap();
+        if (cached) {
+          ensureSocket().emit('map:update', {
+            code: state.code,
+            map: { version: cached.version + 1, nodes: cached.nodes, corridors: cached.corridors, rooms: [], connections: [] },
+          });
+          ensureSocket().emit('map:save', {
+            code: state.code,
+            map: { version: cached.version + 2, nodes: cached.nodes, corridors: cached.corridors, rooms: [], connections: [] },
+          });
+          showToast('Gespeicherte Karte \u00fcbernommen.');
+        } else {
+          showToast('Keine gespeicherte Karte auf dem Ger\u00e4t \u2014 Stra\u00dfen laden.');
+        }
+      }
       if (room.status === 'MAP_READY' && active === 'screen-map') {
         show('lobby');
       }
@@ -306,11 +324,12 @@ const App = (() => {
   function renderLobby(room) {
     const isHost = room.hostId === state.playerId;
     state.isHost = isHost;
-      $('host-controls').classList.toggle('hidden', !isHost);
-      applyLobbyConfig(room);
+    $('host-controls').classList.toggle('hidden', !isHost);
+    applyLobbyConfig(room);
     $('lobby-waiting').classList.toggle('hidden', isHost);
     $('lobby-code').textContent = room.code;
     renderLobbyPlayers(room);
+    refreshCachedMapButton();
   }
 
   function renderLobbyPlayers(room) {
@@ -361,7 +380,9 @@ const App = (() => {
   function readSavedLocalMap() {
     try {
       const map = JSON.parse(localStorage.getItem(SAVED_MAP_KEY) ?? 'null');
-      if (!map?.nodes?.length || !Number.isFinite(map.anchor?.lat)) return null;
+      // Anchor may be missing from very old saves; loading still works,
+      // GPS projection just needs a fresh anchor in that case.
+      if (!map?.nodes?.length || !map?.corridors?.length) return null;
       return map;
     } catch {
       return null;
@@ -369,21 +390,31 @@ const App = (() => {
   }
 
   function refreshCachedMapButton() {
-    const button = $('btn-load-cached');
     const cached = readSavedLocalMap();
+    const editorButton = $('btn-load-cached');
+    const lobbyButton = $('btn-load-cached-lobby');
     if (!cached) {
-      button.hidden = true;
+      editorButton.hidden = true;
+      lobbyButton.hidden = true;
       return;
     }
     const date = new Date(cached.savedAt).toLocaleDateString('de-DE');
-    button.hidden = false;
-    button.textContent = `\u2913 Gespeicherte Karte (${cached.nodes.length} Knoten, ${date})`;
+    const label = `\u2913 Gespeicherte Karte laden (${cached.nodes.length} Knoten, ${date})`;
+    editorButton.hidden = false;
+    editorButton.textContent = label;
+    lobbyButton.hidden = false;
+    lobbyButton.textContent = label;
   }
 
-  $('btn-load-cached').addEventListener('click', () => {
+  /** Loads the device-local map into the editor and pushes it to the room. */
+  function applyCachedMap() {
     const cached = readSavedLocalMap();
     if (!cached) return;
-    editor.setAnchor(cached.anchor.lat, cached.anchor.lon);
+    if (Number.isFinite(cached.anchor?.lat)) {
+      editor.setAnchor(cached.anchor.lat, cached.anchor.lon);
+    } else {
+      showToast('Karte ohne GPS-Anker \u2014 im Spiel evtl. keine Positionsdaten.');
+    }
     const working = {
       version: cached.version + 1,
       nodes: cached.nodes,
@@ -397,6 +428,17 @@ const App = (() => {
       map: { ...working, rooms: [], connections: [] },
     });
     $('map-status').textContent = `Gespeicherte Karte geladen (${working.nodes.length} Knoten) \u2014 erweitern oder speichern`;
+  }
+
+  // Lobby shortcut: skips the editor entirely (map:start -> MAP_SETUP -> load+save).
+  $('btn-load-cached-lobby').addEventListener('click', () => {
+    state.pendingCachedLoad = true;
+    ensureSocket().emit('map:start', { code: state.code });
+    showToast('Lade gespeicherte Karte\u2026');
+  });
+
+  $('btn-load-cached').addEventListener('click', () => {
+    applyCachedMap();
   });
 
   $('btn-load-streets').addEventListener('click', async () => {
