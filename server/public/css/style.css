@@ -352,6 +352,63 @@ button.round {
   #screen-game.active #taskbox summary { font-size: 14px; }
 }
 
+/* Rollen-Karte: kurzer Rollen-Intro-Screen (Crew blau / Impostor rot) */
+#role-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 6, 12, 0.9); backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.role-card {
+  width: min(86vw, 420px); border-radius: 22px; padding: 34px 22px;
+  text-align: center; box-shadow: 0 12px 44px rgba(0, 0, 0, 0.55);
+  animation: rolePop 0.35s ease-out;
+}
+.role-card.crew {
+  background: linear-gradient(160deg, #0d2440, #123a63);
+  border: 2px solid #58a6ff; color: #d6ebff;
+}
+.role-card.impostor {
+  background: linear-gradient(160deg, #3d0e14, #63121b);
+  border: 2px solid #ff5c69; color: #ffd6da;
+}
+#role-card-title { font-size: 34px; font-weight: 800; letter-spacing: 2px; }
+.role-card.crew #role-card-title { color: #58a6ff; }
+.role-card.impostor #role-card-title { color: #ff5c69; }
+#role-card-detail { margin-top: 10px; font-size: 15px; opacity: 0.92; }
+@keyframes rolePop {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Runde Among-Us-Aktionsknöpfe (Report / Use / Kill) */
+.game-actions {
+  display: flex; justify-content: center; align-items: center;
+  gap: 26px; padding: 10px 0 4px;
+}
+.round-btn {
+  width: 88px; height: 88px; border-radius: 50%;
+  font-size: 34px; line-height: 1; display: flex; align-items: center;
+  justify-content: center; border: none; cursor: pointer;
+  color: #fff; opacity: 0.45; filter: grayscale(0.7);
+  transition: opacity 0.2s ease, filter 0.2s ease, transform 0.1s ease;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  touch-action: manipulation;
+}
+.round-btn:active { transform: scale(0.92); }
+.round-btn:disabled { opacity: 0.38; filter: grayscale(0.85); }
+.round-btn.ready { opacity: 1; filter: none; animation: pulse 1.6s infinite; }
+.round-btn.report { background: radial-gradient(circle at 35% 30%, #7fd4ff, #1787c9); }
+.round-btn.use { background: radial-gradient(circle at 35% 30%, #ffe08a, #d99b1a); }
+.round-btn.kill { background: radial-gradient(circle at 35% 30%, #ff8a94, #d32733); }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45); }
+  50% { box-shadow: 0 8px 26px rgba(255, 92, 105, 0.55); }
+}
+
+/* Crewmate-Hochkant: kompakte Karte oben, Aktionen unten */
+#screen-game.active #live-map-wrap { height: 30dvh; }
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   * { transition: none !important; animation-duration: 0.01ms !important; }

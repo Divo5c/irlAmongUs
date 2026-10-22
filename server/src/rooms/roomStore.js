@@ -1035,6 +1035,42 @@ class RoomStore {
   }
 
   /**
+   * Kill targets for an alive impostor: alive crewmates within the
+   * configured kill radius (mirrors canKill without cooldown checking —
+   * cooldown gates remain in killPlayer).
+   */
+  getKillTargetsFor(code, playerId) {
+    const room = this.getRoom(code);
+    if (!room || room.status !== STATUS_IN_GAME) return [];
+    const killer = getPlayer(room, playerId);
+    if (!killer || killer.role !== ROLE_IMPOSTOR || !killer.isAlive) {
+      return [];
+    }
+    const positions = this.#positions.get(code);
+    const own = positions?.get(playerId);
+    if (!own) return [];
+    const maxDistance = room.config.killRadiusM;
+    const targets = [];
+    for (const player of room.players) {
+      if (player.id === playerId || !player.isAlive || player.role === ROLE_IMPOSTOR) {
+        continue;
+      }
+      const targetPos = positions.get(player.id);
+      if (!targetPos) continue;
+      const check = canKill({
+        killerPos: { x: own.x, y: own.y, confidence: own.confidence },
+        targetPos: { x: targetPos.x, y: targetPos.y, confidence: targetPos.confidence },
+        maxDistance,
+      });
+      if (check.allowed) {
+        targets.push({ playerId: player.id, name: player.name, distanceM: Math.round(check.distance ?? 0) });
+      }
+    }
+    targets.sort((a, b) => a.distanceM - b.distanceM);
+    return targets;
+  }
+
+  /**
    * Corpses the given player can discover: those lying on the same street
    * (same corridor) or in the same map room. Shared by every role so
    * impostors can self-report.
@@ -1218,8 +1254,10 @@ class RoomStore {
 const RoomStoreError = GameError;
 
 function getTaskProgress(room) {
-  const total = room.tasks.length;
-  const completed = room.tasks.filter((task) => task.completed).length;
+  // Fake tasks (impostors) never count toward the team progress.
+  const real = room.tasks.filter((task) => !task.isFake);
+  const total = real.length;
+  const completed = real.filter((task) => task.completed).length;
   return { completed, total };
 }
 

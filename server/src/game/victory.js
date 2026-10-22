@@ -9,10 +9,10 @@
  * 4. otherwise                                           -> game continues.
  */
 function evaluateVictory({ players, tasks }) {
-  const total = Array.isArray(tasks) ? tasks.length : 0;
-  const completed = Array.isArray(tasks)
-    ? tasks.filter((task) => task.completed).length
-    : 0;
+  // Fake tasks (impostors) must never contribute to the crew win condition.
+  const realTasks = Array.isArray(tasks) ? tasks.filter((t) => !t.isFake) : [];
+  const total = realTasks.length;
+  const completed = realTasks.filter((task) => task.completed).length;
 
   if (total > 0 && completed >= total) {
     return 'CREWMATE';

@@ -35,19 +35,20 @@ function createTasks(players, tasksPerCrewmate) {
   const tasks = [];
 
   for (const player of players) {
-    if (player.role !== 'CREWMATE') {
-      continue;
-    }
     playerNr += 1;
+    // Impostors receive the same amount of FAKE tasks (like Among Us):
+    // they show up in their task list but never count toward progress.
+    const isFake = player.role !== 'CREWMATE';
     for (let i = 0; i < tasksPerCrewmate; i += 1) {
       // Catalog is at least as large as the max tasks-per-crewmate bound,
       // so titles never repeat within one player's task list.
       const entry = TASK_CATALOG[(playerNr - 1 + i) % TASK_CATALOG.length];
       tasks.push({
-        id: `${entry.id}-${playerNr}-${i + 1}`,
+        id: `${entry.id}-${playerNr}-${i + 1}${isFake ? '-fake' : ''}`,
         type: entry.id,
         assignedTo: player.id,
         title: entry.title,
+        isFake,
         completed: false,
         completedAt: null,
       });

@@ -287,7 +287,8 @@ describe('socket flow security & gameplay', () => {
       assert.deepEqual(crew.assignment.teammates, []);
       assert.deepEqual(imp.assignment.teammates, []); // single impostor game
       assert.ok(Array.isArray(imp.assignment.tasks));
-      assert.equal(imp.assignment.tasks.length, 0); // impostors get no tasks
+      assert.equal(imp.assignment.tasks.length, crew.assignment.tasks.length); // same amount, FAKE
+      assert.match(imp.assignment.tasks[0].id, /-fake$/);
       assert.ok(crew.assignment.tasks.length > 0);
       assert.equal(typeof crew.assignment.tasks[0].type, 'string');
       assert.equal(imp.assignment.killReadyAt, 0); // ready at game start
@@ -326,7 +327,8 @@ describe('socket flow security & gameplay', () => {
       const assignments = await Promise.all(rolePromises);
 
       const crewSlot = assignments.findIndex(
-        (assignment) => assignment.tasks.length > 0,
+        (assignment) =>
+          assignment.role === 'CREWMATE' && assignment.tasks.length > 0,
       );
       assert.ok(crewSlot !== -1, 'expected at least one crewmate');
       const crew = { client: clients[crewSlot], assignment: assignments[crewSlot] };

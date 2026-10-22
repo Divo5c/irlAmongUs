@@ -158,8 +158,11 @@ const App = (() => {
 
     socket.on('game:started', () => {
       show('game');
-      tryLandscape();
       beep(520);
+    });
+    socket.on('game:kill_targets', ({ targets }) => {
+      state.killTargets = targets ?? [];
+      renderGameHud();
     });
     socket.on('game:bodies_nearby', ({ bodies }) => {
       state.nearbyBodies = bodies ?? [];
@@ -196,9 +199,9 @@ const App = (() => {
       state.role = payload;
       state.killReadyAt = payload.killReadyAt ?? 0;
       state.teammates = payload.teammates ?? [];
-      renderRole(payload);
+      showRoleOverlay(payload);
       ensureGpsLoop();
-      vibrate([40]);
+      vibrate([60, 60, 120]);
     });
     socket.on('game:kill_cooldown', ({ killReadyAt }) => {
       state.killReadyAt = killReadyAt;
@@ -651,14 +654,34 @@ const App = (() => {
 
   // ---------------------------------------------------------------- game //
 
-  function renderRole(payload) {
-    const banner = $('role-banner');
-    const impostor = payload.role === 'IMPOSTOR';
-    banner.textContent = impostor ? 'DU BIST IMPOSTOR' : 'DU BIST CREWMATE';
-    banner.className = impostor ? 'role-impostor' : 'role-crew';
-    $('btn-kill').classList.toggle('hidden', !impostor);
-    vibrate([60, 40, 60]);
+  const ROLE_OVERLAY_MS = 3000;
 
+  /** Among-Us-like full-screen role card: shows a few seconds, then fades. */
+  function showRoleOverlay(payload) {
+    const overlay = $('role-overlay');
+    const impostor = payload.role === 'IMPOSTOR';
+    $('role-card').className = impostor ? 'role-card impostor' : 'role-card crew';
+    $('role-card-title').textContent = impostor ? 'IMPOSTOR' : 'CREWMATE';
+    const mates = (payload.teammates ?? []).map((t) => t.name).join(', ');
+    $('role-card-detail').textContent = impostor
+      ? mates
+        ? `Dein Partner: ${mates}`
+        : 'Du arbeitest allein.'
+      : `${payload.tasks?.length ?? 0} Tasks warten \u2014 Fake-Tasks f\u00fcr Impostoren z\u00e4hlen nicht.`;
+    overlay.classList.remove('hidden');
+    $('role-banner').classList.add('hidden');
+    $('btn-kill').classList.toggle('hidden', !impostor);
+
+    window.clearTimeout(showRoleOverlay._t);
+    showRoleOverlay._t = window.setTimeout(() => {
+      overlay.classList.add('hidden');
+      beep(impostor ? 180 : 560);
+    }, ROLE_OVERLAY_MS);
+  }
+
+  function renderRole(payload) {
+    const impostor = payload.role === 'IMPOSTOR';
+    $('btn-kill').classList.toggle('hidden', !impostor);
     const teammates = $('teammates');
     if (impostor && payload.teammates?.length) {
       teammates.textContent = `Impostor-Partner: ${payload.teammates.map((t) => t.name).join(', ')}`;
@@ -701,7 +724,7 @@ const App = (() => {
     $('team-progress-bar').style.width = `${pct}%`;
   }
 
-  /** Report/Kill-Buttons je nach Leichen-Nähe + Cooldown aktivieren. */
+  /** Report/Kill-Buttons je nach Nähe (Kill nur mit echten Zielen). */
   function renderGameHud() {
     const room = state.room;
     if (!room || room.status !== 'IN_GAME') return;
@@ -709,15 +732,15 @@ const App = (() => {
     const bodies = state.nearbyBodies ?? [];
     const reportBtn = $('btn-report');
     reportBtn.disabled = !(bodies.length && imAlive !== false);
-    reportBtn.textContent = bodies.length
-      ? `Report (${bodies.length})`
-      : 'Report';
+    reportBtn.classList.toggle('ready', bodies.length > 0 && imAlive !== false);
     const killBtn = $('btn-kill');
     if (killBtn.classList.contains('hidden')) return;
+    const targets = state.killTargets ?? [];
     const cooldownLeft = Math.max(0, state.killReadyAt - Date.now());
-    killBtn.disabled = cooldownLeft > 0;
-    killBtn.textContent = cooldownLeft
-      ? `Kill in ${Math.ceil(cooldownLeft / 1000)}s`
+    killBtn.disabled = !targets.length || cooldownLeft > 0;
+    killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
+    killBtn.textContent = cooldownLeft && targets.length
+      ? `${Math.ceil(cooldownLeft / 1000)}s`
       : 'Kill';
   }
   setInterval(renderGameHud, 500);
@@ -872,19 +895,6 @@ const App = (() => {
   window.addEventListener('orientationchange', () => setTimeout(drawGameMap, 300));
 
   /** Landscape: lock wenn unterstützt (Android), sonst iOS-Dreh-Hinweis via CSS. */
-  async function tryLandscape() {
-    try {
-      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
-      }
-      if (screen.orientation?.lock) {
-        await screen.orientation.lock('landscape');
-      }
-    } catch {
-      // iOS / denied: der CSS-Hinweis (#rotate-hint) bittet zum Drehen.
-    }
-  }
-
   function renderPhaseHint(room) {
     if (!state.role) return;
     const aliveCount = room.players.filter((p) => p.isAlive).length;
@@ -914,18 +924,19 @@ const App = (() => {
   });
 
   $('btn-kill').addEventListener('click', () => {
-    if (Date.now() < state.killReadyAt) {
-      alert(`Kill bereit in ${Math.ceil((state.killReadyAt - Date.now()) / 1000)}s`);
+    const targets = state.killTargets ?? [];
+    if (!targets.length) {
+      showToast('Kein Opfer in Reichweite \u2014 geh n\u00e4her ran!');
       return;
     }
-    const targets = (state.room?.players ?? []).filter(
-      (p) => p.isAlive && p.id !== state.playerId,
-    );
-    if (!targets.length) return;
-    // Simple pick from the nearest list — proximité gate comes later.
-    openVoteList(targets, (targetId) => {
-      ensureSocket().emit('game:kill', { code: state.code, targetPlayerId: targetId });
-    }, 'Wen killst du?');
+    if (Date.now() < state.killReadyAt) {
+      showToast(`Kill bereit in ${Math.ceil((state.killReadyAt - Date.now()) / 1000)}s`);
+      return;
+    }
+    // Nearest victim wins: no extra pick dialog needed.
+    ensureSocket().emit('game:kill', { code: state.code, targetPlayerId: targets[0].playerId });
+    $('btn-kill').disabled = true;
+    $('btn-kill').textContent = 'Kill';
   });
 
   $('btn-rematch').addEventListener('click', () => {

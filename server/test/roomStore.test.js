@@ -327,7 +327,7 @@ describe('tasks', () => {
     const firstCrew = crewmatesOf(assignments)[0];
     const task = store.getTasksForPlayer('ABC234', firstCrew)[0];
 
-    assert.equal(task.id, `${task.type}-1-1`);
+    assert.match(task.id, new RegExp(`^${task.type}-\\d+-\\d+(-fake)?$`));
     assert.equal(typeof task.type, 'string');
     assert.match(task.type, /^[a-z_]+$/);
     assert.equal(tasksByPlayer[firstCrew][0].type, task.type);
@@ -340,9 +340,10 @@ describe('tasks', () => {
     for (const id of crewmatesOf(assignments)) {
       assert.equal(tasksByPlayer[id].length, 4);
     }
+    // Impostors get FAKE tasks with the same amount (Among Us style).
     const impostorId = impostorsOf(assignments)[0];
-    assert.deepEqual(tasksByPlayer[impostorId], undefined);
-  });
+    assert.equal(tasksByPlayer[impostorId].length, 4);
+    assert.match(tasksByPlayer[impostorId][0].id, /-fake$/);
 
   test('only the owner completes; double completion is rejected', () => {
     const { store, assignments, tasksByPlayer, crewmateId } = startedCrewmateContext();

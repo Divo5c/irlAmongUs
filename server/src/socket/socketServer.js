@@ -441,6 +441,11 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
           });
         }
 
+        // Kill targets in range: the red button lights up only with real
+        // targets (impostor sees names of the closest candidates).
+        const killTargets = roomStore.getKillTargetsFor(code, socket.data.playerId);
+        socket.emit('game:kill_targets', { code, targets: killTargets });
+
         // Broadcast to admin room if any admin is tracking
         if (roomStore.isAdmin(code, socket.data.playerId) || io.sockets.adapter.rooms.has(`admin:${code}`)) {
           const positions = roomStore.getAdminPositions(code);
