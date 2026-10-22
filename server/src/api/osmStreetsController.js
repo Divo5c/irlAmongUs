@@ -13,7 +13,7 @@ const ENDPOINTS = [
   'https://overpass.kumi.systems/api/interpreter',
 ];
 
-const QUERY_TIMEOUT_MS = 45_000;
+const QUERY_TIMEOUT_MS = 75_000;
 
 function parseStrictNumber(value, field, { min, max }) {
   const parsed = Number(value);
