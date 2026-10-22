@@ -387,8 +387,8 @@ button.round {
   gap: 26px; padding: 10px 0 4px;
 }
 .round-btn {
-  width: 88px; height: 88px; border-radius: 50%;
-  font-size: 34px; line-height: 1; display: flex; align-items: center;
+  width: 84px; height: 84px; border-radius: 50%;
+  font-size: 16px; font-weight: 700; line-height: 1; display: flex; align-items: center;
   justify-content: center; border: none; cursor: pointer;
   color: #fff; opacity: 0.45; filter: grayscale(0.7);
   transition: opacity 0.2s ease, filter 0.2s ease, transform 0.1s ease;

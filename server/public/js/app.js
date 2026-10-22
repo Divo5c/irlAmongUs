@@ -671,6 +671,7 @@ const App = (() => {
     overlay.classList.remove('hidden');
     $('role-banner').classList.add('hidden');
     $('btn-kill').classList.toggle('hidden', !impostor);
+    renderRole(payload); // task list build + flags + teammates line
 
     window.clearTimeout(showRoleOverlay._t);
     showRoleOverlay._t = window.setTimeout(() => {
@@ -868,6 +869,33 @@ const App = (() => {
       }
     }
 
+    // task markers: gelbe Punkte mit Nummer an fixen Knoten der Karte
+    const waypoints = [];
+    for (const corridor of map.corridors ?? []) {
+      const aNode = nodes[corridor.a];
+      const bNode = nodes[corridor.b];
+      if (aNode) waypoints.push(aNode);
+      if (bNode) waypoints.push(bNode);
+    }
+    if (!waypoints.length && map.nodes.length) waypoints.push(map.nodes[0]);
+    let taskIdx = 0;
+    for (const task of state.role?.tasks ?? []) {
+      if (task.completed) continue;
+      if (!waypoints.length) break;
+      const wedge = waypoints[(taskIdx * 7) % waypoints.length];
+      const [tx, ty] = toPx(wedge.x + (taskIdx % 3) * 6, wedge.y);
+      ctx.fillStyle = '#ffd166';
+      ctx.beginPath();
+      ctx.arc(tx, ty, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#1c1204';
+      ctx.font = 'bold 12px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(taskIdx + 1), tx, ty + 4);
+      ctx.textAlign = 'left';
+      taskIdx += 1;
+    }
+
     // corpses the player has discovered
     for (const body of state.nearbyBodies ?? []) {
       const [bx, by] = toPx(body.x, body.y);
@@ -939,6 +967,15 @@ const App = (() => {
     $('btn-kill').textContent = 'Kill';
   });
 
+  $('btn-game-leave').addEventListener('click', () => {
+    state.role = null;
+    state.teammates = [];
+    state.socket?.disconnect();
+    state.socket = null;
+    state.room = null;
+    localStorage.removeItem('rlaus_session');
+    show('home');
+  });
   $('btn-rematch').addEventListener('click', () => {
     ensureSocket().emit('game:reset', { code: state.code });
     hideOverlaysNot();
