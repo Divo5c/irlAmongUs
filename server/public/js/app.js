@@ -103,6 +103,7 @@ const App = (() => {
       if (room.status === 'IN_GAME') ensureGpsLoop();
       else stopGpsLoop();
       renderTeamProgress(room);
+      drawGameMap();
       // MAP_READY: the host may go back to the lobby and start the game.
       const startGame = $('btn-start-game');
       const canStart = room.status === 'MAP_READY' && state.isHost;
@@ -157,11 +158,13 @@ const App = (() => {
 
     socket.on('game:started', () => {
       show('game');
+      tryLandscape();
       beep(520);
     });
     socket.on('game:bodies_nearby', ({ bodies }) => {
       state.nearbyBodies = bodies ?? [];
       renderGameHud();
+      drawGameMap();
     });
     socket.on('position:confirmed', (pos) => {
       state.selfPos = pos;
@@ -740,27 +743,27 @@ const App = (() => {
       pad + (y - minY) * scale,
     ];
 
-    // corry corridors
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = '#2e3242';
+    // corridors: server format is { id, a, b } between two nodes
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#3a3f55';
     for (const c of map.corridors ?? []) {
-      const poly = c.points ?? [(nodes[c.from]?.x ?? 0), 0];
-      if (!poly) continue;
+      const from = nodes[c.a];
+      const to = nodes[c.b];
+      if (!from || !to) continue;
       ctx.beginPath();
-      (c.points ?? []).forEach((pt, i) => {
-        const [px, py] = toPx(pt.x ?? nodes[c.from]?.x ?? pt[0], pt.y ?? nodes[c.from]?.y ?? pt[1]);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      });
+      ctx.moveTo(...toPx(from.x, from.y));
+      ctx.lineTo(...toPx(to.x, to.y));
       ctx.stroke();
     }
 
     // rooms polygons
     ctx.lineWidth = 2;
     for (const r of map.rooms ?? []) {
-      const poly = r.polygon ?? r.points ?? [];
+      const poly = r.polygon ?? [];
       if (poly.length < 3) continue;
-      ctx.strokeStyle = 'rgba(255,209,102,0.5)';
-      ctx.strokePath?.();
+      ctx.strokeStyle = r.type === 'MEETING' ? 'rgba(74,222,128,0.7)' : 'rgba(255,209,102,0.55)';
+      ctx.fillStyle = 'rgba(255, 209, 102, 0.07)';
       ctx.beginPath();
       poly.forEach((pt, i) => {
         const [px, py] = toPx(pt.x, pt.y);
@@ -768,6 +771,15 @@ const App = (() => {
       });
       ctx.closePath();
       ctx.stroke();
+      ctx.fill();
+      if (r.name) {
+        const cx = poly.reduce((s, p) => s + p.x, 0) / poly.length;
+        const cy = poly.reduce((s, p) => s + p.y, 0) / poly.length;
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.font = '600 11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(r.name, ...toPx(cx, cy));
+      }
     }
 
     // corpses the player has discovered
@@ -794,6 +806,21 @@ const App = (() => {
     }
   }
   window.addEventListener('resize', () => drawGameMap());
+  window.addEventListener('orientationchange', () => setTimeout(drawGameMap, 300));
+
+  /** Landscape: lock wenn unterstützt (Android), sonst iOS-Dreh-Hinweis via CSS. */
+  async function tryLandscape() {
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      }
+      if (screen.orientation?.lock) {
+        await screen.orientation.lock('landscape');
+      }
+    } catch {
+      // iOS / denied: der CSS-Hinweis (#rotate-hint) bittet zum Drehen.
+    }
+  }
 
   function renderPhaseHint(room) {
     if (!state.role) return;

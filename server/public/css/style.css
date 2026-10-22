@@ -328,6 +328,22 @@ button.round {
 #taskbox { padding: 8px 12px; background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }
 
+/* Rotation: Querformat-Hinweis (iOS, kein Lock) + groessere Karte */
+#rotate-hint {
+  display: none; margin: 6px auto; padding: 8px 14px; max-width: 340px;
+  border-radius: 10px; font-size: 14px; font-weight: 600; text-align: center;
+  background: rgba(255, 209, 102, 0.14); color: #ffd166;
+  border: 1px solid rgba(255, 209, 102, 0.35);
+}
+@media (orientation: portrait) {
+  #screen-game.active #rotate-hint { display: block; }
+}
+@media (orientation: landscape) {
+  #rotate-hint { display: none !important; }
+  #screen-game.active #live-map-wrap { height: 58dvh; }
+  #screen-game.active #taskbox summary { font-size: 14px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   * { transition: none !important; animation-duration: 0.01ms !important; }
