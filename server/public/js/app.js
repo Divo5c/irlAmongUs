@@ -298,6 +298,7 @@ const App = (() => {
     ensureSocket().emit('map:start', { code: state.code });
     show('map');
     $('map-status').textContent = 'Position suchen\u2026';
+    refreshCachedMapButton();
   });
   $('btn-map-back').addEventListener('click', () => show(state.room.status === 'MAP_READY' || state.room.status === 'MAP_SETUP' ? 'lobby' : 'home'));
   $('btn-start-game').addEventListener('click', () => {
@@ -309,6 +310,51 @@ const App = (() => {
   });
 
   // ---------------------------------------------------------- map editor //
+
+  // Device-local map cache: saving a map also stores it on the phone, so the
+  // next session skips the 10-40 s Overpass fetch entirely.
+  const SAVED_MAP_KEY = 'rlaus.savedMap.v1';
+
+  function readSavedLocalMap() {
+    try {
+      const map = JSON.parse(localStorage.getItem(SAVED_MAP_KEY) ?? 'null');
+      if (!map?.nodes?.length || !Number.isFinite(map.anchor?.lat)) return null;
+      return map;
+    } catch {
+      return null;
+    }
+  }
+
+  function refreshCachedMapButton() {
+    const button = $('btn-load-cached');
+    const cached = readSavedLocalMap();
+    if (!cached) {
+      button.hidden = true;
+      return;
+    }
+    const date = new Date(cached.savedAt).toLocaleDateString('de-DE');
+    button.hidden = false;
+    button.textContent = `\u2913 Gespeicherte Karte (${cached.nodes.length} Knoten, ${date})`;
+  }
+
+  $('btn-load-cached').addEventListener('click', () => {
+    const cached = readSavedLocalMap();
+    if (!cached) return;
+    editor.setAnchor(cached.anchor.lat, cached.anchor.lon);
+    const working = {
+      version: cached.version + 1,
+      nodes: cached.nodes,
+      corridors: cached.corridors,
+    };
+    editor.setWorking(working);
+    editor.selected.clear();
+    $('btn-build-streets').disabled = true;
+    ensureSocket().emit('map:update', {
+      code: state.code,
+      map: { ...working, rooms: [], connections: [] },
+    });
+    $('map-status').textContent = `Gespeicherte Karte geladen (${working.nodes.length} Knoten) \u2014 erweitern oder speichern`;
+  });
 
   $('btn-load-streets').addEventListener('click', async () => {
     if (!('geolocation' in navigator)) {
@@ -392,6 +438,21 @@ const App = (() => {
       code: state.code,
       map: { ...working, rooms: [], connections: [] },
     });
+    // Local copy for the next round: skip Overpass entirely.
+    try {
+      localStorage.setItem(
+        SAVED_MAP_KEY,
+        JSON.stringify({
+          version: working.version,
+          nodes: working.nodes,
+          corridors: working.corridors,
+          anchor: editor.anchor,
+          savedAt: new Date().toISOString(),
+        }),
+      );
+    } catch {
+      // Private mode / quota: server save still worked, just no cache.
+    }
     alert('Karte gespeichert! Zur\u00fcck in die Lobby \u2014 dann Spiel starten.');
     show('lobby');
   });
