@@ -105,7 +105,13 @@ const App = (() => {
       renderTeamProgress(room);
       // MAP_READY: the host may go back to the lobby and start the game.
       const startGame = $('btn-start-game');
-      startGame.disabled = !(room.status === 'MAP_READY' && state.isHost);
+      const canStart = room.status === 'MAP_READY' && state.isHost;
+      startGame.disabled = !canStart;
+      if (room.status === 'MAP_READY') {
+        startGame.textContent = 'Spiel starten';
+      } else if (state.isHost) {
+        startGame.textContent = room.status === 'LOBBY' ? 'Erst Karte laden' : 'Karte wird gebaut\u2026';
+      }
       if (room.status === 'MAP_READY' && active === 'screen-map') {
         show('lobby');
       }
@@ -123,10 +129,10 @@ const App = (() => {
       show('lobby');
     });
     socket.on('room:error', ({ code: _error, message }) => {
-      if (!screens.home.classList.contains('active')) {
-        alert(`Server: ${message ?? 'Unbekannter Fehler'}`);
-      } else {
+      if (screens.home.classList.contains('active')) {
         errorHome(message ?? 'Aktion fehlgeschlagen.');
+      } else {
+        showToast(message ?? 'Aktion fehlgeschlagen.');
       }
     });
     socket.onAny((event) => console.debug('[socket]', event));
@@ -753,6 +759,20 @@ const App = (() => {
     $('game-phase-hint').textContent = room.status === 'MEETING'
       ? 'Meeting l\u00e4uft'
       : `Lebende Spieler: ${aliveCount}`;
+  }
+
+  function showToast(message) {
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    Object.assign(toast.style, {
+      position: 'fixed', left: '50%', bottom: '28px', transform: 'translateX(-50%)',
+      maxWidth: '88vw', padding: '10px 16px', borderRadius: '10px',
+      background: 'rgba(30, 30, 38, 0.95)', color: '#fff',
+      fontSize: '14px', zIndex: '999',
+      boxShadow: '0 6px 18px rgba(0, 0, 0, 0.4)',
+    });
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3200);
   }
 
   $('btn-report').addEventListener('click', () => {

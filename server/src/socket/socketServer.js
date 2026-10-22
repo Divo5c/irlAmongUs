@@ -265,10 +265,8 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
         assertSocketInRoom(socket, code);
         assertHost(socket, code);
         const outcome = bots.removeLastBot(code);
-        if (outcome.deleted) {
-          bots.stop(code);
-        } else if (outcome.removed && outcome.room) {
-          io.to(code).emit('room:updated', roomStore.toPublicRoom(outcome.room));
+        if (outcome.room) {
+          io.to(code).emit('room:updated', outcome.room);
         }
       } catch (error) {
         emitRoomError(socket, error);

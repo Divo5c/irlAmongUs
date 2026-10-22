@@ -304,7 +304,7 @@ class RoomStore {
       return { removed: false, deleted: false, room: null };
     }
 
-    if (room.status !== STATUS_LOBBY) {
+    if (room.status === STATUS_MEETING || room.status === STATUS_IN_GAME || room.status === STATUS_GAME_OVER) {
       return { removed: false, deleted: false, room: this.toPublicRoom(room) };
     }
 
