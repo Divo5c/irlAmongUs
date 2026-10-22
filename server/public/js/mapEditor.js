@@ -195,7 +195,7 @@ class MapEditor {
         const d = Math.hypot(ax + t * dx - wx, ay + t * dy - wy);
         if (d < dist) dist = d;
       }
-      if (dist > bestDist) {
+      if (dist < bestDist) {
         bestDist = dist;
         best = candidate;
       }

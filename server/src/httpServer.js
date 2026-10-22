@@ -36,11 +36,14 @@ function serveStaticFile(response, relativePath) {
       return;
     }
     const ext = path.extname(resolved).toLowerCase();
-    // Immutable shell assets; index/sw stay fresh so deploys land fast.
-    const cache =
-      ext === '.html' || resolved.endsWith('.webmanifest') || resolved.endsWith('sw.js')
-        ? 'no-cache'
-        : 'public, max-age=300';
+    // Immutable shell assets; index/sw/js/css stay fresh so deploys land fast.
+    const alwaysFresh =
+      ext === '.html' ||
+      resolved.endsWith('.webmanifest') ||
+      resolved.endsWith('sw.js') ||
+      ext === '.js' ||
+      ext === '.css';
+    const cache = alwaysFresh ? 'no-cache' : 'public, max-age=300';
     response.writeHead(200, {
       'Content-Type': MIME_TYPES[ext] ?? 'application/octet-stream',
       'Cache-Control': cache,
