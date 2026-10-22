@@ -169,6 +169,10 @@ const App = (() => {
     socket.on('position:confirmed', (pos) => {
       state.selfPos = pos;
       state.anchorOk = !!pos.onCorridor || !!pos.onRoom;
+      // Zurück im Spielfeld -> Warnbanner ausblenden.
+      if (state.selfPos.onCorridor || state.selfPos.onRoom) {
+        $('boundary-banner').classList.add('hidden');
+      }
       drawGameMap();
       renderGameHud();
     });
