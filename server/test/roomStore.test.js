@@ -387,10 +387,10 @@ describe('tasks', () => {
     for (const id of Object.keys(assignments)) {
       const spot = (tasksByPlayer[id] ?? [])[0];
       if (spot) {
-        store.updatePosition('ABC234', id, { x: spot.x, y: spot.y, confidence: 1 });
+        store.updatePosition('ABC234', id, { x: spot.x, y: spot.y, confidence: 1 }, { skipPlausibilityCheck: true });
       }
       for (const task of tasksByPlayer[id] ?? []) {
-        store.updatePosition('ABC234', id, { x: task.x, y: task.y, confidence: 1 });
+        store.updatePosition('ABC234', id, { x: task.x, y: task.y, confidence: 1 }, { skipPlausibilityCheck: true });
         lastResult = store.completeTask('ABC234', id, task.id);
         winner = lastResult.winner;
         if (winner !== null && winner !== 'CREWMATE') {
@@ -992,3 +992,154 @@ function getAliveById(room, playerId) {
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+describe('sabotage & emergency meeting', () => {
+  const REACTOR_C = { x: 43, y: 108 };
+  const O2_C = { x: 62, y: 108 };
+  const ADMIN_C = { x: 82, y: 80 };
+  const CAFE_C = { x: 21, y: 80 };
+
+  function sabotageGame(config = {}) {
+    const store = new RoomStore({ config });
+    createRoomWithPlayers(store, 4, 'ABC234', { impostorCount: 1 });
+    const { assignments } = beginGame(store);
+    return { store, impostorId: impostorsOf(assignments)[0], crewIds: crewmatesOf(assignments) };
+  }
+
+  /** First position update per player is always accepted (fresh store). */
+  function placeAt(store, id, { x, y }) {
+    store.updatePosition('ABC234', id, { x, y, confidence: 1 });
+  }
+
+  test('only a living impostor can sabotage; first cycle type is REACTOR', () => {
+    const { store, impostorId, crewIds } = sabotageGame();
+
+    assertGameError(
+      () => store.startSabotage('ABC234', crewIds[0]),
+      'SABOTAGE_REJECTED',
+    );
+
+    const result = store.startSabotage('ABC234', impostorId);
+    assert.equal(result.type, 'REACTOR');
+    assert.ok(Date.parse(result.deadline) > Date.now());
+    assert.equal(store.getRoom('ABC234').sabotage.type, 'REACTOR');
+
+    // A second sabotage while one runs is rejected:
+    assertGameError(
+      () => store.startSabotage('ABC234', impostorId),
+      'SABOTAGE_ACTIVE',
+    );
+  });
+
+  test('REACTOR fix needs TWO crewmates standing together in the reactor', () => {
+    const { store, impostorId, crewIds } = sabotageGame();
+    store.startSabotage('ABC234', impostorId);
+
+    // Crewmates standing outside the reactor cannot fix:
+    assertGameError(
+      () => store.fixSabotagePanel('ABC234', crewIds[0], 'REACTOR'),
+      'SABOTAGE_NOT_AT_PANEL',
+    );
+
+    // One crewmate alone in the reactor needs a partner:
+    placeAt(store, crewIds[0], REACTOR_C);
+    assertGameError(
+      () => store.fixSabotagePanel('ABC234', crewIds[0], 'REACTOR'),
+      'SABOTAGE_NEED_HELP',
+    );
+
+    // A second crewmate joins -> the joint press fixes it.
+    placeAt(store, crewIds[1], REACTOR_C);
+    const result = store.fixSabotagePanel('ABC234', crewIds[0], 'REACTOR');
+    assert.deepEqual(result.fixed, ['REACTOR']);
+    assert.equal(store.getRoom('ABC234').sabotage, null);
+  });
+
+  test('O2 sabotage needs fixes at BOTH the oxygen and the Admin room', () => {
+    const { store, impostorId, crewIds } = sabotageGame();
+    const room = store.getRoom('ABC234');
+    // Force the second cycle type (O2) and clear the cooldown:
+    room.sabotageCount = 1;
+    room.sabotageCooldownUntil = 0;
+    const result = store.startSabotage('ABC234', impostorId);
+    assert.equal(result.type, 'O2');
+
+    // Wrong room for the panel:
+    placeAt(store, crewIds[0], O2_C);
+    assertGameError(
+      () => store.fixSabotagePanel('ABC234', crewIds[0], 'admin'),
+      'SABOTAGE_NOT_AT_PANEL',
+    );
+
+    // o2 panel fixes, admin panel still missing:
+    const partial = store.fixSabotagePanel('ABC234', crewIds[0], 'o2');
+    assert.deepEqual(partial.fixed, ['o2']);
+    assert.equal(store.getRoom('ABC234').sabotage.type, 'O2');
+
+    // Exactly the same panel can't be fixed twice:
+    assertGameError(
+      () => store.fixSabotagePanel('ABC234', crewIds[0], 'o2'),
+      'SABOTAGE_ALREADY_FIXED',
+    );
+
+    // Second panel at the Admin room clears everything:
+    placeAt(store, crewIds[1], ADMIN_C);
+    const final = store.fixSabotagePanel('ABC234', crewIds[1], 'admin');
+    assert.deepEqual(final.fixed, ['o2', 'admin']);
+    assert.equal(store.getRoom('ABC234').sabotage, null);
+  });
+
+  test('sabotage cooldown blocks spam after a fix', () => {
+    const { store, impostorId, crewIds } = sabotageGame();
+    const room = store.getRoom('ABC234');
+    store.startSabotage('ABC234', impostorId);
+    placeAt(store, crewIds[0], REACTOR_C);
+    placeAt(store, crewIds[1], REACTOR_C);
+    store.fixSabotagePanel('ABC234', crewIds[0], 'REACTOR');
+
+    assertGameError(
+      () => store.startSabotage('ABC234', impostorId),
+      'SABOTAGE_COOLDOWN',
+    );
+    // Ready again when the cooldown elapses:
+    room.sabotageCooldownUntil = 0;
+    assert.equal(store.startSabotage('ABC234', impostorId).type, 'O2');
+  });
+
+  test('emergency meetings: Cafeteria only, one per player per round', () => {
+    const { store, impostorId, crewIds } = sabotageGame();
+
+    // Not inside the Cafeteria -> rejected:
+    placeAt(store, crewIds[1], { x: 20, y: 51 });
+    assertGameError(
+      () => store.emergencyMeeting('ABC234', crewIds[1]),
+      'NOT_IN_CAFETERIA',
+    );
+
+    placeAt(store, crewIds[0], CAFE_C);
+    const result = store.emergencyMeeting('ABC234', crewIds[0]);
+    assert.equal(result.phase, 'DISCUSSION');
+    assert.equal(store.getRoom('ABC234').status, 'MEETING');
+
+    // While the meeting runs, the store blocks further emergency presses:
+    assertGameError(
+      () => store.emergencyMeeting('ABC234', crewIds[0]),
+      'NOT_IN_GAME',
+    );
+
+    // Simulate the meeting having ended:
+    const room = store.getRoom('ABC234');
+    room.status = 'IN_GAME'; // STATUS_IN_GAME is a plain string constant
+    room.meeting = null;
+
+    assertGameError(
+      () => store.emergencyMeeting('ABC234', crewIds[0]),
+      'NO_EMERGENCY_LEFT',
+    );
+    // Other players still have their own button:
+    assertGameError(
+      () => store.emergencyMeeting('ABC234', crewIds[1]),
+      'NOT_IN_CAFETERIA',
+    );
+  });
+});

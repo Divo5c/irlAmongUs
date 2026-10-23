@@ -321,8 +321,73 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
       }
     });
 
-    socket.on('game:vote_cast', (payload) => {
+    // ------------------------------------------------------ sabotage //
+
+    /** Impostor-only: fires the next sabotage in the cycle. */
+    socket.on('game:sabotage', (payload) => {
       try {
+        const { code } = payload ?? {};
+        assertSocketInRoom(socket, code);
+
+        const result = roomStore.startSabotage(code, socket.data.playerId);
+
+        io.to(code).emit('room:updated', result.room);
+        io.to(code).emit('game:sabotage_started', {
+          code,
+          type: result.type,
+          deadline: result.deadline,
+        });
+        armSabotageDeadlineTimer(code, io);
+      } catch (error) {
+        emitRoomError(socket, error);
+      }
+    });
+
+    /** Crew fix attempt: panel = 'REACTOR' | 'o2' | 'admin'. */
+    socket.on('game:sabotage_fix', (payload) => {
+      try {
+        const { code, panel } = payload ?? {};
+        assertSocketInRoom(socket, code);
+
+        const result = roomStore.fixSabotagePanel(
+          code,
+          socket.data.playerId,
+          panel,
+        );
+        clearSabotageTimer(code);
+
+        io.to(code).emit('room:updated', result.room);
+        io.to(code).emit('game:sabotage_fixed', { code, fixed: result.fixed });
+      } catch (error) {
+        emitRoomError(socket, error);
+      }
+    });
+
+    /** Notfall-Button: standing in the Cafeteria, one per player per game. */
+    socket.on('game:emergency', (payload) => {
+      try {
+        const { code } = payload ?? {};
+        assertSocketInRoom(socket, code);
+
+        const result = roomStore.emergencyMeeting(code, socket.data.playerId);
+
+        io.to(code).emit('room:updated', result.room);
+        io.to(code).emit('game:meeting_started', {
+          code,
+          status: 'MEETING',
+          phase: result.phase,
+          reporterId: result.reporterId,
+          players: result.room.players,
+          discussionDeadline: result.discussionDeadline,
+          emergency: true,
+        });
+        armNextMeetingTimer(code);
+      } catch (error) {
+        emitRoomError(socket, error);
+      }
+    });
+
+    socket.on('game:vote_cast', (payload) => {      try {
         const { code, targetId, skip } = payload ?? {};
         assertSocketInRoom(socket, code);
 
@@ -629,6 +694,45 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
       clearTimeout(timer);
       meetingTimers.delete(code);
     }
+  }
+
+  // ------------------------------------------------ sabotage deadline //
+
+  const sabotageTimers = new Map();
+
+  function clearSabotageTimer(code) {
+    const timer = sabotageTimers.get(code);
+    if (timer) {
+      clearTimeout(timer);
+      sabotageTimers.delete(code);
+    }
+  }
+
+  /** Countdown end: not fixed in time -> instant impostor victory. */
+  function armSabotageDeadlineTimer(code, ioInstance) {
+    clearSabotageTimer(code);
+    const room = roomStore.getRoom(code);
+    if (!room?.sabotage) return;
+    const delay = Math.max(0, Date.parse(room.sabotage.deadline) - Date.now());
+    const timer = setTimeout(() => {
+      sabotageTimers.delete(code);
+      try {
+        if (!roomStore.isSabotageExpired(code)) return;
+        clearMeetingTimer(code);
+        const gameOver = roomStore.endGame(code, 'IMPOSTOR');
+        ioInstance.to(code).emit('room:updated', gameOver.room);
+        ioInstance.to(code).emit('game:over', {
+          code,
+          winner: 'IMPOSTOR',
+          players: gameOver.room.players,
+          reason: 'SABOTAGE_EXPIRED',
+        });
+      } catch (error) {
+        console.error(`Sabotage tick failed for room ${code}:`, error.message);
+      }
+    }, delay);
+    timer.unref();
+    sabotageTimers.set(code, timer);
   }
 
   /**

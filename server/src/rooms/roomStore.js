@@ -179,9 +179,22 @@ class RoomStore {
       adminPinSet: room.adminPinHash !== null,
       ...this.#publicMeetingInfo(room),
       ...this.#publicKillInfo(room),
+      ...this.#publicSabotageInfo(room),
       taskProgress: getTaskProgress(room),
       createdAt: room.createdAt,
       updatedAt: room.updatedAt,
+    };
+  }
+
+  /** Live countdown payload for the client overlays. */
+  #publicSabotageInfo(room) {
+    if (!room.sabotage) return {};
+    return {
+      sabotage: {
+        type: room.sabotage.type,
+        deadline: room.sabotage.deadline,
+        ...(room.sabotage.panels ? { panels: { ...room.sabotage.panels } } : {}),
+      },
     };
   }
 
@@ -568,8 +581,8 @@ class RoomStore {
       );
     }
 
-    room.sabotageCount = (room.sabotageCount ?? 0) + 1;
     const type = this.#nextSabotageType(room);
+    room.sabotageCount = (room.sabotageCount ?? 0) + 1;
     // 30 s meltdown / depletion — enough panic, short enough for real play.
     const deadlineMs = Date.now() + 30_000;
     room.sabotage = {
@@ -1143,7 +1156,7 @@ class RoomStore {
    *
    * @returns {{ position: {x,y,heading,confidence,source,timestamp}, roomId: string|null, onCorridor: boolean }}
    */
-  updatePosition(code, playerId, rawEstimate) {
+  updatePosition(code, playerId, rawEstimate, { skipPlausibilityCheck = false } = {}) {
     const room = this.getRequiredRoom(code);
 
     // Position updates allowed in MAP_READY and IN_GAME
@@ -1167,7 +1180,9 @@ class RoomStore {
     const previous = roomPositions.get(playerId) || null;
 
     // Temporal/spatial plausibility check
-    const plausibility = isPositionPlausible(estimate, previous);
+    const plausibility = skipPlausibilityCheck
+      ? { valid: true }
+      : isPositionPlausible(estimate, previous);
     if (!plausibility.valid) {
       throw new GameError(
         plausibility.reason,

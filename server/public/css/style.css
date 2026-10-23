@@ -332,6 +332,13 @@ button.round {
   padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 600;
   background: rgba(239, 68, 68, 0.92); color: #fff; text-align: center;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); }
+#sabotage-banner { position: absolute; left: 8px; right: 8px; top: 12px;
+  z-index: 3; padding: 10px 12px; border-radius: 10px; font-size: 14px;
+  font-weight: 700; color: #fff; text-align: center;
+  animation: sab-pulse 1s infinite; }
+#sabotage-banner.reactor-war { background: rgba(215, 38, 61, 0.95); }
+#sabotage-banner.o2-war { background: rgba(202, 138, 4, 0.95); }
+@keyframes sab-pulse { 50% { opacity: 0.75; } }
 #taskbox summary { cursor: pointer; font-weight: 600; color: rgba(255,255,255,0.85); }
 #taskbox { padding: 8px 12px; background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }
@@ -400,6 +407,7 @@ button.round {
 .round-btn.ready { opacity: 1; filter: none; animation: pulse 1.6s infinite; }
 .round-btn.report { background: radial-gradient(circle at 35% 30%, #7fd4ff, #1787c9); }
 .round-btn.use { background: radial-gradient(circle at 35% 30%, #ffe08a, #d99b1a); }
+.round-btn.sabotage { background: radial-gradient(circle at 35% 30%, #d8b4fe, #7c3aed); }
 .round-btn.kill { background: radial-gradient(circle at 35% 30%, #ff8a94, #d32733); }
 @keyframes pulse {
   0%, 100% { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45); }

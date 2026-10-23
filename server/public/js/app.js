@@ -164,6 +164,18 @@ const App = (() => {
       state.killTargets = targets ?? [];
       renderGameHud();
     });
+    socket.on('game:sabotage_started', ({ code: _code, type, deadline }) => {
+      if (state.room) state.room.sabotage = { type, deadline, ...(type === 'O2' ? { panels: { o2: false, admin: false } } : {}) };
+      beep(type === 'REACTOR' ? 120 : 240);
+      vibrate([80, 60, 80, 60, 160]);
+      renderSabotage();
+    });
+    socket.on('game:sabotage_fixed', ({ code: _code }) => {
+      if (state.room) delete state.room.sabotage;
+      $('sabotage-banner').classList.add('hidden');
+      beep(700);
+      renderGameHud();
+    });
     socket.on('game:bodies_nearby', ({ bodies }) => {
       state.nearbyBodies = bodies ?? [];
       renderGameHud();
@@ -246,6 +258,18 @@ const App = (() => {
       const alivePlayers = (players ?? []).filter((p) => p.isAlive).map((p) => p.name);
       $('gameover-detail').textContent = `Am Ende \u00fcbrig: ${alivePlayers.join(', ')}`;
       $('btn-rematch').classList.toggle('hidden', !state.isHost);
+    });
+    socket.on('task:progress', ({ completedTaskId }) => {
+      if (!completedTaskId) return;
+      if ((state.role?.tasks ?? []).some((t) => t.id === completedTaskId)) {
+        const task = state.role.tasks.find((t) => t.id === completedTaskId);
+        if (task) task.completed = true;
+        showToast(task?.isFake ? 'Fake-Task abgehakt (kein Fortschritt \u2014 t\u00e4usche weiter!).' : 'Task erledigt!');
+        beep(880);
+        vibrate(50);
+      }
+      drawGameMap();
+      renderGameHud();
     });
     socket.on('disconnect', () => {
       // Socket.IO reconnects automatically; try to rejoin when back.
@@ -735,16 +759,123 @@ const App = (() => {
     reportBtn.disabled = !(bodies.length && imAlive !== false);
     reportBtn.classList.toggle('ready', bodies.length > 0 && imAlive !== false);
     const killBtn = $('btn-kill');
-    if (killBtn.classList.contains('hidden')) return;
-    const targets = state.killTargets ?? [];
-    const cooldownLeft = Math.max(0, state.killReadyAt - Date.now());
-    killBtn.disabled = !targets.length || cooldownLeft > 0;
-    killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
-    killBtn.textContent = cooldownLeft && targets.length
-      ? `${Math.ceil(cooldownLeft / 1000)}s`
-      : 'Kill';
+    if (!killBtn.classList.contains('hidden')) {
+      const targets = state.killTargets ?? [];
+      const cooldownLeft = Math.max(0, state.killReadyAt - Date.now());
+      killBtn.disabled = !targets.length || cooldownLeft > 0;
+      killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
+      killBtn.textContent = cooldownLeft && targets.length
+        ? `${Math.ceil(cooldownLeft / 1000)}s`
+        : 'Kill';
+    }
+    updateUseButton();
+    updateSabotageButton();
+  }
+
+  /** Use-Knopf: Sabotage-Fix > Task > Notfall-Meeting (nur wenn anw\u00e4hlbar). */
+  function useAction() {
+    if (state.room?.status !== 'IN_GAME') return null;
+    const sab = state.room?.sabotage;
+    const roomId = state.selfPos?.roomId;
+    if (sab) {
+      if (sab.type === 'REACTOR' && roomIdContains('REACTOR')) {
+        return { label: 'Fix', kind: 'FIX', panel: 'REACTOR' };
+      }
+      if (sab.type === 'O2') {
+        if (!sab.panels?.o2 && roomIdContains('O2')) {
+          return { label: 'Fix O2', kind: 'FIX', panel: 'o2' };
+        }
+        if (!sab.panels?.admin && roomIdContains('ADMIN')) {
+          return { label: 'Fix Admin', kind: 'FIX', panel: 'admin' };
+        }
+      }
+      return null;
+    }
+    const task = nearestIncompleteTask();
+    if (task) {
+      return { label: 'Task', kind: 'TASK', task };
+    }
+    if (roomIdContains('CAFETERIA') && emergencyLeft() > 0) {
+      return { label: 'Notfall', kind: 'EMERGENCY' };
+    }
+    return null;
+  }
+
+  function roomIdContains(type) {
+    const roomId = state.selfPos?.roomId;
+    const room = (state.room?.map?.rooms ?? []).find((r) => r.id === roomId);
+    return room?.type === type;
+  }
+
+  /** Innerhalb 4 m (Server-Gate) des n\u00e4chsten offenen Tasks. */
+  function nearestIncompleteTask() {
+    const self = state.selfPos;
+    if (!self) return null;
+    let best = null;
+    let bestDist = Infinity;
+    for (const task of state.role?.tasks ?? []) {
+      if (task.completed || task.x == null) continue;
+      const d = Math.hypot((self.x ?? Infinity) - task.x, (self.y ?? Infinity) - task.y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = task;
+      }
+    }
+    return bestDist <= 4.2 ? best : null;
+  }
+
+  function emergencyLeft() {
+    // Der Server z\u00e4hlt (emergencyUsed) \u2014 lokal tasten wir 1 pro Spieler.
+    return state.role && !(state._usedEmergency) ? 1 : 0;
+  }
+
+  function updateUseButton() {
+    const useBtn = $('btn-use');
+    const action = useAction();
+    useBtn.textContent = action ? action.label : 'Use';
+    const inMeeting = state.room?.status !== 'IN_GAME';
+    const dead = state.room?.players?.find((p) => p.id === state.playerId) ?.
+      isAlive === false;
+    useBtn.classList.toggle('hidden', !state.room || inMeeting || dead);
+    useBtn.disabled = !action || inMeeting || dead;
+    useBtn.classList.toggle('ready', !!action && !inMeeting);
+    useBtn.dataset.kind = action?.kind ?? '';
+  }
+
+  function updateSabotageButton() {
+    const sabBtn = $('btn-sabotage');
+    if (!sabBtn) return;
+    const impostor = state.role?.role === 'IMPOSTOR';
+    sabBtn.classList.toggle('hidden', !impostor || state.room?.status !== 'IN_GAME');
+    if (!impostor) return;
+    sabBtn.disabled = !!state.room?.sabotage;
+    sabBtn.textContent = state.room?.sabotage ? 'L\u00e4uft' : 'Sabotage';
   }
   setInterval(renderGameHud, 500);
+
+  // -------------------------------------------------------- sabotage HUD //
+
+  /** Overlay banner during active sabotage with live countdown. */
+  function renderSabotage() {
+    const banner = $('sabotage-banner');
+    const sab = state.room?.sabotage;
+    if (!sab || state.room?.status !== 'IN_GAME') {
+      banner.classList.add('hidden');
+      return;
+    }
+    const remaining = Math.max(0, Math.round((Date.parse(sab.deadline) - Date.now()) / 1000));
+    if (sab.type === 'REACTOR') {
+      banner.textContent = `\u26A0\uFE0F REACTOR MELTDOWN \u2014 2 Crewmates m\u00fcssen zusammen im Reactor fixen! ${remaining}s`;
+    } else {
+      const o2 = sab.panels?.o2 ? '\u2705' : '\u274C';
+      const admin = sab.panels?.admin ? '\u2705' : '\u274C';
+      banner.textContent = `\u26A0\uFE0F Sauerstoff! Fix in O2 ${o2} + Admin ${admin} \u2014 ${remaining}s`;
+    }
+    banner.classList.remove('hidden');
+    banner.classList.toggle('reactor-war', sab.type === 'REACTOR');
+    banner.classList.toggle('o2-war', sab.type === 'O2');
+  }
+  setInterval(renderSabotage, 1000);
 
   // ------------------------------------------------------------ gps loop //
 
@@ -869,21 +1000,27 @@ const App = (() => {
       }
     }
 
-    // task markers: gelbe Punkte mit Nummer an fixen Knoten der Karte
-    const waypoints = [];
-    for (const corridor of map.corridors ?? []) {
-      const aNode = nodes[corridor.a];
-      const bNode = nodes[corridor.b];
-      if (aNode) waypoints.push(aNode);
-      if (bNode) waypoints.push(bNode);
-    }
-    if (!waypoints.length && map.nodes.length) waypoints.push(map.nodes[0]);
+    // task markers: echte Server-Koordinaten (roomId/roomName/x/y);
+    // \u00e4ltere Runden ohne Spots fallen auf Karten-Knoten zur\u00fcck.
     let taskIdx = 0;
     for (const task of state.role?.tasks ?? []) {
       if (task.completed) continue;
-      if (!waypoints.length) break;
-      const wedge = waypoints[(taskIdx * 7) % waypoints.length];
-      const [tx, ty] = toPx(wedge.x + (taskIdx % 3) * 6, wedge.y);
+      let tx, ty;
+      if (task.x != null) {
+        [tx, ty] = toPx(task.x, task.y);
+      } else {
+        const waypoints = [];
+        for (const corridor of map.corridors ?? []) {
+          const aNode = nodes[corridor.a];
+          const bNode = nodes[corridor.b];
+          if (aNode) waypoints.push(aNode);
+          if (bNode) waypoints.push(bNode);
+        }
+        if (!waypoints.length && map.nodes.length) waypoints.push(map.nodes[0]);
+        if (!waypoints.length) break;
+        const wedge = waypoints[(taskIdx * 7) % waypoints.length];
+        [tx, ty] = toPx(wedge.x + (taskIdx % 3) * 6, wedge.y);
+      }
       ctx.fillStyle = '#ffd166';
       ctx.beginPath();
       ctx.arc(tx, ty, 9, 0, Math.PI * 2);
@@ -965,6 +1102,30 @@ const App = (() => {
     ensureSocket().emit('game:kill', { code: state.code, targetPlayerId: targets[0].playerId });
     $('btn-kill').disabled = true;
     $('btn-kill').textContent = 'Kill';
+  });
+
+  $('btn-use').addEventListener('click', () => {
+    const action = useAction();
+    if (!action) return;
+    const socket = ensureSocket();
+    if (action.kind === 'FIX') {
+      socket.emit('game:sabotage_fix', { code: state.code, panel: action.panel });
+      vibrate(60);
+    } else if (action.kind === 'TASK') {
+      socket.emit('task:complete', { code: state.code, taskId: action.task.id });
+      vibrate(60);
+    } else if (action.kind === 'EMERGENCY') {
+      state._usedEmergency = true;
+      socket.emit('game:emergency', { code: state.code });
+      vibrate(60);
+    }
+  });
+
+  $('btn-sabotage').addEventListener('click', () => {
+    if (!state.room?.sabotage) {
+      ensureSocket().emit('game:sabotage', { code: state.code });
+      vibrate(60);
+    }
   });
 
   $('btn-game-leave').addEventListener('click', () => {
