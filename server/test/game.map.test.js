@@ -248,7 +248,24 @@ describe('validateForSave (minimum viable map)', () => {
         { id: 'n2', x: 10, y: 0 },
       ],
       corridors: [{ id: 'c1', a: 'n1', b: 'n2' }],
+      rooms: require('./criticalRooms').criticalRooms(),
     });
     assert.equal(validateForSave(minimal), true);
+  });
+
+  test('saving without the four critical rooms is rejected', () => {
+    const noRooms = sanitizeGameMap({
+      nodes: [
+        { id: 'n1', x: 0, y: 0 },
+        { id: 'n2', x: 10, y: 0 },
+      ],
+      corridors: [{ id: 'c1', a: 'n1', b: 'n2' }],
+    });
+    assert.throws(
+      () => validateForSave(noRooms),
+      (error) =>
+        error instanceof GameError &&
+        error.code === 'MAP_CRITICAL_ROOMS_MISSING',
+    );
   });
 });

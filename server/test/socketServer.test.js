@@ -179,7 +179,7 @@ const SAMPLE_MAP = {
     { id: 'n2', x: 90, y: 50 },
   ],
   corridors: [{ id: 'c1', a: 'n1', b: 'n2' }],
-  rooms: [],
+  rooms: require('./criticalRooms').criticalRooms(),
   connections: [],
 };
 

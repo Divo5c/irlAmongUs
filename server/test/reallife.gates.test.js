@@ -16,7 +16,7 @@ function validMap() {
       { id: 'c1', a: 'n1', b: 'n2' },
       { id: 'c2', a: 'n3', b: 'n4' },
     ],
-    rooms: [],
+    rooms: (() => require('./criticalRooms').criticalRooms())(),
   };
 }
 

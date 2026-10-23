@@ -3,6 +3,22 @@ const enumsSchema = require('../../../shared/models/enums.schema.json');
 
 const ROOM_TYPES = enumsSchema.$defs.RoomType.enum;
 
+/** Display names for typed rooms (hosts may only name NORMAL rooms). */
+const ROOM_DISPLAY_NAMES = Object.freeze({
+  CAFETERIA: 'Cafeteria',
+  MEDBAY: 'Medbay',
+  SECURITY: 'Security',
+  REACTOR: 'Reactor',
+  ELECTRICAL: 'Electrical',
+  STORAGE: 'Storage',
+  ADMIN: 'Admin',
+  O2: 'O2',
+  WEAPONS: 'Weapons',
+});
+
+/** Rooms that sabotage/meeting mechanics need for a playable game. */
+const CRITICAL_ROOM_TYPES = Object.freeze(['CAFETERIA', 'REACTOR', 'O2', 'ADMIN']);
+
 /**
  * Hard limits for host-created maps. Generous enough for a whole school
  * floor, small enough to keep payloads and rendering cheap.
@@ -156,7 +172,9 @@ function sanitizeGameMap(raw) {
     roomIds.add(room.id);
     rooms.push({
       id: room.id,
-      name: room.name.trim(),
+      // Typed rooms ALWAYS carry their canonical name (hosts cannot rename
+      // Cafeterias or Reactors into something confusing).
+      name: room.type === 'NORMAL' ? room.name.trim() : ROOM_DISPLAY_NAMES[room.type],
       type: room.type,
       polygon: normalizedPolygon,
     });
@@ -231,12 +249,26 @@ function validateForSave(map) {
       { field: 'map' },
     );
   }
+  // Critical rooms: meeting (Cafeteria), sabotage fix/trigger points.
+  const types = new Set((map.rooms ?? []).map((room) => room.type));
+  const missing = CRITICAL_ROOM_TYPES.filter((type) => !types.has(type));
+  if (missing.length) {
+    throw new GameError(
+      'MAP_CRITICAL_ROOMS_MISSING',
+      `The map also needs these rooms: ${missing
+        .map((type) => ROOM_DISPLAY_NAMES[type])
+        .join(', ')}.`,
+      { field: 'rooms', missing },
+    );
+  }
   return true;
 }
 
 module.exports = {
   MAP_LIMITS,
   ROOM_TYPES,
+  ROOM_DISPLAY_NAMES,
+  CRITICAL_ROOM_TYPES,
   sanitizeGameMap,
   validateForSave,
 };

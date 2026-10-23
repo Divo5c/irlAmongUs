@@ -25,7 +25,7 @@ const SAMPLE_MAP = {
     { id: 'n2', x: 90, y: 50 },
   ],
   corridors: [{ id: 'c1', a: 'n1', b: 'n2' }],
-  rooms: [],
+  rooms: require('./criticalRooms').criticalRooms(),
   connections: [],
 };
 
@@ -344,6 +344,7 @@ describe('tasks', () => {
     const impostorId = impostorsOf(assignments)[0];
     assert.equal(tasksByPlayer[impostorId].length, 4);
     assert.match(tasksByPlayer[impostorId][0].id, /-fake$/);
+  });
 
   test('only the owner completes; double completion is rejected', () => {
     const { store, assignments, tasksByPlayer, crewmateId } = startedCrewmateContext();

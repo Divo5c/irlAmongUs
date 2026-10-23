@@ -2,6 +2,7 @@ const { test, describe, before } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { RoomStore } = require('../src/rooms/roomStore');
+const { criticalRooms } = require('./criticalRooms');
 const { createBotEngine } = require('../src/game/bots');
 
 function validMap() {
@@ -28,6 +29,7 @@ function validMap() {
           { x: 2, y: 8 },
         ],
       },
+      ...criticalRooms(),
     ],
   };
 }

@@ -441,7 +441,7 @@ describe('RoomStore.updatePosition', () => {
           { x: -5, y: -5 },
           { x: -10, y: -5 },
         ],
-      }],
+      }, ...require('./criticalRooms').criticalRooms()],
       connections: [],
     });
     store.saveMap('ABC234');
@@ -590,7 +590,7 @@ describe('RoomStore admin auth', () => {
     store.updateMap('ABC234', {
       nodes: [{ id: 'n1', x: 0, y: 0 }, { id: 'n2', x: 10, y: 0 }],
       corridors: [{ id: 'c1', a: 'n1', b: 'n2' }],
-      rooms: [],
+      rooms: require('./criticalRooms').criticalRooms(),
       connections: [],
     });
     store.saveMap('ABC234');
