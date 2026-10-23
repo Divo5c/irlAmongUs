@@ -127,6 +127,9 @@ function createBotEngine(roomStore, { moveIntervalMs = MOVE_INTERVAL_MS, taskTic
       if (progress % taskTicks === 0) {
         autoCompleteOneTask(code, room, bots);
       }
+      if (room.sabotage) {
+        botCrewFixSabotage(code, room, bots);
+      }
       return;
     }
 
@@ -215,8 +218,29 @@ function createBotEngine(roomStore, { moveIntervalMs = MOVE_INTERVAL_MS, taskTic
     });
   }
 
-  function autoCompleteOneTask(code, room, bots) {
+  /**
+   * Bots keep long games alive by fixing an impostor sabotage quickly
+   * (skipping the physical presence gate, same as task completion).
+   */
+  function botCrewFixSabotage(code, room, bots) {
+    const sab = room.sabotage;
+    const panel = sab.type === 'REACTOR'
+      ? 'REACTOR'
+      : !sab.panels?.o2 ? 'o2' : 'admin';
     for (const bot of bots) {
+      if (bot.role !== 'CREWMATE') continue;
+      try {
+        roomStore.fixSabotagePanel(code, bot.id, panel, {
+          skipPresenceCheck: true,
+        });
+        return; // fixed — or one panel done per tick
+      } catch {
+        // Panel race / dead crew: try the next bot.
+      }
+    }
+  }
+
+  function autoCompleteOneTask(code, room, bots) {    for (const bot of bots) {
       if (bot.role !== 'CREWMATE') continue;
       try {
         const tasks = roomStore

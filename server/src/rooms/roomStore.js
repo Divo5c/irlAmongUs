@@ -598,7 +598,7 @@ class RoomStore {
   }
 
   /** Crew fix at a panel: REACTOR (available) / O2 / ADMIN. */
-  fixSabotagePanel(code, playerId, panel) {
+  fixSabotagePanel(code, playerId, panel, { skipPresenceCheck = false } = {}) {
     const room = this.getRequiredRoom(code);
     assertInGame(room);
 
@@ -609,7 +609,10 @@ class RoomStore {
     if (new Date(sab.deadline).getTime() <= Date.now()) {
       throw new GameError('SABOTAGE_EXPIRED', 'Too late — the countdown already ran out.');
     }
-    if (this.#playerInSabotageFixRoom(code, playerId, sab, panel) !== true) {
+    if (
+      !skipPresenceCheck &&
+      this.#playerInSabotageFixRoom(code, playerId, sab, panel) !== true
+    ) {
       throw new GameError(
         'SABOTAGE_NOT_AT_PANEL',
         'Du musst im passenden Raum stehen (Reactor/O2/Admin).',
@@ -623,7 +626,7 @@ class RoomStore {
       // Among Us rule: two area members must fix TOGETHER — a second alive
       // crewmate must be standing in the reactor with the presser.
       const helpers = this.#aliveCrewInRoom(code, 'REACTOR', playerId);
-      if (helpers.length < 1) {
+      if (!skipPresenceCheck && helpers.length < 1) {
         throw new GameError(
           'SABOTAGE_NEED_HELP',
           'Zwei Crewmates m\u00fcssen im Reactor stehen, um zusammen zu fixen!',
