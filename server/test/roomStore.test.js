@@ -356,6 +356,8 @@ describe('tasks', () => {
       'TASK_NOT_FOUND',
     );
 
+    const taskSpot = tasksByPlayer[crewmateId][0];
+    store.updatePosition('ABC234', crewmateId, { x: taskSpot.x, y: taskSpot.y, confidence: 1 });
     const result = store.completeTask('ABC234', crewmateId, taskId);
     assert.equal(result.completedTaskId, taskId);
     assert.equal(result.progress.completed, 1);
@@ -367,13 +369,28 @@ describe('tasks', () => {
     assertGameError(() => store.completeTask('ABC234', crewmateId, 'nope'), 'TASK_NOT_FOUND');
   });
 
+  test('tasks require standing at the task spot (no remote completing)', () => {
+    const { store, assignments, tasksByPlayer, crewmateId } = startedCrewmateContext();
+    const taskSpot = tasksByPlayer[crewmateId][0];
+    store.updatePosition('ABC234', crewmateId, { x: taskSpot.x + 30, y: taskSpot.y + 30, confidence: 1 });
+    assertGameError(
+      () => store.completeTask('ABC234', crewmateId, taskSpot.id),
+      'TASK_TOO_FAR',
+    );
+  });
+
   test('completing all tasks wins the game for the crew', () => {
     const { store, assignments, tasksByPlayer } = startedCrewmateContext();
     let winner = null;
     let lastResult = null;
 
     for (const id of Object.keys(assignments)) {
+      const spot = (tasksByPlayer[id] ?? [])[0];
+      if (spot) {
+        store.updatePosition('ABC234', id, { x: spot.x, y: spot.y, confidence: 1 });
+      }
       for (const task of tasksByPlayer[id] ?? []) {
+        store.updatePosition('ABC234', id, { x: task.x, y: task.y, confidence: 1 });
         lastResult = store.completeTask('ABC234', id, task.id);
         winner = lastResult.winner;
         if (winner !== null && winner !== 'CREWMATE') {

@@ -19,10 +19,14 @@ const TASK_CATALOG = Object.freeze([
 ]);
 
 /**
- * Creates fresh task instances for every crewmate of the given player list.
- * Instance IDs are stable within a round: `<type>-<playerNr>-<taskNr>`.
+ * Creates fresh task instances for every player of the given player list.
+ * Each task links to a spot on the map: centroid of a room polygon or a
+ * map node, so clients can render markers and require proximity via the
+ * Use button. Impostors receive fake instances (isFake: true).
+ *
+ * Locations cycle through rooms first, then fall back to street nodes.
  */
-function createTasks(players, tasksPerCrewmate) {
+function createTasks(players, tasksPerCrewmate, map = null) {
   if (!Number.isInteger(tasksPerCrewmate) || tasksPerCrewmate < 1 || tasksPerCrewmate > TASK_CATALOG.length) {
     throw new GameError(
       'CONFIG_INVALID',
@@ -31,8 +35,10 @@ function createTasks(players, tasksPerCrewmate) {
     );
   }
 
+  const spots = collectTaskSpots(map);
   let playerNr = 0;
   const tasks = [];
+  let spotNr = 0;
 
   for (const player of players) {
     playerNr += 1;
@@ -43,12 +49,18 @@ function createTasks(players, tasksPerCrewmate) {
       // Catalog is at least as large as the max tasks-per-crewmate bound,
       // so titles never repeat within one player's task list.
       const entry = TASK_CATALOG[(playerNr - 1 + i) % TASK_CATALOG.length];
+      const spot = spots[spotNr % spots.length] ?? null;
+      spotNr += 1;
       tasks.push({
         id: `${entry.id}-${playerNr}-${i + 1}${isFake ? '-fake' : ''}`,
         type: entry.id,
         assignedTo: player.id,
         title: entry.title,
         isFake,
+        roomId: spot?.roomId ?? null,
+        roomName: spot?.roomName ?? null,
+        x: spot?.x ?? null,
+        y: spot?.y ?? null,
         completed: false,
         completedAt: null,
       });
@@ -58,11 +70,48 @@ function createTasks(players, tasksPerCrewmate) {
   return tasks;
 }
 
+/** Indoor room centroids first, then street nodes as outdoor spots. */
+function collectTaskSpots(map) {
+  const spots = [];
+  const rooms = map?.rooms ?? [];
+  for (const room of rooms) {
+    const pts = room.polygon ?? [];
+    if (pts.length < 3) continue;
+    spots.push({
+      roomId: room.id,
+      roomName: room.name,
+      x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length,
+      y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length,
+    });
+  }
+  const anchor = new Set();
+  for (const room of rooms) {
+    for (const conn of map?.connections ?? []) {
+      if (conn.roomId === room.id) anchor.add(conn.nodeId);
+    }
+    for (const node of map?.nodes ?? []) {
+      if (!anchor.has(node.id)) continue;
+      anchor.delete(node.id);
+      spots.push({ roomId: room.id, roomName: room.name, x: node.x, y: node.y });
+    }
+  }
+  return spots;
+}
+
 function groupTasksByPlayer(tasks) {
   const grouped = {};
   for (const task of tasks) {
     grouped[task.assignedTo] ??= [];
-    grouped[task.assignedTo].push({ id: task.id, type: task.type, title: task.title });
+    grouped[task.assignedTo].push({
+      id: task.id,
+      type: task.type,
+      title: task.title,
+      isFake: !!task.isFake,
+      roomId: task.roomId ?? null,
+      roomName: task.roomName ?? null,
+      x: task.x ?? null,
+      y: task.y ?? null,
+    });
   }
   return grouped;
 }

@@ -50,6 +50,9 @@ for (const status of [
 const ROLE_CREWMATE = PlayerRole.enum[0];
 const ROLE_IMPOSTOR = PlayerRole.enum[1];
 
+/** How close a player must stand to a task spot to complete it. */
+const DEFAULT_TASK_RADIUS_M = 4;
+
 const MAX_PLAYERS = 10;
 
 /**
@@ -426,7 +429,7 @@ class RoomStore {
       isAlive: true,
     }));
 
-    room.tasks = createTasks(room.players, room.config.tasksPerCrewmate);
+    room.tasks = createTasks(room.players, room.config.tasksPerCrewmate, room.map);
     delete room.winner;
     room.ejectedPlayerIds = [];
     room.lastKillAt = 0;
@@ -461,7 +464,7 @@ class RoomStore {
     return room.tasks.filter((task) => task.assignedTo === playerId);
   }
 
-  completeTask(code, playerId, taskId) {
+  completeTask(code, playerId, taskId, { skipProximity = false } = {}) {
     const room = this.getRequiredRoom(code);
     assertInGame(room);
     assertKnownPlayer(room, playerId);
@@ -477,6 +480,28 @@ class RoomStore {
 
     if (!isPlayerAlive(room, playerId)) {
       throw new GameError('PLAYER_DEAD', 'Dead players cannot complete tasks.');
+    }
+
+    // Proximity gate: the task must be at the player's own spot (room) or
+    // within reach on the street — no completing from across the map.
+    // Bot engine passes skipProximity (bot walking already models effort).
+    const own = this.getPlayerPosition(code, playerId);
+    if (!skipProximity) {
+      if (task.roomId != null && own?.roomId === task.roomId) {
+        // fine: standing in the same room
+      } else if (
+        task.x != null &&
+        own &&
+        Math.hypot(own.x - task.x, own.y - task.y) <= DEFAULT_TASK_RADIUS_M
+      ) {
+        // fine: close to the task spot
+      } else {
+        throw new GameError(
+          'TASK_TOO_FAR',
+          'Du musst an der Stelle des Tasks stehen, um ihn zu erledigen.',
+          { field: 'task.position' },
+        );
+      }
     }
 
     if (task.completed) {

@@ -178,7 +178,14 @@ function createBotEngine(roomStore, { moveIntervalMs = MOVE_INTERVAL_MS, taskTic
         walk.y = jump.y;
         return;
       }
-      walk.targetId = options[Math.floor(Math.random() * options.length)];
+      // Route toward the bot's own task spot when it has one (pose as a
+      // purposeful worker), otherwise wander.
+      const taskTarget = botTaskTarget(code, room, bot);
+      if (taskTarget?.id && taskTarget.id !== walk.nodeId && nodeById.has(taskTarget.id)) {
+        walk.targetId = taskTarget.id;
+      } else {
+        walk.targetId = options[Math.floor(Math.random() * options.length)];
+      }
     }
     const target = nodeById.get(walk.targetId);
     if (!target) {
@@ -216,12 +223,39 @@ function createBotEngine(roomStore, { moveIntervalMs = MOVE_INTERVAL_MS, taskTic
           .getTasksForPlayer(code, bot.id)
           .filter((task) => !task.completed);
         if (!tasks.length) continue;
-        roomStore.completeTask(code, bot.id, tasks[0].id);
+        roomStore.completeTask(code, bot.id, tasks[0].id, { skipProximity: true });
         return; // one task per cycle keeps the game going long enough
       } catch (error) {
         // Already completed this tick / task race: try next bot.
       }
     }
+  }
+
+  /**
+   * Bots steer toward their next task spot (room centroid) when they have
+   * one, so the proximity gate for task completion can actually pass.
+   */
+  function botTaskTarget(code, room, bot) {
+    if (bot.role !== 'CREWMATE') return null;
+    const task = roomStore
+      .getTasksForPlayer(code, bot.id)
+      .find((entry) => !entry.completed);
+    if (!task || task.x == null) return null;
+    return { id: findNearestNode(room.map, task.x, task.y)?.id ?? null };
+  }
+
+  function findNearestNode(map, x, y) {
+    const nodes = map?.nodes ?? [];
+    let best = null;
+    let bestDist = Infinity;
+    for (const node of nodes) {
+      const d = Math.hypot(node.x - x, node.y - y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = node;
+      }
+    }
+    return best;
   }
 
   function castBotVote(code, room, botId, alive) {

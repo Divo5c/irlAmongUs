@@ -339,6 +339,13 @@ describe('socket flow security & gameplay', () => {
       const impostorClient = clients[impostorSlot];
 
       const progressSeen = waitForEvent(impostorClient, 'task:progress');
+      // Stand at the task spot first (wire proximity gate).
+      crew.client.emit('position:update', {
+        code,
+        x: crew.assignment.tasks[0].x,
+        y: crew.assignment.tasks[0].y,
+        confidence: 1,
+      });
       crew.client.emit('task:complete', {
         code,
         taskId: crew.assignment.tasks[0].id,
