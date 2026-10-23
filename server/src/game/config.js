@@ -19,6 +19,8 @@ const DEFAULT_GAME_CONFIG = Object.freeze({
   killRadiusM: 2,
   // Sqlders further than this from every street get boundary warnings.
   boundaryWarnM: 4,
+  // Notfall-Button: pro Spieler brauchbar la rueda (Cafeteria).
+  emergencyMeetingsPerPlayer: 1,
 });
 
 const NUMERIC_BOUNDS = Object.freeze({
@@ -29,6 +31,7 @@ const NUMERIC_BOUNDS = Object.freeze({
   votingDurationMs: { min: 5000, max: 300000 },
   killRadiusM: { min: 1, max: 5 },
   boundaryWarnM: { min: 1, max: 30 },
+  emergencyMeetingsPerPlayer: { min: 0, max: 3 },
 });
 
 const NUMERIC_KEYS = Object.freeze(Object.keys(NUMERIC_BOUNDS));

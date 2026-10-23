@@ -15,6 +15,7 @@ const {
   isPositionPlausible,
   nearestCorridorDistanceM,
   snapToCorridor,
+  pointInPolygon,
 } = require('../game/positioning');
 const { canKill } = require('../game/proximity');
 
@@ -434,7 +435,10 @@ class RoomStore {
     room.ejectedPlayerIds = [];
     room.lastKillAt = 0;
     room.corpses = [];
-    delete room.meeting;
+    delete room.sabotage;
+    room.sabotageCount = 0;
+    delete room.sabotageCooldownUntil;
+    room.emergencyUsed = {};
     room.status = getEnumValue(RoomStatus, 'IN_GAME');
     room.updatedAt = new Date().toISOString();
 
@@ -527,6 +531,195 @@ class RoomStore {
    */
   startMeeting(code, reporterId) {
     return this.reportBody(code, reporterId);
+  }
+
+  // ------------------------------------------------------------ sabotage //
+
+  /** Sabotage cycle order for the impostor button. */
+  #nextSabotageType(room) {
+    const cycle = ['REACTOR', 'O2'];
+    const index = (room.sabotageCount ?? 0) % cycle.length;
+    return cycle[index];
+  }
+
+  /**
+   * Impostor sabotage: REACTOR meltdown (two crew must stand together in
+   * the Reactor to fix) or O2 depletion (two panels: O2 room + Admin).
+   * Deadline expiry wins the game for the impostors instantly.
+   */
+  startSabotage(code, playerId) {
+    const room = this.getRequiredRoom(code);
+    assertInGame(room);
+    assertKnownPlayer(room, playerId);
+
+    const impostor = getPlayer(room, playerId);
+    if (!impostor || impostor.role !== ROLE_IMPOSTOR || !impostor.isAlive) {
+      throw new GameError('SABOTAGE_REJECTED', 'Only an alive impostor can sabotage.');
+    }
+    if (room.sabotage) {
+      throw new GameError('SABOTAGE_ACTIVE', 'A sabotage is already running.');
+    }
+    const cooldownLeft = (room.sabotageCooldownUntil ?? 0) - Date.now();
+    if (cooldownLeft > 0) {
+      throw new GameError(
+        'SABOTAGE_COOLDOWN',
+        `Sabotage bereit in ${Math.ceil(cooldownLeft / 1000)}s.`,
+        { retryInMs: cooldownLeft },
+      );
+    }
+
+    room.sabotageCount = (room.sabotageCount ?? 0) + 1;
+    const type = this.#nextSabotageType(room);
+    // 30 s meltdown / depletion — enough panic, short enough for real play.
+    const deadlineMs = Date.now() + 30_000;
+    room.sabotage = {
+      type,
+      deadline: new Date(deadlineMs).toISOString(),
+      panels: type === 'O2' ? { o2: false, admin: false } : null,
+    };
+    // Cooldown for the NEXT sabotage starts after this one gets resolved.
+    room.sabotageCooldownUntil = deadlineMs + 15_000;
+    room.updatedAt = new Date().toISOString();
+
+    return { room: this.toPublicRoom(room), type, deadline: room.sabotage.deadline };
+  }
+
+  /** Crew fix at a panel: REACTOR (available) / O2 / ADMIN. */
+  fixSabotagePanel(code, playerId, panel) {
+    const room = this.getRequiredRoom(code);
+    assertInGame(room);
+
+    const sab = room.sabotage;
+    if (!sab) {
+      throw new GameError('NO_SABOTAGE', 'Nothing to fix right now.');
+    }
+    if (new Date(sab.deadline).getTime() <= Date.now()) {
+      throw new GameError('SABOTAGE_EXPIRED', 'Too late — the countdown already ran out.');
+    }
+    if (this.#playerInSabotageFixRoom(code, playerId, sab, panel) !== true) {
+      throw new GameError(
+        'SABOTAGE_NOT_AT_PANEL',
+        'Du musst im passenden Raum stehen (Reactor/O2/Admin).',
+      );
+    }
+    if (sab.panels && sab.panels[panel]) {
+      throw new GameError('SABOTAGE_ALREADY_FIXED', 'This panel is already fixed.');
+    }
+
+    if (sab.type === 'REACTOR') {
+      // Among Us rule: two area members must fix TOGETHER — a second alive
+      // crewmate must be standing in the reactor with the presser.
+      const helpers = this.#aliveCrewInRoom(code, 'REACTOR', playerId);
+      if (helpers.length < 1) {
+        throw new GameError(
+          'SABOTAGE_NEED_HELP',
+          'Zwei Crewmates m\u00fcssen im Reactor stehen, um zusammen zu fixen!',
+        );
+      }
+      this.#clearSabotage(code, room);
+      return { room: this.toPublicRoom(room), fixed: ['REACTOR'] };
+    }
+
+    // O2: two panels — fix panel at O2 and Admin rooms.
+    sab.panels[panel] = true;
+    if (sab.panels.o2 && sab.panels.admin) {
+      this.#clearSabotage(code, room);
+      return { room: this.toPublicRoom(room), fixed: ['o2', 'admin'] };
+    }
+    room.updatedAt = new Date().toISOString();
+    return { room: this.toPublicRoom(room), fixed: [panel] };
+  }
+
+  /** True when sabotage ran out; used by the socket timer chain. */
+  isSabotageExpired(code) {
+    const room = this.getRoom(code);
+    if (!room?.sabotage) return false;
+    return new Date(room.sabotage.deadline).getTime() <= Date.now();
+  }
+
+  #clearSabotage(code, room) {
+    const type = room.sabotage?.type;
+    room.sabotage = null;
+    room.updatedAt = new Date().toISOString();
+    return { room: this.toPublicRoom(room), clearedType: type };
+  }
+
+  #roomPolygonByType(room, type) {
+    return (room.map?.rooms ?? []).find((candidate) => candidate.type === type) ?? null;
+  }
+
+  #playerRoomIdByType(code, playerId, type) {
+    const room = this.getRoom(code);
+    const own = this.#positions.get(code)?.get(playerId);
+    const polygon = this.#roomPolygonByType(room, type);
+    if (!own || !polygon) return false;
+    return own.roomId === polygon.id && pointInPolygon(own.x, own.y, polygon.polygon);
+  }
+
+  #playerInSabotageFixRoom(code, playerId, sab, panel) {
+    const neededType = sab.type === 'REACTOR'
+      ? 'REACTOR'
+      : panel === 'o2' ? 'O2' : 'ADMIN';
+    return this.#playerRoomIdByType(code, playerId, neededType);
+  }
+
+  #aliveCrewInRoom(code, type, excludeId) {
+    const room = this.getRoom(code);
+    if (!room) return [];
+    const result = [];
+    for (const player of room.players) {
+      if (player.id === excludeId || !player.isAlive || player.role === ROLE_IMPOSTOR) continue;
+      if (this.#playerRoomIdByType(code, player.id, type)) result.push(player.id);
+    }
+    return result;
+  }
+
+  // -------------------------------------------------- emergency meeting //
+
+  /** One emergency meeting per player per game: standing in Cafeteria. */
+  emergencyMeeting(code, playerId) {
+    const room = this.getRequiredRoom(code);
+    assertInGame(room);
+    assertKnownPlayer(room, playerId);
+
+    if (!isPlayerAlive(room, playerId)) {
+      throw new GameError('PLAYER_DEAD', 'Dead players cannot call meetings.');
+    }
+    const used = room.emergencyUsed ?? {};
+    used[playerId] ??= 0;
+    if (used[playerId] >= room.config.emergencyMeetingsPerPlayer) {
+      throw new GameError(
+        'NO_EMERGENCY_LEFT',
+        'Dein Notfall-Button ist f\u00fcr diese Runde aufgebraucht.',
+      );
+    }
+    if (!this.#playerRoomIdByType(code, playerId, 'CAFETERIA')) {
+      throw new GameError(
+        'NOT_IN_CAFETERIA',
+        'Der Notfall-Button funktioniert nur in der Cafeteria.',
+      );
+    }
+    used[playerId] += 1;
+    room.emergencyUsed = used;
+
+    const now = Date.now();
+    room.meeting = {
+      reporterId: playerId,
+      phase: 'DISCUSSION',
+      discussionEndsAt: new Date(now + room.config.discussionDurationMs).toISOString(),
+      votingEndsAt: null,
+      votes: {},
+      emergency: true,
+    };
+    room.status = getEnumValue(RoomStatus, 'MEETING');
+    room.updatedAt = new Date().toISOString();
+
+    return {
+      room: this.toPublicRoom(room),
+      reporterId: playerId,
+      phase: room.meeting.phase,
+      discussionDeadline: room.meeting.discussionEndsAt,
+    };
   }
 
   reportBody(code, reportingPlayerId) {
@@ -832,6 +1025,10 @@ class RoomStore {
     room.ejectedPlayerIds = [];
     room.lastKillAt = 0;
     room.corpses = [];
+    delete room.sabotage;
+    room.sabotageCount = 0;
+    delete room.sabotageCooldownUntil;
+    room.emergencyUsed = {};
     // A saved map survives rematches (the real building does not change):
     room.status = room.map ? STATUS_MAP_READY : STATUS_LOBBY;
     room.updatedAt = new Date().toISOString();
