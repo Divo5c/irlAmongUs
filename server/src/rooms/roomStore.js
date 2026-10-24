@@ -550,17 +550,39 @@ class RoomStore {
 
   /** Sabotage cycle order for the impostor button. */
   #nextSabotageType(room) {
-    const cycle = ['REACTOR', 'O2'];
-    const index = (room.sabotageCount ?? 0) % cycle.length;
-    return cycle[index];
+    const allowed = this.#sabotageTypesFor(room);
+    return allowed[(room.sabotageCount ?? 0) % allowed.length];
   }
 
   /**
-   * Impostor sabotage: REACTOR meltdown (two crew must stand together in
-   * the Reactor to fix) or O2 depletion (two panels: O2 room + Admin).
-   * Deadline expiry wins the game for the impostors instantly.
+   * Which sabotages the mapped rooms support: criticals first.
+   * LIGHTS needs an ELECTRICAL room, COMMS a COMMUNICATIONS room.
    */
-  startSabotage(code, playerId) {
+  #sabotageTypesFor(room) {
+    const types = (room.map?.rooms ?? []).map((room) => room.type);
+    const allowed = [];
+    if (types.includes('REACTOR')) allowed.push('REACTOR');
+    if (types.includes('O2')) allowed.push('O2');
+    if (types.includes('ELECTRICAL')) allowed.push('LIGHTS');
+    if (types.includes('COMMUNICATIONS')) allowed.push('COMMS');
+    return allowed;
+  }
+
+  static SABOTAGE_META = Object.freeze({
+    REACTOR: { label: 'Reactor Meltdown', critical: true },
+    O2: { label: 'Oxygen Depleted', critical: true },
+    LIGHTS: { label: 'Lights Off', critical: false },
+    COMMS: { label: 'Comms Down', critical: false },
+  });
+
+  /**
+   * Impostor sabotage. Critical rounds (REACTOR/O2) run a 30 s countdown
+   * that wins the game for the impostors when it expires. LIGHTS and
+   * COMMS are soft sabotages without deadline; they disable corpse
+   * spotting (visibility) or the task list until the crew fixes them.
+   * An active soft sabotage can be replaced by a new one.
+   */
+  startSabotage(code, playerId, requestedType = null) {
     const room = this.getRequiredRoom(code);
     assertInGame(room);
     assertKnownPlayer(room, playerId);
@@ -569,11 +591,20 @@ class RoomStore {
     if (!impostor || impostor.role !== ROLE_IMPOSTOR || !impostor.isAlive) {
       throw new GameError('SABOTAGE_REJECTED', 'Only an alive impostor can sabotage.');
     }
-    if (room.sabotage) {
-      throw new GameError('SABOTAGE_ACTIVE', 'A sabotage is already running.');
+    const active = room.sabotage;
+    const activeCritical = active?.deadline != null;
+    if (active && activeCritical) {
+      throw new GameError('SABOTAGE_ACTIVE', 'A critical sabotage is already running.');
     }
     const cooldownLeft = (room.sabotageCooldownUntil ?? 0) - Date.now();
-    if (cooldownLeft > 0) {
+    if (active && cooldownLeft > 0) {
+      throw new GameError(
+        'SABOTAGE_COOLDOWN',
+        `Sabotage bereit in ${Math.ceil(cooldownLeft / 1000)}s.`,
+        { retryInMs: cooldownLeft },
+      );
+    }
+    if (!active && cooldownLeft > 0) {
       throw new GameError(
         'SABOTAGE_COOLDOWN',
         `Sabotage bereit in ${Math.ceil(cooldownLeft / 1000)}s.`,
@@ -581,17 +612,35 @@ class RoomStore {
       );
     }
 
-    const type = this.#nextSabotageType(room);
+    const allowed = this.#sabotageTypesFor(room);
+    let type;
+    if (requestedType != null) {
+      if (!allowed.includes(requestedType)) {
+        throw new GameError(
+          'SABOTAGE_UNAVAILABLE',
+          'Diese Sabotage passt nicht zu den R\u00e4umen (\u00c4nderung der Karte).',
+          { field: 'sabotage' },
+        );
+      }
+      type = requestedType;
+    } else {
+      type = this.#nextSabotageType(room);
+    }
     room.sabotageCount = (room.sabotageCount ?? 0) + 1;
+
+    const isCritical = RoomStore.SABOTAGE_META[type].critical;
     // 30 s meltdown / depletion — enough panic, short enough for real play.
-    const deadlineMs = Date.now() + 30_000;
+    const deadlineMs = isCritical ? Date.now() + 30_000 : null;
     room.sabotage = {
       type,
-      deadline: new Date(deadlineMs).toISOString(),
+      deadline: deadlineMs != null ? new Date(deadlineMs).toISOString() : null,
       panels: type === 'O2' ? { o2: false, admin: false } : null,
     };
-    // Cooldown for the NEXT sabotage starts after this one gets resolved.
-    room.sabotageCooldownUntil = deadlineMs + 15_000;
+    // Cooldown for the NEXT sabotage: after a critical ends (+15 s mercy),
+    // non-critical ones self-limit with 45 s ready time.
+    room.sabotageCooldownUntil = deadlineMs != null
+      ? deadlineMs + 15_000
+      : Date.now() + 45_000;
     room.updatedAt = new Date().toISOString();
 
     return { room: this.toPublicRoom(room), type, deadline: room.sabotage.deadline };
@@ -606,7 +655,7 @@ class RoomStore {
     if (!sab) {
       throw new GameError('NO_SABOTAGE', 'Nothing to fix right now.');
     }
-    if (new Date(sab.deadline).getTime() <= Date.now()) {
+    if (sab.deadline != null && new Date(sab.deadline).getTime() <= Date.now()) {
       throw new GameError('SABOTAGE_EXPIRED', 'Too late — the countdown already ran out.');
     }
     if (
@@ -636,20 +685,26 @@ class RoomStore {
       return { room: this.toPublicRoom(room), fixed: ['REACTOR'] };
     }
 
-    // O2: two panels — fix panel at O2 and Admin rooms.
-    sab.panels[panel] = true;
-    if (sab.panels.o2 && sab.panels.admin) {
-      this.#clearSabotage(code, room);
-      return { room: this.toPublicRoom(room), fixed: ['o2', 'admin'] };
+    if (sab.type === 'O2') {
+      // O2: two panels — fix panel at O2 and Admin rooms.
+      sab.panels[panel] = true;
+      if (sab.panels.o2 && sab.panels.admin) {
+        this.#clearSabotage(code, room);
+        return { room: this.toPublicRoom(room), fixed: ['o2', 'admin'] };
+      }
+      room.updatedAt = new Date().toISOString();
+      return { room: this.toPublicRoom(room), fixed: [panel] };
     }
-    room.updatedAt = new Date().toISOString();
-    return { room: this.toPublicRoom(room), fixed: [panel] };
+
+    // LIGHTS / COMMS: single press at the fitting panel.
+    this.#clearSabotage(code, room);
+    return { room: this.toPublicRoom(room), fixed: [sab.type] };
   }
 
-  /** True when sabotage ran out; used by the socket timer chain. */
+  /** True when a CRITICAL sabotage ran out; used by the socket timers. */
   isSabotageExpired(code) {
     const room = this.getRoom(code);
-    if (!room?.sabotage) return false;
+    if (!room?.sabotage?.deadline) return false;
     return new Date(room.sabotage.deadline).getTime() <= Date.now();
   }
 
@@ -673,9 +728,11 @@ class RoomStore {
   }
 
   #playerInSabotageFixRoom(code, playerId, sab, panel) {
-    const neededType = sab.type === 'REACTOR'
-      ? 'REACTOR'
-      : panel === 'o2' ? 'O2' : 'ADMIN';
+    let neededType;
+    if (sab.type === 'REACTOR') neededType = 'REACTOR';
+    else if (sab.type === 'O2') neededType = panel === 'o2' ? 'O2' : 'ADMIN';
+    else if (sab.type === 'LIGHTS') neededType = 'ELECTRICAL';
+    else neededType = 'COMMUNICATIONS';
     return this.#playerRoomIdByType(code, playerId, neededType);
   }
 
@@ -727,6 +784,7 @@ class RoomStore {
       votes: {},
       emergency: true,
     };
+    delete room.sabotage; // a meeting resets soft sabotages (Among Us rule)
     room.status = getEnumValue(RoomStatus, 'MEETING');
     room.updatedAt = new Date().toISOString();
 
@@ -765,6 +823,7 @@ class RoomStore {
       votingEndsAt: null,
       votes: {},
     };
+    delete room.sabotage; // a meeting resets soft sabotages (Among Us rule)
     room.status = getEnumValue(RoomStatus, 'MEETING');
     room.updatedAt = new Date().toISOString();
 
@@ -1324,6 +1383,8 @@ class RoomStore {
     }
     const own = this.#positions.get(code)?.get(playerId);
     if (!own) return [];
+    // Lights sabotage: nobody spots bodies in the dark (Among Us vision rule).
+    if (room.sabotage?.type === 'LIGHTS') return [];
     return corpses
       .filter(
         (corpse) =>

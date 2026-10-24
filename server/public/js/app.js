@@ -165,8 +165,14 @@ const App = (() => {
       renderGameHud();
     });
     socket.on('game:sabotage_started', ({ code: _code, type, deadline }) => {
-      if (state.room) state.room.sabotage = { type, deadline, ...(type === 'O2' ? { panels: { o2: false, admin: false } } : {}) };
-      beep(type === 'REACTOR' ? 120 : 240);
+      if (state.room) {
+        state.room.sabotage = {
+          type,
+          deadline,
+          ...(type === 'O2' ? { panels: { o2: false, admin: false } } : {}),
+        };
+      }
+      beep(type === 'REACTOR' ? 120 : type === 'O2' ? 240 : 80);
       vibrate([80, 60, 80, 60, 160]);
       renderSabotage();
     });
@@ -261,12 +267,15 @@ const App = (() => {
     });
     socket.on('task:progress', ({ completedTaskId }) => {
       if (!completedTaskId) return;
-      if ((state.role?.tasks ?? []).some((t) => t.id === completedTaskId)) {
-        const task = state.role.tasks.find((t) => t.id === completedTaskId);
+      const ownList = state.role?.tasks ?? state.tasks ?? [];
+      if (ownList.some((t) => t.id === completedTaskId)) {
+        const task = ownList.find((t) => t.id === completedTaskId);
         if (task) task.completed = true;
         showToast(task?.isFake ? 'Fake-Task abgehakt (kein Fortschritt \u2014 t\u00e4usche weiter!).' : 'Task erledigt!');
         beep(880);
         vibrate(50);
+        const li = $('task-list').querySelector(`[data-task-id="${completedTaskId}"]`);
+        if (li) li.classList.add('done');
       }
       drawGameMap();
       renderGameHud();
@@ -716,24 +725,19 @@ const App = (() => {
     }
 
     // Build task list (crewmates), impostors can still get fake tasks.
+    // Tap a task to open its minigame (gated by proximity in openTask).
     const list = $('task-list');
     list.innerHTML = '';
     for (const task of payload.tasks ?? []) {
       const li = document.createElement('li');
-      li.innerHTML = `<span>${escapeHtml(task.title)}</span>`;
-      const button = document.createElement('button');
-      button.textContent = 'Erledigt';
-      button.className = 'primary small';
-      button.addEventListener('click', () => {
-        ensureSocket().emit('task:complete', { code: state.code, taskId: task.id });
-        button.disabled = true;
-        button.textContent = '\u2713';
-        beep(880);
-        vibrate(30);
-      });
-      li.appendChild(button);
+      li.className = 'task-item';
+      li.dataset.taskId = task.id;
+      li.innerHTML = `<span>${escapeHtml(task.title)}</span>` +
+        (task.roomName ? `<small>${escapeHtml(task.roomName)}</small>` : '');
+      li.addEventListener('click', () => openTask(task));
       list.appendChild(li);
     }
+    state.tasks = payload.tasks ?? [];
     $('task-count').textContent = `${payload.tasks?.length ?? 0}`;
     if (!payload.tasks?.length) {
       list.innerHTML = '<li><span>Keine Tasks \u2014 als Impostor sabotier, als Geist beobachte.</span></li>';
@@ -754,6 +758,15 @@ const App = (() => {
     const room = state.room;
     if (!room || room.status !== 'IN_GAME') return;
     const imAlive = room.players.find((p) => p.id === state.playerId)?.isAlive;
+    const commsDown = room.sabotage?.type === 'COMMS';
+    const notImpostor = state.role?.role !== 'IMPOSTOR';
+    // Comms-Sabotage: Taskliste + Marker verstecken (Crew ist blind).
+    const taskbox = $('taskbox');
+    const commsBlind = commsDown && notImpostor;
+    taskbox.querySelector('summary').textContent = commsBlind
+      ? 'Kommunikation gest\u00f6rt \u2014 keine Taskdaten!'
+      : `Deine Tasks (${state.tasks?.filter((t) => !t.completed).length ?? 0})`;
+    $('task-list').style.display = commsBlind ? 'none' : '';
     const bodies = state.nearbyBodies ?? [];
     const reportBtn = $('btn-report');
     reportBtn.disabled = !(bodies.length && imAlive !== false);
@@ -772,6 +785,44 @@ const App = (() => {
     updateSabotageButton();
   }
 
+  /** Task-Distanz: gleicher Raum \u00fcber roomId oder <4.2m (Server-Gate). */
+  function taskNear(task) {
+    if (task.roomId && state.selfPos?.roomId === task.roomId) return true;
+    if (task.x == null || !state.selfPos || state.selfPos.x == null) return false;
+    return Math.hypot(state.selfPos.x - task.x, state.selfPos.y - task.y) <= 4.2;
+  }
+
+  /** \u00d6ffnet das Task-Minigame, wenn N\u00e4he + Regeln passen. */
+  function openTask(task) {
+    if (!state.room || state.room.status !== 'IN_GAME') {
+      showToast('Tasks gehen nur im Spiel.');
+      return;
+    }
+    if (state.room.players?.find((p) => p.id === state.playerId)?.isAlive === false) {
+      showToast('Geister k\u00f6nnen keine Tasks machen.');
+      return;
+    }
+    if (task.completed) {
+      showToast('Dieser Task ist schon fertig.');
+      return;
+    }
+    if (state.room?.sabotage?.type === 'COMMS') {
+      showToast('Kein Netz \u2014 Communications sind sabotiert!');
+      return;
+    }
+    if (!taskNear(task)) {
+      showToast(task.roomName
+        ? `Zu weit weg \u2014 geh nach ${task.roomName}.`
+        : 'Zu weit weg \u2014 geh zum Task-Marker.');
+      beep(220);
+      return;
+    }
+    window.RlausTasks?.launch(task, () => {
+      ensureSocket().emit('task:complete', { code: state.code, taskId: task.id });
+      vibrate(80);
+    });
+  }
+
   /** Use-Knopf: Sabotage-Fix > Task > Notfall-Meeting (nur wenn anw\u00e4hlbar). */
   function useAction() {
     if (state.room?.status !== 'IN_GAME') return null;
@@ -788,6 +839,12 @@ const App = (() => {
         if (!sab.panels?.admin && roomIdContains('ADMIN')) {
           return { label: 'Fix Admin', kind: 'FIX', panel: 'admin' };
         }
+      }
+      if (sab.type === 'LIGHTS' && roomIdContains('ELECTRICAL')) {
+        return { label: 'Licht Fix', kind: 'FIX', panel: 'LIGHTS' };
+      }
+      if (sab.type === 'COMMS' && roomIdContains('COMMUNICATIONS')) {
+        return { label: 'Comms Fix', kind: 'FIX', panel: 'COMMS' };
       }
       return null;
     }
@@ -846,11 +903,69 @@ const App = (() => {
     const sabBtn = $('btn-sabotage');
     if (!sabBtn) return;
     const impostor = state.role?.role === 'IMPOSTOR';
-    sabBtn.classList.toggle('hidden', !impostor || state.room?.status !== 'IN_GAME');
+    sabBtn.classList.toggle('hidden', !impostor || state.room?.status !== 'IN_GAME' ||
+      state.room?.players?.find((p) => p.id === state.playerId)?.isAlive === false);
     if (!impostor) return;
-    sabBtn.disabled = !!state.room?.sabotage;
-    sabBtn.textContent = state.room?.sabotage ? 'L\u00e4uft' : 'Sabotage';
+    const sab = state.room?.sabotage;
+    sabBtn.disabled = !!sab && sab.deadline != null;
+    sabBtn.textContent = sab ? 'L\u00e4uft' : 'Sabotage';
   }
+
+  /**
+   * Sabotage-Auswahl: Impostor w\u00e4hlt zwischen verf\u00fcgbaren Sabotagen
+   * (abh\u00e4ngig von den gemappten R\u00e4umen). Soft-Sabotagen k\u00f6nnen eine
+   * laufende Soft-Sabotage ersetzen.
+   */
+  function openSabotageSelect() {
+    const types = sabotageTypesAvailable();
+    if (!types.length) {
+      showToast('Keine Sabotage f\u00fcr diese Karte verf\u00fcgbar.');
+      return;
+    }
+    const overlay = document.createElement('div');
+    overlay.className = 'task-overlay';
+    const card = document.createElement('div');
+    card.className = 'task-card sabotage-select';
+    const title = document.createElement('div');
+    title.className = 'task-title';
+    title.textContent = 'Sabotage w\u00e4hlen';
+    card.appendChild(title);
+    const meta = {
+      REACTOR: { label: '\u2622\uFE0F Reactor Meltdown', hint: '2 Crew im Reactor \u2014 30s Countdown' },
+      O2: { label: '\u26FD O2 D\u00e4mpfung', hint: 'Fix an O2 UND Admin \u2014 30s Countdown' },
+      LIGHTS: { label: '\u{1F4A1} Lichter aus', hint: 'Niemand sieht Leichen \u2014 Fix in Electrical' },
+      COMMS: { label: '\u{1F4E1} Comms gest\u00f6rt', hint: 'Taskliste weg \u2014 Fix in Communications' },
+    };
+    for (const type of types) {
+      const btn = document.createElement('button');
+      btn.className = 'task-tap-btn sabotage-choice';
+      btn.innerHTML = `<strong>${meta[type]?.label ?? type}</strong>` +
+        `<small>${meta[type]?.hint ?? ''}</small>`;
+      btn.addEventListener('click', () => {
+        overlay.remove();
+        ensureSocket().emit('game:sabotage', { code: state.code, type });
+        vibrate(60);
+      });
+      card.appendChild(btn);
+    }
+    const cancel = document.createElement('button');
+    cancel.className = 'ghost';
+    cancel.textContent = 'Abbrechen';
+    cancel.addEventListener('click', () => overlay.remove());
+    card.appendChild(cancel);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+
+  sabotageTypesAvailable = () => {
+    const types = (state.room?.map?.rooms ?? []).map((room) => room.type);
+    const allowed = [];
+    if (types.includes('REACTOR')) allowed.push('REACTOR');
+    if (types.includes('O2')) allowed.push('O2');
+    if (types.includes('ELECTRICAL')) allowed.push('LIGHTS');
+    if (types.includes('COMMUNICATIONS')) allowed.push('COMMS');
+    return allowed;
+  };
   setInterval(renderGameHud, 500);
 
   // -------------------------------------------------------- sabotage HUD //
@@ -864,16 +979,23 @@ const App = (() => {
       return;
     }
     const remaining = Math.max(0, Math.round((Date.parse(sab.deadline) - Date.now()) / 1000));
-    if (sab.type === 'REACTOR') {
-      banner.textContent = `\u26A0\uFE0F REACTOR MELTDOWN \u2014 2 Crewmates m\u00fcssen zusammen im Reactor fixen! ${remaining}s`;
-    } else {
+    if (sab.type === 'REACTOR' && sab.deadline) {
+      banner.textContent = `\u2622\uFE0F REACTOR MELTDOWN \u2014 2 Crewmates m\u00fcssen zusammen im Reactor fixen! ${remaining}s`;
+    } else if (sab.type === 'O2' && sab.deadline) {
       const o2 = sab.panels?.o2 ? '\u2705' : '\u274C';
       const admin = sab.panels?.admin ? '\u2705' : '\u274C';
       banner.textContent = `\u26A0\uFE0F Sauerstoff! Fix in O2 ${o2} + Admin ${admin} \u2014 ${remaining}s`;
+    } else if (sab.type === 'LIGHTS') {
+      banner.textContent = '\u{1F4A1} Lichter aus \u2014 Leichen werden nicht gefunden. Fix in ELECTRICAL!';
+    } else if (sab.type === 'COMMS') {
+      banner.textContent = '\u{1F4E1} COMMS gest\u00f6rt \u2014 Taskliste deaktiviert. Fix in COMMUNICATIONS!';
+    } else {
+      return;
     }
     banner.classList.remove('hidden');
-    banner.classList.toggle('reactor-war', sab.type === 'REACTOR');
-    banner.classList.toggle('o2-war', sab.type === 'O2');
+    banner.classList.toggle('reactor-war', sab.deadline != null);
+    banner.classList.toggle('o2-war', sab.deadline == null);
+    renderGameHud();
   }
   setInterval(renderSabotage, 1000);
 
@@ -1002,8 +1124,12 @@ const App = (() => {
 
     // task markers: echte Server-Koordinaten (roomId/roomName/x/y);
     // \u00e4ltere Runden ohne Spots fallen auf Karten-Knoten zur\u00fcck.
+    // Comms-Sabotage: Crew sieht keine Marker (Impostor schon).
+    const eta = state.tasks ?? state.role?.tasks ?? [];
+    const commsBlind = map === state.room?.map && state.room?.sabotage?.type === 'COMMS' &&
+      state.role?.role !== 'IMPOSTOR';
     let taskIdx = 0;
-    for (const task of state.role?.tasks ?? []) {
+    for (const task of commsBlind ? [] : eta) {
       if (task.completed) continue;
       let tx, ty;
       if (task.x != null) {
@@ -1042,9 +1168,12 @@ const App = (() => {
       ctx.fill();
     }
 
-    // self marker
-    if (state.selfPos) {
-      const [sx, sy] = toPx(state.selfPos.x, state.selfPos.y);
+    // self marker: weich interpoliert + Heading-F\u00e4hnchen
+    if (state.selfPos?.x != null) {
+      const smooth = (state._smoothPos ??= { x: state.selfPos.x, y: state.selfPos.y });
+      smooth.x += (state.selfPos.x - smooth.x) * 0.35;
+      smooth.y += (state.selfPos.y - smooth.y) * 0.35;
+      const [sx, sy] = toPx(smooth.x, smooth.y);
       ctx.fillStyle = '#4ade80';
       ctx.beginPath();
       ctx.arc(sx, sy, 8, 0, Math.PI * 2);
@@ -1054,6 +1183,33 @@ const App = (() => {
       ctx.beginPath();
       ctx.arc(sx, sy, state.selfPos.onRoom || state.selfPos.onCorridor ? 14 : 20, 0, Math.PI * 2);
       ctx.stroke();
+      const heading = state.selfPos.heading;
+      if (typeof heading === 'number' && !Number.isNaN(heading)) {
+        const rad = ((heading - 90) * Math.PI) / 180;
+        const dx = sx + Math.cos(rad) * 22;
+        const dy = sy + Math.sin(rad) * 22;
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(dx, dy);
+        ctx.stroke();
+      }
+    }
+
+    // Lights-Sabotage: Crew sieht fast nichts (Sommerfolientausch ~0.72 Deckkraft).
+    const lightsOut = state.room?.sabotage?.type === 'LIGHTS' &&
+      state.role?.role !== 'IMPOSTOR';
+    if (lightsOut) {
+      ctx.fillStyle = 'rgba(2, 4, 10, 0.78)';
+      const w = canvas.clientWidth || canvas.width;
+      const h = canvas.clientHeight || canvas.height;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.75)';
+      ctx.font = '600 13px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('\u{1F4A1} LICHTER AUS \u2014 find Electrical im Dunkeln!', w / 2, h / 2);
+      ctx.textAlign = 'left';
     }
   }
   window.addEventListener('resize', () => drawGameMap());
@@ -1112,8 +1268,7 @@ const App = (() => {
       socket.emit('game:sabotage_fix', { code: state.code, panel: action.panel });
       vibrate(60);
     } else if (action.kind === 'TASK') {
-      socket.emit('task:complete', { code: state.code, taskId: action.task.id });
-      vibrate(60);
+      openTask(action.task);
     } else if (action.kind === 'EMERGENCY') {
       state._usedEmergency = true;
       socket.emit('game:emergency', { code: state.code });
@@ -1122,10 +1277,14 @@ const App = (() => {
   });
 
   $('btn-sabotage').addEventListener('click', () => {
-    if (!state.room?.sabotage) {
-      ensureSocket().emit('game:sabotage', { code: state.code });
-      vibrate(60);
+    if (state.room?.sabotage) {
+      if (state.room.sabotage.deadline == null) {
+        showToast('Sabotage l\u00e4uft \u2014 Crew muss fixen oder du w\u00e4hlst beim n\u00e4chsten Cooldown neu.');
+      }
+      return;
     }
+    openSabotageSelect();
+    vibrate(60);
   });
 
   $('btn-game-leave').addEventListener('click', () => {

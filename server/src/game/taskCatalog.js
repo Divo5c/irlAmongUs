@@ -16,7 +16,38 @@ const TASK_CATALOG = Object.freeze([
   { id: 'chart_course', title: 'Chart Course' },
   { id: 'clean_o2_filter', title: 'Clean O2 Filter' },
   { id: 'empty_garbage', title: 'Empty Garbage' },
+  { id: 'divert_power', title: 'Divert Power' },
+  { id: 'align_engine', title: 'Align Engine Output' },
+  { id: 'stabilize_steering', title: 'Stabilize Steering' },
+  { id: 'clear_asteroids', title: 'Clear Asteroids' },
+  { id: 'prime_shields', title: 'Prime Shields' },
+  { id: 'submit_scan', title: 'Submit Scan' },
+  { id: 'unlock_manifolds', title: 'Unlock Manifolds' },
+  { id: 'enter_id_code', title: 'Enter ID Code' },
+  { id: 'reset_breakers', title: 'Reset Breakers' },
 ]);
+
+/**
+ * Which tasks CAN happen in which room type (Among Us logic): the mapper
+ * decides the rooms, the store picks fitting task types for them.
+ * Room types missing here fall back to the general pool.
+ */
+const ROOM_TASKS = Object.freeze({
+  CAFETERIA: ['empty_garbage', 'fix_wiring', 'divert_power'],
+  ADMIN: ['swipe_card', 'upload_data', 'enter_id_code'],
+  REACTOR: ['start_reactor', 'unlock_manifolds', 'fix_wiring'],
+  O2: ['clean_o2_filter', 'empty_garbage'],
+  ELECTRICAL: ['calibrate_distributor', 'divert_power', 'reset_breakers', 'fix_wiring'],
+  MEDBAY: ['inspect_sample', 'submit_scan'],
+  SECURITY: ['reset_breakers', 'fix_wiring'],
+  NAVIGATION: ['chart_course', 'stabilize_steering'],
+  WEAPONS: ['clear_asteroids', 'divert_power'],
+  SHIELDS: ['prime_shields', 'fix_wiring'],
+  STORAGE: ['fuel_engines', 'align_engine', 'empty_garbage', 'fix_wiring'],
+});
+
+/** Fallback pool for normal/custom rooms and unmapped street spots. */
+const GENERAL_POOL = Object.freeze(['fix_wiring', 'upload_data', 'chart_course', 'empty_garbage']);
 
 /**
  * Creates fresh task instances for every player of the given player list.
@@ -27,38 +58,54 @@ const TASK_CATALOG = Object.freeze([
  * Locations cycle through rooms first, then fall back to street nodes.
  */
 function createTasks(players, tasksPerCrewmate, map = null) {
-  if (!Number.isInteger(tasksPerCrewmate) || tasksPerCrewmate < 1 || tasksPerCrewmate > TASK_CATALOG.length) {
+  if (!Number.isInteger(tasksPerCrewmate) || tasksPerCrewmate < 1 || tasksPerCrewmate > 6) {
     throw new GameError(
       'CONFIG_INVALID',
-      `tasksPerCrewmate must be between 1 and ${TASK_CATALOG.length}.`,
+      'tasksPerCrewmate must be between 1 and 6.',
       { field: 'tasksPerCrewmate' },
     );
   }
 
-  const spots = collectTaskSpots(map);
-  let playerNr = 0;
-  const tasks = [];
-  let spotNr = 0;
+  const titleOf = new Map(TASK_CATALOG.map((entry) => [entry.id, entry.title]));
+  const generalTitle = (type) => titleOf.get(type) ??
+    type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ');
 
-  for (const player of players) {
-    playerNr += 1;
+  const spots = collectTaskSpots(map);
+  const tasks = [];
+
+  for (let playerNr = 1; playerNr <= players.length; playerNr += 1) {
+    const player = players[playerNr - 1];
     // Impostors receive the same amount of FAKE tasks (like Among Us):
     // they show up in their task list but never count toward progress.
     const isFake = player.role !== 'CREWMATE';
+    const usedTypes = new Set();
+
     for (let i = 0; i < tasksPerCrewmate; i += 1) {
-      // Catalog is at least as large as the max tasks-per-crewmate bound,
-      // so titles never repeat within one player's task list.
-      const entry = TASK_CATALOG[(playerNr - 1 + i) % TASK_CATALOG.length];
-      const spot = spots[spotNr % spots.length] ?? null;
-      spotNr += 1;
+      const spot = spots[(playerNr - 1 + i * players.length) % spots.length] ?? null;
+      const pool = ROOM_TASKS[spot?.roomType ?? 'NORMAL'] ?? GENERAL_POOL;
+      // Rotate through the room's pool; skip types the player already has
+      // (room pools can be smaller than tasksPerCrewmate \u2014 then repeats
+      // of DIFFERENT spots are fine, Among Us does the same).
+      let type = null;
+      for (let attempt = 0; attempt < pool.length * 2; attempt += 1) {
+        const candidate = pool[(playerNr + i + attempt) % pool.length];
+        if (!usedTypes.has(candidate)) {
+          type = candidate;
+          break;
+        }
+      }
+      type ??= GENERAL_POOL[(playerNr + i) % GENERAL_POOL.length];
+      usedTypes.add(type);
+
       tasks.push({
-        id: `${entry.id}-${playerNr}-${i + 1}${isFake ? '-fake' : ''}`,
-        type: entry.id,
+        id: `${type}-${playerNr}-${i + 1}${isFake ? '-fake' : ''}`,
+        type: type === 'general' ? 'fix_wiring' : type,
         assignedTo: player.id,
-        title: entry.title,
+        title: type === 'general' ? 'Stra\u00dfen-Check' : generalTitle(type),
         isFake,
         roomId: spot?.roomId ?? null,
         roomName: spot?.roomName ?? null,
+        roomType: spot?.roomType ?? null,
         x: spot?.x ?? null,
         y: spot?.y ?? null,
         completed: false,
@@ -80,6 +127,7 @@ function collectTaskSpots(map) {
     spots.push({
       roomId: room.id,
       roomName: room.name,
+      roomType: room.type ?? 'NORMAL',
       x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length,
       y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length,
     });
@@ -92,7 +140,13 @@ function collectTaskSpots(map) {
     for (const node of map?.nodes ?? []) {
       if (!anchor.has(node.id)) continue;
       anchor.delete(node.id);
-      spots.push({ roomId: room.id, roomName: room.name, x: node.x, y: node.y });
+      spots.push({
+        roomId: room.id,
+        roomName: room.name,
+        roomType: room.type ?? 'NORMAL',
+        x: node.x,
+        y: node.y,
+      });
     }
   }
   return spots;
@@ -116,4 +170,4 @@ function groupTasksByPlayer(tasks) {
   return grouped;
 }
 
-module.exports = { TASK_CATALOG, createTasks, groupTasksByPlayer };
+module.exports = { TASK_CATALOG, ROOM_TASKS, createTasks, groupTasksByPlayer };

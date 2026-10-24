@@ -226,7 +226,9 @@ function createBotEngine(roomStore, { moveIntervalMs = MOVE_INTERVAL_MS, taskTic
     const sab = room.sabotage;
     const panel = sab.type === 'REACTOR'
       ? 'REACTOR'
-      : !sab.panels?.o2 ? 'o2' : 'admin';
+      : sab.type === 'O2'
+        ? (!sab.panels?.o2 ? 'o2' : 'admin')
+        : sab.type; // LIGHTS / COMMS fix via pressed panel named like the sabotage
     for (const bot of bots) {
       if (bot.role !== 'CREWMATE') continue;
       try {

@@ -722,7 +722,7 @@ describe('rematch / reset to lobby', () => {
     };
     placeNear(store, [impostorId, crewmateIds[0], crewmateIds[1]]);
     plantCorpse(store, 'ghost-x', 21, 50);
-    store.updatePosition('ABC234', crewmateIds[1], { x: 22, y: 50, confidence: 1 });
+    store.updatePosition('ABC234', crewmateIds[1], { x: 22, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
     store.killPlayer('ABC234', impostorId, crewmateIds[0]);
     store.reportBody('ABC234', crewmateIds[1]);
     store.advanceMeeting('ABC234');
@@ -1104,6 +1104,79 @@ describe('sabotage & emergency meeting', () => {
     // Ready again when the cooldown elapses:
     room.sabotageCooldownUntil = 0;
     assert.equal(store.startSabotage('ABC234', impostorId).type, 'O2');
+  });
+
+  test('requested sabotage type must exist on the map', () => {
+    const { store, impostorId } = sabotageGame();
+    // criticalRooms has no ELECTRICAL / COMMUNICATIONS room:
+    assertGameError(
+      () => store.startSabotage('ABC234', impostorId, 'LIGHTS'),
+      'SABOTAGE_UNAVAILABLE',
+    );
+    assertGameError(
+      () => store.startSabotage('ABC234', impostorId, 'COMMS'),
+      'SABOTAGE_UNAVAILABLE',
+    );
+  });
+
+  test('LIGHTS sabotage has no deadline and hides corpses until fixed', () => {
+    const { store, impostorId, crewIds } = sabotageGame();
+    const room = store.getRoom('ABC234');
+    room.map.rooms.push({
+      id: 'room-e', name: 'Electrical', type: 'ELECTRICAL',
+      polygon: [{ x: 100, y: 100 }, { x: 120, y: 100 }, { x: 120, y: 120 }, { x: 100, y: 120 }],
+    });
+    const result = store.startSabotage('ABC234', impostorId, 'LIGHTS');
+    assert.equal(result.type, 'LIGHTS');
+    assert.equal(result.deadline, null);
+    assert.equal(store.isSabotageExpired('ABC234'), false);
+
+    // Soft sabotage can be replaced without SABOTAGE_ACTIVE:
+    room.sabotageCooldownUntil = 0;
+    const next = store.startSabotage('ABC234', impostorId, 'LIGHTS');
+    assert.equal(next.type, 'LIGHTS');
+    room.sabotageCooldownUntil = 0;
+
+    // Fix works regardless of position when explicitly present in Electrical:
+    placeAt(store, crewIds[0], { x: 110, y: 110 });
+    const fixed = store.fixSabotagePanel('ABC234', crewIds[0], 'LIGHTS');
+    assert.deepEqual(fixed.fixed, ['LIGHTS']);
+    assert.equal(store.getRoom('ABC234').sabotage, null);
+  });
+
+  test('COMMS sabotage requires a COMMUNICATIONS room to fix', () => {
+    const { store, impostorId, crewIds } = sabotageGame();
+    const room = store.getRoom('ABC234');
+    room.map.rooms.push({
+      id: 'room-c', name: 'Communications', type: 'COMMUNICATIONS',
+      polygon: [{ x: 100, y: 100 }, { x: 120, y: 100 }, { x: 120, y: 120 }, { x: 100, y: 120 }],
+    });
+    const result = store.startSabotage('ABC234', impostorId, 'COMMS');
+    assert.equal(result.type, 'COMMS');
+    assert.equal(result.deadline, null);
+
+    assertGameError(
+      () => store.fixSabotagePanel('ABC234', crewIds[0], 'COMMS'),
+      'SABOTAGE_NOT_AT_PANEL',
+    );
+    placeAt(store, crewIds[0], { x: 110, y: 110 });
+    const fixed = store.fixSabotagePanel('ABC234', crewIds[0], 'COMMS');
+    assert.deepEqual(fixed.fixed, ['COMMS']);
+    assert.equal(store.getRoom('ABC234').sabotage, null);
+  });
+
+  test('a meeting clears the running soft sabotage', () => {
+    const { store, impostorId, crewIds } = sabotageGame();
+    const room = store.getRoom('ABC234');
+    room.map.rooms.push({
+      id: 'room-e', name: 'Electrical', type: 'ELECTRICAL',
+      polygon: [{ x: 100, y: 100 }, { x: 120, y: 100 }, { x: 120, y: 120 }, { x: 100, y: 120 }],
+    });
+    store.startSabotage('ABC234', impostorId, 'LIGHTS');
+    assert.ok(store.getRoom('ABC234').sabotage);
+    placeAt(store, crewIds[0], { x: 21, y: 80 });
+    store.emergencyMeeting('ABC234', crewIds[0]);
+    assert.equal(store.getRoom('ABC234').sabotage, undefined);
   });
 
   test('emergency meetings: Cafeteria only, one per player per round', () => {

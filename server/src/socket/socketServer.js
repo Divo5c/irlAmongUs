@@ -329,7 +329,11 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
         const { code } = payload ?? {};
         assertSocketInRoom(socket, code);
 
-        const result = roomStore.startSabotage(code, socket.data.playerId);
+        const result = roomStore.startSabotage(
+          code,
+          socket.data.playerId,
+          payload?.type ?? null,
+        );
 
         io.to(code).emit('room:updated', result.room);
         io.to(code).emit('game:sabotage_started', {
@@ -343,7 +347,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
       }
     });
 
-    /** Crew fix attempt: panel = 'REACTOR' | 'o2' | 'admin'. */
+    /** Crew fix attempt: panel = 'REACTOR' | 'o2' | 'admin' | 'LIGHTS' | 'COMMS'. */
     socket.on('game:sabotage_fix', (payload) => {
       try {
         const { code, panel } = payload ?? {};
