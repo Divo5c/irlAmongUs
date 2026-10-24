@@ -27,3 +27,44 @@ Room-Type bestimmt Namen automatisch: CAFETERIA=»Cafeteria«, REACTOR=»Reactor
 2. Sabotage: REACTOR-Zwei-Spieler-Gate + O2-Zwei-Code-Fix + Meetings via CAFETERIA.
 3. Raum-Pflichtvalidierung vor Start.
 4. Live-Position smoother (Feder + 1s Redraw interpollen).
+
+---
+
+## Session 2026-10-25 (Second AI day, 13h) \u2014 v19.1 deployed
+Alle Items der ersten Prio sind FERTIG und live:
+
+### Done (v18\u2192v19\u2192v19.1)
+- Sabotage-Engine komplett: REACTOR (2 Crew zusammen im Reactor fixen),
+  O2 (Fix an O2 UND Admin), LIGHTS (Fix in Electrical, Leichen unsichtbar,
+  Map gedimmt f\u00fcr Crew), COMMS (Fix in Communications, Taskliste/Marker
+  weg f\u00fcr Crew). Meetings clearen laufende Sabotagen. Impostor bekommt
+  Sabotage-Auswahl-Overlay (je nach gemappten R\u00e4umen). Bots fixen mit.
+- Notfall-Meeting: Use-Button in CAFETERIA, 1\u00d7 pro Spieler pro Runde.
+- Task-Orte + Minispiele: 19 echte Minigames in tasks.js (Fix Wiring mit
+  Drag-Kabeln, Swipe Card mit Tempo-Check, Upload/Hold, Calibrate-3-Ringe,
+  Start Reactor Simon, Unlock Manifolds 1-10, Enter ID Code, Reset Breakers
+  1-7, Chart Course Zickzack, Clean O2 Filter Bl\u00e4tter, Empty Garbage Hebel,
+  Divert Power Regler, Align Engine Zeiger, Stabilize Steering Fadenkreuz,
+  Clear Asteroids Klick-Jagd, Prime Shields Hexagone, Inspect Sample mit
+  Wartezeit, Submit Scan 12s, Fuel Engines Halten).
+- Task-Verteilung nach Raumtyp: ROOM_TASKS in taskCatalog.js \u2014 CAFETERIA
+  bekommt Garbage/Wiring/Divert, ADMIN Swipe/Upload/ID, REACTOR
+  Simon/Manifolds, O2 Filter/Garbage, ELECTRICAL Distributor/Breakers,
+  MEDBAY Sample/Scan, NAVIGATION Chart/Steering etc. Normale R\u00e4ume
+  bekommen den General-Pool.
+- Kein \u201eErledigt\u201c-Button mehr: Tasks in der Liste + Marker auf der Karte
+  antippbar \u2192 Minigame \u2192 Server-Gate (4m / gleiches Zimmer / roomId).
+  Use-Button zeigt echten Tasknamen, \u00f6ffnet das Minigame.
+- Karte gr\u00f6\u00dfer: Portrait 52dvh, Landscape 66dvh.
+- Eigene Position: sanfter Marker mit Heading-F\u00e4hnchen auf Live-Map.
+- Serverseitig: tasksPerCrewmate auf max 6 gedeckelt (config bounds).
+- Tests: 137\u2013148 pro Run gr\u00fcn (Timer-Flakes in socketServer bleiben
+  bekannt: rejoin/meeting-Timer brauchen Wartezeit unter Last).
+
+### N\u00e4chste sinnvolle Schritte (Prio neue Session)
+1. Zwei stufige Tasks (Download \u2192 Upload, Fuellen \u2192 Tanken) \u2014 Server
+   unterst\u00fctzt Single-Step, w\u00e4re ein eigener Task-Flow mit stageState.
+2. kommunikations-Sabotage Code-Eingabe am Panel (Mini) statt nur Press.
+3. Kill-Richtungspfeil: Crew sieht wo der Kill passierte als Leuchen.
+4. Task-Marker-Cluster bei \u00fcberlappenden Spots in einem Raum ab\u00e4ndern.
+5. Sound-Bank: verschiedene beeps fuer sabotage/fix/task/gameover.
