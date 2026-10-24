@@ -68,3 +68,10 @@ Alle Items der ersten Prio sind FERTIG und live:
 3. Kill-Richtungspfeil: Crew sieht wo der Kill passierte als Leuchen.
 4. Task-Marker-Cluster bei \u00fcberlappenden Spots in einem Raum ab\u00e4ndern.
 5. Sound-Bank: verschiedene beeps fuer sabotage/fix/task/gameover.
+
+### Nachtrag v19.2/v19.3 (gleiche Session)
+- Zweistufige Tasks live: Upload Data (Download in beliebigem Raum \u2192
+  Upload in ADMIN), Empty Garbage (Cafeteria \u2192 STORAGE), Stufen-Gate
+  serverseitig (TASK_TOO_FAR nennt die Ziel-Raum), Bots komplettieren
+  beide Stufen (skipProximity), Client zeigt "Stufe 1/2" + Toast.
+- Comms-Blind-Marker-Fix (Objekt-Vergleich falsch).
