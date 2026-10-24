@@ -25,7 +25,7 @@ const DEFAULT_GAME_CONFIG = Object.freeze({
 
 const NUMERIC_BOUNDS = Object.freeze({
   impostorCount: { min: 1, max: 5 },
-  tasksPerCrewmate: { min: 1, max: 8 },
+  tasksPerCrewmate: { min: 1, max: 6 },
   killCooldownMs: { min: 0, max: 180000 },
   discussionDurationMs: { min: 0, max: 180000 },
   votingDurationMs: { min: 5000, max: 300000 },

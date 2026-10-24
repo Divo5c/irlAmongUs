@@ -706,6 +706,13 @@ const App = (() => {
     $('btn-kill').classList.toggle('hidden', !impostor);
     renderRole(payload); // task list build + flags + teammates line
 
+    // Tap = skip intro (no 3s wait when playing with friends).
+    overlay.onclick = () => {
+      window.clearTimeout(showRoleOverlay._t);
+      overlay.classList.add('hidden');
+      beep(impostor ? 180 : 560);
+    };
+
     window.clearTimeout(showRoleOverlay._t);
     showRoleOverlay._t = window.setTimeout(() => {
       overlay.classList.add('hidden');
@@ -1128,6 +1135,7 @@ const App = (() => {
     const eta = state.tasks ?? state.role?.tasks ?? [];
     const commsBlind = map === state.room?.map && state.room?.sabotage?.type === 'COMMS' &&
       state.role?.role !== 'IMPOSTOR';
+    const taskHits = [];
     let taskIdx = 0;
     for (const task of commsBlind ? [] : eta) {
       if (task.completed) continue;
@@ -1156,8 +1164,10 @@ const App = (() => {
       ctx.textAlign = 'center';
       ctx.fillText(String(taskIdx + 1), tx, ty + 4);
       ctx.textAlign = 'left';
+      taskHits.push({ x: tx, y: ty, task });
       taskIdx += 1;
     }
+    state._taskHits = taskHits;
 
     // corpses the player has discovered
     for (const body of state.nearbyBodies ?? []) {
@@ -1285,6 +1295,24 @@ const App = (() => {
     }
     openSabotageSelect();
     vibrate(60);
+  });
+
+  // Task-Marker direkt antippen \u2192 Minigame (wie In-Game-Konsole).
+  $('game-map').addEventListener('click', (event) => {
+    if (state.room?.status !== 'IN_GAME') return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const tapX = event.clientX - rect.left;
+    const tapY = event.clientY - rect.top;
+    let best = null;
+    let bestDist = 30;
+    for (const hit of state._taskHits ?? []) {
+      const d = Math.hypot(hit.x - tapX, hit.y - tapY);
+      if (d < bestDist) {
+        best = hit.task;
+        bestDist = d;
+      }
+    }
+    if (best) openTask(best);
   });
 
   $('btn-game-leave').addEventListener('click', () => {
