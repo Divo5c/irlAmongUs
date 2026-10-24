@@ -75,3 +75,13 @@ Alle Items der ersten Prio sind FERTIG und live:
   serverseitig (TASK_TOO_FAR nennt die Ziel-Raum), Bots komplettieren
   beide Stufen (skipProximity), Client zeigt "Stufe 1/2" + Toast.
 - Comms-Blind-Marker-Fix (Objekt-Vergleich falsch).
+
+### v19.4 (IRL-Test-Ready) 
+- DU-Pin mit Pulsfred + Heading-Fred + "DU"-Label, Dauerwelle 800ms.
+- Round-Buttons in einer Reihe (Report Use [Sabotage Kill]).
+- Gruener Team-Task-Oberbalken strip (shimmer + pop bei Fortschritt),
+  Comms-Sabotage versteckt den Balken fuer Crew.
+- Bot-Positionen: crew-bots fuers alle, impostor-bots nur fuer Impostoren,
+  Schalter im Einstellungsmenue.
+- Einstellungen (Zahnrad oben rechts): Sound, Vibration, Bot-Dots
+  (localStorage persistiert); roter pulsierender Verlassen-Button.
