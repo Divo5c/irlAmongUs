@@ -50,10 +50,22 @@ const App = (() => {
   }
 
   function vibrate(pattern) {
+    if (!optEnabled('rlaus_vibration', true)) return;
     if (navigator.vibrate) navigator.vibrate(pattern);
   }
 
+  /** Einstellungen aus dem Gear-Men\u00fc (persistiert in localStorage). */
+  function optEnabled(key, fallback) {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    return raw === '1';
+  }
+  function showBotsEnabled() {
+    return optEnabled('rlaus_showBots', true);
+  }
+
   function beep(freq = 660, durationMs = 140) {
+    if (!optEnabled('rlaus_sound', true)) return;
     try {
       if (!App.audioCtx) App.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const ctx = App.audioCtx;
@@ -196,6 +208,12 @@ const App = (() => {
       }
       drawGameMap();
       renderGameHud();
+    });
+    // Bots gibt es nur virtuell \u2014 ihre Wander-Punkte zeigt das Spiel.
+    socket.on('game:bot_positions', ({ impostor, positions }) => {
+      state.botPositions ??= {};
+      state.botPositions[impostor ? 'impostor' : 'crew'] = positions ?? [];
+      if (showBotsEnabled()) drawGameMap();
     });
     socket.on('position:error', ({ code }) => {
       if (code === 'POSITION_NOT_ALLOWED') return; // Meeting etc. – ruhig ignorieren
@@ -779,7 +797,19 @@ const App = (() => {
     const progress = room.taskProgress ?? { completed: 0, total: 0 };
     const total = progress.total || 0;
     const pct = total ? Math.round((progress.completed / total) * 100) : 0;
-    $('team-progress-bar').style.width = `${pct}%`;
+    const strip = document.getElementById('task-progress-strip');
+    if (!strip) return;
+    const before = document.getElementById('task-progress-fill').style.width;
+    // COMMS gest\u00f6rt: Crew kann den Team-Fortschritt nicht sehen.
+    const commsBlind = room.sabotage?.type === 'COMMS' && state.role?.role !== 'IMPOSTOR';
+    const shown = commsBlind ? before : `${pct}%`;
+    if (shown !== before) {
+      document.getElementById('task-progress-fill').style.width = shown;
+      strip.classList.remove('flash');
+      void strip.offsetWidth; // restart the pop animation
+      strip.classList.add('flash');
+    }
+    strip.style.opacity = commsBlind ? '0.25' : '1';
   }
 
   /** Report/Kill-Buttons je nach Nähe (Kill nur mit echten Zielen). */
@@ -996,6 +1026,10 @@ const App = (() => {
     return allowed;
   };
   setInterval(renderGameHud, 500);
+  // Selbst-Marker-Puls: weiche Dauerwelle auf der Karte.
+  setInterval(() => {
+    if (state.room?.status === 'IN_GAME') drawGameMap();
+  }, 800);
 
   // -------------------------------------------------------- sabotage HUD //
 
@@ -1191,6 +1225,29 @@ const App = (() => {
     }
     state._taskHits = taskHits;
 
+    // Bots (nur virtuelle Bewohner): hellblaue Pinguin-Dots mit Namen.
+    if (showBotsEnabled()) {
+      const groups = [state.botPositions?.crew, state.botPositions?.impostor];
+      for (const list of groups) {
+        for (const bot of list ?? []) {
+          if (bot.x == null) continue;
+          const [bx, by] = toPx(bot.x, bot.y);
+          ctx.fillStyle = 'rgba(147, 197, 253, 0.9)';
+          ctx.beginPath();
+          ctx.arc(bx, by, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.font = '600 10px system-ui';
+          ctx.textAlign = 'center';
+          ctx.fillText(bot.name ?? 'Bot', bx, by - 12);
+          ctx.textAlign = 'left';
+        }
+      }
+    }
+
     // corpses the player has discovered
     for (const body of state.nearbyBodies ?? []) {
       const [bx, by] = toPx(body.x, body.y);
@@ -1200,33 +1257,41 @@ const App = (() => {
       ctx.fill();
     }
 
-    // self marker: weich interpoliert + Heading-F\u00e4hnchen
+    // self marker: kr\u00e4ftiger "Du bist hier"-Pin, weich interpoliert
     if (state.selfPos?.x != null) {
       const smooth = (state._smoothPos ??= { x: state.selfPos.x, y: state.selfPos.y });
       smooth.x += (state.selfPos.x - smooth.x) * 0.35;
       smooth.y += (state.selfPos.y - smooth.y) * 0.35;
       const [sx, sy] = toPx(smooth.x, smooth.y);
-      ctx.fillStyle = '#4ade80';
+      const turn = (Date.now() % 1600) / 1600; // weiche Puls-Welle
+      ctx.fillStyle = `rgba(74,222,128,${0.5 + 0.3 * Math.sin(turn * Math.PI)})`;
       ctx.beginPath();
-      ctx.arc(sx, sy, 8, 0, Math.PI * 2);
+      ctx.arc(sx, sy, 16 + 6 * turn, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(74,222,128,0.3)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(sx, sy, state.selfPos.onRoom || state.selfPos.onCorridor ? 14 : 20, 0, Math.PI * 2);
-      ctx.stroke();
       const heading = state.selfPos.heading;
       if (typeof heading === 'number' && !Number.isNaN(heading)) {
         const rad = ((heading - 90) * Math.PI) / 180;
-        const dx = sx + Math.cos(rad) * 22;
-        const dy = sy + Math.sin(rad) * 22;
-        ctx.strokeStyle = '#4ade80';
-        ctx.lineWidth = 3;
+        const dx = sx + Math.cos(rad) * 24;
+        const dy = sy + Math.sin(rad) * 24;
+        ctx.strokeStyle = '#86efac';
+        ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(sx, sy);
         ctx.lineTo(dx, dy);
         ctx.stroke();
       }
+      ctx.fillStyle = '#4ade80';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = '700 11px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('DU', sx, sy - 16);
+      ctx.textAlign = 'left';
     }
 
     // Lights-Sabotage: Crew sieht fast nichts (Sommerfolientausch ~0.72 Deckkraft).
@@ -1337,14 +1402,38 @@ const App = (() => {
     if (best) openTask(best);
   });
 
-  $('btn-game-leave').addEventListener('click', () => {
+  $('btn-leave-from-menu').addEventListener('click', () => {
+    $('settings-menu').classList.add('hidden');
     state.role = null;
     state.teammates = [];
     state.socket?.disconnect();
     state.socket = null;
     state.room = null;
+    state.selfPos = null;
+    state.botPositions = null;
     localStorage.removeItem('rlaus_session');
     show('home');
+  });
+
+  // Einstellungs-Men\u00fc: pers\u00f6nliche Optionen + Verlassen-Button.
+  $('btn-settings').addEventListener('click', () => {
+    $('opt-sound').checked = optEnabled('rlaus_sound', true);
+    $('opt-vibration').checked = optEnabled('rlaus_vibration', true);
+    $('opt-show-bots').checked = optEnabled('rlaus_showBots', true);
+    $('settings-menu').classList.remove('hidden');
+  });
+  $('btn-settings-close').addEventListener('click', () => {
+    $('settings-menu').classList.add('hidden');
+  });
+  $('opt-sound').addEventListener('change', (event) => {
+    localStorage.setItem('rlaus_sound', event.target.checked ? '1' : '0');
+  });
+  $('opt-vibration').addEventListener('change', (event) => {
+    localStorage.setItem('rlaus_vibration', event.target.checked ? '1' : '0');
+  });
+  $('opt-show-bots').addEventListener('change', (event) => {
+    localStorage.setItem('rlaus_showBots', event.target.checked ? '1' : '0');
+    drawGameMap();
   });
   $('btn-rematch').addEventListener('click', () => {
     ensureSocket().emit('game:reset', { code: state.code });

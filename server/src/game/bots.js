@@ -22,7 +22,12 @@ const TASK_TICKS = 15;
 
 const MAX_BOTS = 5;
 
-function createBotEngine(roomStore, { moveIntervalMs = MOVE_INTERVAL_MS, taskTicks = TASK_TICKS } = {}) {
+function createBotEngine(roomStore, {
+  moveIntervalMs = MOVE_INTERVAL_MS,
+  taskTicks = TASK_TICKS,
+  /** optional (code, event, payload, playerId?) -> emit adapter (browser map) */
+  broadcast = null,
+} = {}) {
   /** code -> interval */
   const timers = new Map();
   /** code -> Map<botId, {nodeId, x, y, targetId}> */
@@ -130,6 +135,7 @@ function createBotEngine(roomStore, { moveIntervalMs = MOVE_INTERVAL_MS, taskTic
       if (room.sabotage) {
         botCrewFixSabotage(code, room, bots);
       }
+      broadcastBotPositions(code, room, bots);
       return;
     }
 
@@ -222,6 +228,42 @@ function createBotEngine(roomStore, { moveIntervalMs = MOVE_INTERVAL_MS, taskTic
    * Bots keep long games alive by fixing an impostor sabotage quickly
    * (skipping the physical presence gate, same as task completion).
    */
+  /**
+   * Bots exist physically nowhere — the app paints their walking dots:
+   * crew bots go to EVERYONE, impostor bots only to impostor players
+   * (crewmates must not track the killer on the map).
+   */
+  function broadcastBotPositions(code, room, bots) {
+    if (typeof broadcast !== 'function') return;
+    const crewPositions = bots
+      .filter((bot) => bot.role !== 'IMPOSTOR' && bot.isAlive !== false)
+      .map((bot) => {
+        const walk = walkers.get(code)?.get(bot.id);
+        return { playerId: bot.id, name: bot.name, x: walk?.x ?? null, y: walk?.y ?? null };
+      })
+      .filter((entry) => entry.x != null);
+    if (crewPositions.length) {
+      broadcast(code, 'game:bot_positions', { positions: crewPositions }, null);
+    }
+    const impostorBots = bots
+      .filter((bot) => bot.role === 'IMPOSTOR' && bot.isAlive !== false)
+      .map((bot) => {
+        const walk = walkers.get(code)?.get(bot.id);
+        return { playerId: bot.id, name: bot.name, x: walk?.x ?? null, y: walk?.y ?? null };
+      })
+      .filter((entry) => entry.x != null);
+    if (impostorBots.length) {
+      for (const player of room.players) {
+        if (player.role === 'IMPOSTOR' && player.isAlive !== false) {
+          broadcast(code, 'game:bot_positions', {
+            impostor: true,
+            positions: impostorBots,
+          }, player.id);
+        }
+      }
+    }
+  }
+
   function botCrewFixSabotage(code, room, bots) {
     const sab = room.sabotage;
     const panel = sab.type === 'REACTOR'

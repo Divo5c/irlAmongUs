@@ -5,7 +5,15 @@ const { createBotEngine } = require('../game/bots');
 
 function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 } = {}) {
   const io = new Server(httpServer);
-  const bots = createBotEngine(roomStore);
+  const bots = createBotEngine(roomStore, {
+    broadcast(code, event, payload, playerId = null) {
+      if (playerId) {
+        emitToPlayer(code, playerId, event, payload);
+      } else {
+        io.to(code).emit(event, payload);
+      }
+    },
+  });
   const meetingTimers = new Map();
   const pendingDisconnects = new Map();
 

@@ -138,6 +138,10 @@
     <div class="topbar">
       <span class="room-code small" id="game-code">&mdash;&mdash;</span>
       <span class="hint" id="game-phase-hint"></span>
+      <button id="btn-settings" class="gear-btn" aria-label="Einstellungen">&#9881;&#xFE0E;</button>
+    </div>
+    <div id="task-progress-strip" aria-hidden="true">
+      <div id="task-progress-fill"></div>
     </div>
     <div id="role-overlay" class="hidden">
       <div id="role-card" class="role-card crew">
@@ -149,7 +153,6 @@
     <div id="teammates" class="hint hidden"></div>
     <div id="live-map-wrap">
       <canvas id="game-map"></canvas>
-      <div id="team-progress"><div id="team-progress-bar"></div></div>
       <div id="sabotage-banner" class="hidden"></div>
       <div id="boundary-banner" class="hidden">Geh zur&uuml;ck ins Spielfeld!</div>
     </div>
@@ -158,7 +161,6 @@
       <button id="btn-use" class="round-btn use hidden" disabled>Use</button>
       <button id="btn-sabotage" class="round-btn sabotage hidden" disabled>Sabotage</button>
       <button id="btn-kill" class="round-btn kill hidden">Kill</button>
-      <button id="btn-game-leave" class="ghost">Verlassen</button>
     </div>
     <details id="taskbox">
       <summary>Deine Tasks (<span id="task-count">0</span>)</summary>
@@ -178,12 +180,36 @@
         <button id="btn-rematch" class="primary big hidden">Neue Runde</button>
       </div>
     </div>
+    <div id="settings-menu" class="task-overlay hidden">
+      <div class="task-card settings-card">
+        <div class="task-head">
+          <div class="task-title">Einstellungen</div>
+          <button id="btn-settings-close" class="task-close">&#10005;</button>
+        </div>
+        <div class="settings-body">
+          <label class="settings-toggle">
+            <input type="checkbox" id="opt-sound" checked>
+            <span>Sound &amp; Klingeltöne</span>
+          </label>
+          <label class="settings-toggle">
+            <input type="checkbox" id="opt-vibration" checked>
+            <span>Vibration</span>
+          </label>
+          <label class="settings-toggle">
+            <input type="checkbox" id="opt-show-bots" checked>
+            <span>Bot-Positionen auf der Karte</span>
+          </label>
+          <button id="btn-leave-from-menu" class="danger-big">Verlassen</button>
+          <p class="hint" id="settings-note">Verlassen beendet die Verbindung. Die Lobby l\u00e4uft weiter.</p>
+        </div>
+      </div>
+    </div>
   </section>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.3"></script>
-  <script src="/js/mapEditor.js?v=19.3"></script>
-  <script src="/js/tasks.js?v=19.3"></script>
-  <script src="/js/app.js?v=19.3"></script>
+  <script src="/js/osm.js?v=19.4"></script>
+  <script src="/js/mapEditor.js?v=19.4"></script>
+  <script src="/js/tasks.js?v=19.4"></script>
+  <script src="/js/app.js?v=19.4"></script>
 </body>
 </html>
