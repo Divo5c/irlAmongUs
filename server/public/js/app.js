@@ -857,7 +857,7 @@ const App = (() => {
     }
     const task = nearestIncompleteTask();
     if (task) {
-      return { label: 'Task', kind: 'TASK', task };
+      return { label: task.title, kind: 'TASK', task };
     }
     if (roomIdContains('CAFETERIA') && emergencyLeft() > 0) {
       return { label: 'Notfall', kind: 'EMERGENCY' };
