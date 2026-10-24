@@ -1155,7 +1155,7 @@ const App = (() => {
     // \u00e4ltere Runden ohne Spots fallen auf Karten-Knoten zur\u00fcck.
     // Comms-Sabotage: Crew sieht keine Marker (Impostor schon).
     const eta = state.tasks ?? state.role?.tasks ?? [];
-    const commsBlind = map === state.room?.map && state.room?.sabotage?.type === 'COMMS' &&
+    const commsBlind = state.room?.sabotage?.type === 'COMMS' &&
       state.role?.role !== 'IMPOSTOR';
     const taskHits = [];
     let taskIdx = 0;
