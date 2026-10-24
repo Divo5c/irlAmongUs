@@ -1,6 +1,54 @@
 const { GameError } = require('./errors');
 
 /**
+ * Two-stage task blueprints (Among Us style): stage 1 happens at the
+ * assigned spot, stage 2 at a room of the given type — only if the map
+ * actually has such a room and it is NOT the spot's own room.
+ */
+const STAGE_PAIRS = Object.freeze({
+  upload_data: { toType: 'ADMIN', stageLabels: ['Daten herunterladen', 'Daten hochladen'] },
+  empty_garbage: { toType: 'STORAGE', stageLabels: ['M\u00fcll leeren', 'M\u00fcll abgeben'] },
+});
+
+function catalogTitle(type) {
+  const entry = TASK_CATALOG.find((item) => item.id === type);
+  return entry?.title ?? type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ');
+}
+
+/**
+ * Builds 1..2 stage objects for a task: the given spot first, optionally a
+ * second spot in the paired room type. Centroids of candidate rooms only.
+ */
+function buildStages(map, spot, type) {
+  const first = {
+    roomId: spot?.roomId ?? null,
+    roomName: spot?.roomName ?? null,
+    roomType: spot?.roomType ?? null,
+    x: spot?.x ?? null,
+    y: spot?.y ?? null,
+  };
+  const pair = STAGE_PAIRS[type];
+  const rooms = map?.rooms ?? [];
+  if (!pair) return { stages: [first], stageLabels: null };
+  const candidates = rooms.filter(
+    (room) => room.type === pair.toType
+      && room.id !== first.roomId
+      && (room.polygon ?? []).length >= 3,
+  );
+  if (!candidates.length) return { stages: [first], stageLabels: null };
+  const target = candidates[spot.prototypeHash ?? 0] ?? candidates[0];
+  const pts = target.polygon ?? [];
+  const second = {
+    roomId: target.id,
+    roomName: target.name,
+    roomType: target.type,
+    x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length,
+    y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length,
+  };
+  return { stages: [first, second], stageLabels: pair.stageLabels };
+}
+
+/**
  * Central task catalog. Every task instance references a catalog entry via
  * its `type`, so clients can later render a dedicated UI per task type
  * without any server change.
@@ -66,8 +114,8 @@ function createTasks(players, tasksPerCrewmate, map = null) {
     );
   }
 
-  const titleOf = new Map(TASK_CATALOG.map((entry) => [entry.id, entry.title]));
-  const generalTitle = (type) => titleOf.get(type) ??
+  const titleMap = new Map(TASK_CATALOG.map((entry) => [entry.id, entry.title]));
+  const generalTitle = (type) => titleMap.get(type) ??
     type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ');
 
   const spots = collectTaskSpots(map);
@@ -97,17 +145,27 @@ function createTasks(players, tasksPerCrewmate, map = null) {
       type ??= GENERAL_POOL[(playerNr + i) % GENERAL_POOL.length];
       usedTypes.add(type);
 
+      const { stages, stageLabels } = buildStages(
+        map,
+        spot,
+        type === 'general' ? 'fix_wiring' : type,
+      );
+
       tasks.push({
         id: `${type}-${playerNr}-${i + 1}${isFake ? '-fake' : ''}`,
         type: type === 'general' ? 'fix_wiring' : type,
         assignedTo: player.id,
         title: type === 'general' ? 'Stra\u00dfen-Check' : generalTitle(type),
         isFake,
-        roomId: spot?.roomId ?? null,
-        roomName: spot?.roomName ?? null,
-        roomType: spot?.roomType ?? null,
-        x: spot?.x ?? null,
-        y: spot?.y ?? null,
+        stageIndex: 0,
+        stages,
+        stageLabels,
+        // Aktuelle Stufe (f\u00fcr Marker/Gate): mirror of stages[stageIndex]
+        roomId: stages[0].roomId,
+        roomName: stages[0].roomName,
+        roomType: stages[0].roomType,
+        x: stages[0].x,
+        y: stages[0].y,
         completed: false,
         completedAt: null,
       });
@@ -161,6 +219,9 @@ function groupTasksByPlayer(tasks) {
       type: task.type,
       title: task.title,
       isFake: !!task.isFake,
+      stageIndex: task.stageIndex ?? 0,
+      stages: task.stages ?? null,
+      stageLabels: task.stageLabels ?? null,
       roomId: task.roomId ?? null,
       roomName: task.roomName ?? null,
       x: task.x ?? null,

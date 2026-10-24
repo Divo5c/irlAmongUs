@@ -265,9 +265,31 @@ const App = (() => {
       $('gameover-detail').textContent = `Am Ende \u00fcbrig: ${alivePlayers.join(', ')}`;
       $('btn-rematch').classList.toggle('hidden', !state.isHost);
     });
-    socket.on('task:progress', ({ completedTaskId }) => {
-      if (!completedTaskId) return;
+    socket.on('task:progress', ({ completedTaskId, advancedTaskId, stageIndex }) => {
       const ownList = state.role?.tasks ?? state.tasks ?? [];
+      if (advancedTaskId) {
+        // Stufe am相结合 abgeschlossen: naechste Stufe wird zum Ziel.
+        const task = ownList.find((t) => t.id === advancedTaskId);
+        if (task) {
+          task.stageIndex = stageIndex ?? 1;
+          const nextStage = task.stages?.[task.stageIndex];
+          if (nextStage) {
+            task.roomId = nextStage.roomId;
+            task.roomName = nextStage.roomName;
+            task.x = nextStage.x;
+            task.y = nextStage.y;
+          }
+          showToast(`Stufe fertig! N\u00e4chster Schritt: ${task.roomName ?? 'unbekannt'}`);
+          const li = $('task-list').querySelector(`[data-task-id="${advancedTaskId}"] small`);
+          if (li) li.textContent = task.roomName ?? '';
+        }
+        beep(660);
+        vibrate(40);
+        drawGameMap();
+        renderGameHud();
+        return;
+      }
+      if (!completedTaskId) return;
       if (ownList.some((t) => t.id === completedTaskId)) {
         const task = ownList.find((t) => t.id === completedTaskId);
         if (task) task.completed = true;
@@ -740,7 +762,7 @@ const App = (() => {
       li.className = 'task-item';
       li.dataset.taskId = task.id;
       li.innerHTML = `<span>${escapeHtml(task.title)}</span>` +
-        (task.roomName ? `<small>${escapeHtml(task.roomName)}</small>` : '');
+        (task.roomName ? `<small>${escapeHtml(task.roomName)}${task.stages?.length > 1 ? ` \u2022 Stufe ${(task.stageIndex ?? 0) + 1}` : ''}</small>` : '');
       li.addEventListener('click', () => openTask(task));
       list.appendChild(li);
     }

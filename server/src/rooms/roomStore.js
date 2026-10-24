@@ -499,32 +499,75 @@ class RoomStore {
       throw new GameError('PLAYER_DEAD', 'Dead players cannot complete tasks.');
     }
 
-    // Proximity gate: the task must be at the player's own spot (room) or
-    // within reach on the street — no completing from across the map.
-    // Bot engine passes skipProximity (bot walking already models effort).
-    const own = this.getPlayerPosition(code, playerId);
-    if (!skipProximity) {
-      if (task.roomId != null && own?.roomId === task.roomId) {
-        // fine: standing in the same room
-      } else if (
-        task.x != null &&
-        own &&
-        Math.hypot(own.x - task.x, own.y - task.y) <= DEFAULT_TASK_RADIUS_M
-      ) {
-        // fine: close to the task spot
-      } else {
-        throw new GameError(
-          'TASK_TOO_FAR',
-          'Du musst an der Stelle des Tasks stehen, um ihn zu erledigen.',
-          { field: 'task.position' },
-        );
-      }
-    }
-
     if (task.completed) {
       throw new GameError('TASK_ALREADY_COMPLETED', 'This task is already completed.');
     }
 
+    // Two-stage progress: skipProximity completes ALL stages at once
+    // (bot engine — its walking already models the effort), humans work
+    // through stage by stage, each stage gated by proximity to its spot.
+    const stages = task.stages?.length ? task.stages : null;
+    if (!stages) {
+      task.completed = true;
+      task.completedAt = new Date().toISOString();
+      room.updatedAt = task.completedAt;
+      return {
+        room: this.toPublicRoom(room),
+        progress: getTaskProgress(room),
+        completedTaskId: task.id,
+        winner: evaluateVictory(room),
+      };
+    }
+
+    if (!skipProximity) {
+      const stage = stages[task.stageIndex ?? 0];
+      const stageAt = (spot) =>
+        spot != null && (
+          (spot.roomId != null && own?.roomId === spot.roomId) ||
+          (spot.x != null && own != null &&
+            Math.hypot(own.x - spot.x, own.y - spot.y) <= DEFAULT_TASK_RADIUS_M)
+        );
+      const own = this.getPlayerPosition(code, playerId);
+      if (!stageAt(stage)) {
+        throw new GameError(
+          'TASK_TOO_FAR',
+          stage?.roomName
+            ? `Du musst daf\u00fcr nach ${stage.roomName} (Stufe ${task.stageIndex + 1}).`
+            : 'Du musst an der Stelle des Tasks stehen.',
+          { field: 'task.position' },
+        );
+      }
+      if (task.stageIndex + 1 < stages.length) {
+        // Stage done, next stage becomes the active spot.
+        task.stageIndex += 1;
+        const next = stages[task.stageIndex];
+        task.roomId = next.roomId;
+        task.roomName = next.roomName;
+        task.roomType = next.roomType;
+        task.x = next.x;
+        task.y = next.y;
+        room.updatedAt = new Date().toISOString();
+        return {
+          room: this.toPublicRoom(room),
+          progress: getTaskProgress(room),
+          completedTaskId: null,
+          advancedTaskId: task.id,
+          stageIndex: task.stageIndex,
+          winner: evaluateVictory(room),
+        };
+      }
+    }
+
+    // Final stage done (or bot shortcut): mark completed for good.
+    if (skipProximity && stages.length > 1) {
+      const last = stages[stages.length - 1];
+      task.stageIndex = stages.length - 1;
+      task.roomId = last.roomId;
+      task.roomName = last.roomName;
+      task.roomType = last.roomType;
+      task.x = last.x;
+      task.y = last.y;
+    }
     task.completed = true;
     task.completedAt = new Date().toISOString();
     room.updatedAt = task.completedAt;
