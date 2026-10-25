@@ -18,6 +18,7 @@ const App = (() => {
       'role.imp.title': 'IMPOSTOR',
       'role.imp.line1': 'Sabotiere und töte heimlich.',
       'role.tap': 'Tippe zum Fortfahren',
+      'game.partner': 'Partner',
       'banner.crew': 'DU BIST CREWMATE',
       'banner.imp': 'DU BIST IMPOSTOR',
       // Spielstatus
@@ -90,6 +91,7 @@ const App = (() => {
       'role.imp.title': 'IMPOSTOR',
       'role.imp.line1': 'Sabotage and kill secretly.',
       'role.tap': 'Tap to continue',
+      'game.partner': 'Partner',
       'banner.crew': 'YOU ARE A CREWMATE',
       'banner.imp': 'YOU ARE THE IMPOSTOR',
       'phase.prepare': 'Lobby',
@@ -229,6 +231,29 @@ const App = (() => {
   function showBotsEnabled() {
     return optEnabled('rlaus_showBots', true);
   }
+
+  /**
+   * Sichtig-Fehler-Chip: Jeder unbehandelte JS-Fehler wird als roter Chip
+   * oben angezeigt (statt unsichtbar im Handy-Konsole-Log zu verschwinden).
+   * Nach 15s verschwindet er von selbst — IRL-Debug w/o Laptop.
+   */
+  function showJsError(error) {
+    try {
+      let chip = document.getElementById('js-error-chip');
+      if (!chip) {
+        chip = document.createElement('div');
+        chip.id = 'js-error-chip';
+        chip.addEventListener('click', () => chip.classList.add('hidden'));
+        document.body.appendChild(chip);
+      }
+      chip.textContent = `App-Fehler: ${(error?.message ?? String(error)).slice(0, 160)}`;
+      chip.classList.remove('hidden');
+      window.clearTimeout(showJsError._t);
+      showJsError._t = window.setTimeout(() => chip.classList.add('hidden'), 15000);
+    } catch (_) { /* chip is best-effort */ }
+  }
+  window.addEventListener('error', (event) => showJsError(event.error ?? event.message));
+  window.addEventListener('unhandledrejection', (event) => showJsError(event.reason));
 
   function beep(freq = 660, durationMs = 140) {
     if (!optEnabled('rlaus_sound', true)) return;
@@ -899,31 +924,34 @@ const App = (() => {
   function showRoleOverlay(payload) {
     const overlay = $('role-overlay');
     const impostor = payload.role === 'IMPOSTOR';
-    $('role-card').className = impostor ? 'role-card impostor' : 'role-card crew';
-    $('role-card-title').textContent = impostor ? t('role.imp.title') : t('role.crew.title');
-    const mates = (payload.teammates ?? []).map((t) => t.name).join(', ');
-    $('role-card-detail').innerHTML = impostor
-      ? (mates
-        ? `${t('role.imp.line1')}<br><small>Partner: ${mates}</small>`
-        : `${t('role.imp.line1')}<br><small>${t('role.tap')}</small>`)
-      : `${t('role.crew.line1')} ${t('role.crew.and')}<br><small>${t('role.tap')}</small>`;
-    overlay.classList.remove('hidden');
-    $('role-banner').classList.add('hidden');
-    $('btn-kill').classList.toggle('hidden', !impostor);
-    renderRole(payload); // task list build + flags + teammates line
-
-    // Tap = skip intro (no 3s wait when playing with friends).
-    overlay.onclick = () => {
+    // Tap-Handler ZUERST registrieren — egal was danach knallt, der Spieler
+    // kommt beim Tappen auf jeden Fall weiter (IRL-Freeze-Fix).
+    const dismiss = () => {
       window.clearTimeout(showRoleOverlay._t);
+      overlay.onclick = null;
       overlay.classList.add('hidden');
       beep(impostor ? 180 : 560);
     };
-
+    overlay.onclick = dismiss;
     window.clearTimeout(showRoleOverlay._t);
-    showRoleOverlay._t = window.setTimeout(() => {
-      overlay.classList.add('hidden');
-      beep(impostor ? 180 : 560);
-    }, ROLE_OVERLAY_MS);
+    showRoleOverlay._t = window.setTimeout(dismiss, ROLE_OVERLAY_MS);
+    try {
+      overlay.classList.remove('hidden');
+      $('role-card').className = impostor ? 'role-card impostor' : 'role-card crew';
+      $('role-card-title').textContent = impostor ? t('role.imp.title') : t('role.crew.title');
+      const mates = (payload.teammates ?? []).map((mate) => mate.name).join(', ');
+      $('role-card-detail').innerHTML = impostor
+        ? (mates
+          ? `${t('role.imp.line1')}<br><small>${t('game.partner')}: ${escapeHtml(mates)}</small>`
+          : `${t('role.imp.line1')}<br><small>${t('role.tap')}</small>`)
+        : `${t('role.crew.line1')} ${t('role.crew.and')}<br><small>${t('role.tap')}</small>`;
+      $('role-banner').classList.add('hidden');
+      $('btn-kill').classList.toggle('hidden', !impostor);
+      renderRole(payload); // task list build + flags + teammates line
+    } catch (error) {
+      // UI darf nie den Spieler einfrieren — Fehler sichtbar machen.
+      showJsError(error);
+    }
   }
 
   function renderRole(payload) {

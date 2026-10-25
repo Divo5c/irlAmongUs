@@ -657,6 +657,11 @@ button.round {
   border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 10px;
   font-weight: 600; }
 .gear-btn { position: relative; z-index: 45; pointer-events: auto; }
+/* Roter App-Fehler-Chip: sieht man, wenn JS irgendwo explodiert */
+#js-error-chip { position: fixed; top: 6px; left: 8px; right: 8px; z-index: 999;
+  background: rgba(153, 27, 27, 0.95); color: #fff; font-size: 11px;
+  font-family: monospace; padding: 6px 10px; border-radius: 8px;
+  white-space: normal; word-break: break-word; cursor: pointer; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
