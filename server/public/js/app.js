@@ -44,7 +44,7 @@ const App = (() => {
       'gps.waiting': 'Warte auf GPS-Signal …',
       'gps.lost': 'GPS-Signal verloren …',
       'gps.noapi': 'Dein Browser kennt keinen Standort (GPS) — du siehst deinen Marker nicht.',
-      'gps.noanchor': 'Karte ohne GPS-Anker — Host muss den Setz-Punkt neu einmessen.',
+      'gps.noanchor': 'Karte ohne GPS-Ursprung: \u2699\ufe0e Zahnrad oben rechts — „Setz-Punkt setzen" drücken, wenn du an der CAFETERIA stehst.',
       'map.waiting': 'Warte auf GPS …',
       'map.you': 'DU',
       'map.noTasks': 'Aktiv gerade keine Task',
@@ -114,7 +114,7 @@ const App = (() => {
       'gps.waiting': 'Waiting for GPS signal …',
       'gps.lost': 'GPS signal lost …',
       'gps.noapi': 'Your browser has no location support — you will not see your marker.',
-      'gps.noanchor': 'Map without GPS anchor — host must re-calibrate the origin point.',
+      'gps.noanchor': 'Map without GPS origin: \u2699\ufe0e gear icon top right — press "Set anchor" while standing where the CAFETERIA is on your map.',
       'map.waiting': 'Waiting for GPS …',
       'map.you': 'YOU',
       'map.noTasks': 'No active task right now',
@@ -1582,6 +1582,8 @@ const App = (() => {
     $('game-phase-hint').textContent = room.status === 'MEETING'
       ? t('phase.meeting')
       : `${t('game.alive')} ${aliveCount}`;
+    // Raumcode oben links (war "——" weil nie gesetzt).
+    $('game-code').textContent = state.code || '——';
   }
 
   function showToast(message) {
@@ -1665,6 +1667,34 @@ const App = (() => {
     if (best) openTask(best);
   });
 
+  // Setz-Punkt nachtragen (Host): Wenn die Karte ohne GPS-Anker gespeichert
+  // wurde (z. B. alter Cache), kann der Host im Spiel einmalig neu einmessen.
+  function refreshAnchorUi() {
+    const room = state.room;
+    const showBtn = !!room?.map && !Number.isFinite(room.map.anchor?.lat) && state.isHost
+      && room.status === 'IN_GAME';
+    $('btn-set-anchor').classList.toggle('hidden', !showBtn);
+    $('anchor-hint').classList.toggle('hidden', !showBtn);
+  }
+
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('#btn-set-anchor')) return;
+    if (!state.gpsFixAt) {
+      showToast('Kein GPS-Signal! Geh raus und warte, dann wieder dr\u00fccken.');
+      return;
+    }
+    const map = state.room?.map;
+    if (!map) return;
+    ensureSocket().emit('map:update', {
+      code: state.code,
+      map: {
+        ...map,
+        anchor: { lat: state.gpsFix.latitude, lon: state.gpsFix.longitude },
+      },
+    });
+    showToast('\ud83d\udcdb Setz-Punkt gespeichert \u2014 dein Marker erscheint mit dem n\u00e4chsten GPS-Fix.');
+  });
+
   // Einstellungs-Men\u00fc: DELEGATION auf Dokumentebene, damit der Zahnrad-
   // Button in keinem Fall verdeckt/blockiert sein kann (IRL-Bugfix).
   document.addEventListener('click', (event) => {
@@ -1675,6 +1705,7 @@ const App = (() => {
       $('opt-vibration').checked = optEnabled('rlaus_vibration', true);
       $('opt-show-bots').checked = optEnabled('rlaus_showBots', true);
       $('opt-lang').value = langActive();
+      refreshAnchorUi();
       $('settings-menu').classList.remove('hidden');
     } else if (target.id === 'btn-settings-close') {
       $('settings-menu').classList.add('hidden');
