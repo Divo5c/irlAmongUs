@@ -899,6 +899,12 @@ const App = (() => {
     $('cfg-cooldown').value = `${Math.round((cfg.killCooldownMs ?? 0) / 1000)}`;
     $('cfg-discuss').value = `${Math.round((cfg.discussionDurationMs ?? 0) / 1000)}`;
     $('cfg-vote').value = `${Math.round((cfg.votingDurationMs ?? 60_000) / 1000)}`;
+    $('cfg-emergency').value = `${cfg.emergencyMeetingsPerPlayer ?? 1}`;
+    $('cfg-boundary').value = `${cfg.boundaryWarnM ?? 10}`;
+    $('cfg-anonymous').checked = !!cfg.anonymousVoting;
+    $('cfg-confirm').checked = cfg.confirmEjects !== false;
+    $('cfg-taskbar').checked = cfg.taskbarAlways !== false;
+    state.taskbarAlways = cfg.taskbarAlways !== false;
   }
 
   $('cfg-apply').addEventListener('click', () => {
@@ -911,6 +917,11 @@ const App = (() => {
         killCooldownMs: Number($('cfg-cooldown').value) * 1000,
         discussionDurationMs: Number($('cfg-discuss').value) * 1000,
         votingDurationMs: Number($('cfg-vote').value) * 1000,
+        emergencyMeetingsPerPlayer: Number($('cfg-emergency').value),
+        boundaryWarnM: Number($('cfg-boundary').value),
+        anonymousVoting: $('cfg-anonymous').checked,
+        confirmEjects: $('cfg-confirm').checked,
+        taskbarAlways: $('cfg-taskbar').checked,
       },
     });
     beep(660);
@@ -993,6 +1004,12 @@ const App = (() => {
     const pct = total ? Math.round((progress.completed / total) * 100) : 0;
     const strip = document.getElementById('task-progress-strip');
     if (!strip) return;
+    // Host kann den Balken komplett verstecken (Info-Control-Knopf).
+    if (state.taskbarAlways === false) {
+      strip.style.display = 'none';
+      return;
+    }
+    strip.style.display = '';
     const before = document.getElementById('task-progress-fill').style.width;
     // COMMS gest\u00f6rt: Crew kann den Team-Fortschritt nicht sehen.
     const commsBlind = room.sabotage?.type === 'COMMS' && state.role?.role !== 'IMPOSTOR';

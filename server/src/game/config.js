@@ -21,6 +21,8 @@ const DEFAULT_GAME_CONFIG = Object.freeze({
   boundaryWarnM: 4,
   // Notfall-Button: pro Spieler brauchbar la rueda (Cafeteria).
   emergencyMeetingsPerPlayer: 1,
+  // False = der Team-Task-Balken bleibt fuer ALLE versteckt (Mehr Info-Hide).
+  taskbarAlways: true,
 });
 
 const NUMERIC_BOUNDS = Object.freeze({
@@ -35,7 +37,7 @@ const NUMERIC_BOUNDS = Object.freeze({
 });
 
 const NUMERIC_KEYS = Object.freeze(Object.keys(NUMERIC_BOUNDS));
-const BOOLEAN_KEYS = Object.freeze(['confirmEjects', 'anonymousVoting']);
+const BOOLEAN_KEYS = Object.freeze(['confirmEjects', 'anonymousVoting', 'taskbarAlways']);
 
 /**
  * Upper bound for the impostor count given a player count:

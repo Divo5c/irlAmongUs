@@ -657,6 +657,23 @@ button.round {
   border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 10px;
   font-weight: 600; }
 .gear-btn { position: relative; z-index: 45; pointer-events: auto; }
+
+/* Regel-Panels im Lobby-Stil (Among-Us-Tabs) */
+.rules-panels { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.rules-group { position: relative; padding: 14px 4px 6px; border-radius: 12px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }
+.rules-tab { margin: -24px 0 8px 12px; display: inline-block; padding: 4px 16px;
+  border-radius: 10px 10px 0 0; background: rgba(255,255,255,0.1);
+  font-size: 12px; letter-spacing: 2px; color: rgba(255,255,255,0.85);
+  font-style: italic; font-weight: 700; }
+.settings-grid { display: flex; flex-direction: column; gap: 8px; }
+.settings-grid > label { display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: rgba(255,255,255,0.8); }
+.settings-grid > label select { margin-left: auto; min-width: 88px; }
+.settings-toggle-inline { padding: 8px 10px; border-radius: 10px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); }
+.settings-toggle-inline span { flex: 1; }
+.settings-toggle-inline input { width: 20px; height: 20px; accent-color: #4ade80; }
 /* Roter App-Fehler-Chip: sieht man, wenn JS irgendwo explodiert */
 #js-error-chip { position: fixed; top: 6px; left: 8px; right: 8px; z-index: 999;
   background: rgba(153, 27, 27, 0.95); color: #fff; font-size: 11px;
