@@ -648,6 +648,15 @@ button.round {
   cursor: pointer; box-shadow: 0 8px 22px rgba(185, 28, 28, 0.4);
   animation: leave-pulse 2s infinite; }
 @keyframes leave-pulse { 50% { box-shadow: 0 8px 30px rgba(239, 68, 68, 0.55); } }
+/* GPS-Status-Zeile im Spiel: rotes Fix-Banner, nur wenn GPS fehlt */
+.gps-status { position: fixed; top: 46px; left: 10px; right: 10px; z-index: 40;
+  background: rgba(127, 29, 29, 0.94); color: #fff; font-weight: 700;
+  font-size: 12px; padding: 8px 12px; border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4); text-align: center; }
+.lang-select { margin-left: auto; background: rgba(255,255,255,0.1); color: #fff;
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 10px;
+  font-weight: 600; }
+.gear-btn { position: relative; z-index: 45; pointer-events: auto; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

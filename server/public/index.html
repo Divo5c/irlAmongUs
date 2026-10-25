@@ -151,16 +151,17 @@
     </div>
     <div id="role-banner" class="role-crew hidden">DU BIST CREWMATE</div>
     <div id="teammates" class="hint hidden"></div>
+    <div id="gps-status" class="gps-status hidden"></div>
     <div id="live-map-wrap">
       <canvas id="game-map"></canvas>
       <div id="sabotage-banner" class="hidden"></div>
       <div id="boundary-banner" class="hidden">Geh zur&uuml;ck ins Spielfeld!</div>
     </div>
     <div class="game-actions">
-      <button id="btn-report" class="round-btn report" disabled>Report</button>
-      <button id="btn-use" class="round-btn use hidden" disabled>Use</button>
-      <button id="btn-sabotage" class="round-btn sabotage hidden" disabled>Sabotage</button>
-      <button id="btn-kill" class="round-btn kill hidden">Kill</button>
+      <button id="btn-report" class="round-btn report" disabled data-i18n="btn.report">Report</button>
+      <button id="btn-use" class="round-btn use hidden" disabled data-i18n="btn.use">Use</button>
+      <button id="btn-sabotage" class="round-btn sabotage hidden" disabled data-i18n="btn.sabotage">Sabotage</button>
+      <button id="btn-kill" class="round-btn kill hidden" data-i18n="btn.kill">Kill</button>
     </div>
     <details id="taskbox">
       <summary>Deine Tasks (<span id="task-count">0</span>)</summary>
@@ -183,33 +184,40 @@
     <div id="settings-menu" class="task-overlay hidden">
       <div class="task-card settings-card">
         <div class="task-head">
-          <div class="task-title">Einstellungen</div>
+          <div class="task-title" data-i18n="settings.title">Einstellungen</div>
           <button id="btn-settings-close" class="task-close">&#10005;</button>
         </div>
         <div class="settings-body">
           <label class="settings-toggle">
             <input type="checkbox" id="opt-sound" checked>
-            <span>Sound &amp; Klingeltöne</span>
+            <span data-i18n="settings.sound">Sound &amp; Klingeltöne</span>
           </label>
           <label class="settings-toggle">
             <input type="checkbox" id="opt-vibration" checked>
-            <span>Vibration</span>
+            <span data-i18n="settings.vibration">Vibration</span>
           </label>
           <label class="settings-toggle">
             <input type="checkbox" id="opt-show-bots" checked>
-            <span>Bot-Positionen auf der Karte</span>
+            <span data-i18n="settings.bots">Bot-Positionen auf der Karte</span>
           </label>
-          <button id="btn-leave-from-menu" class="danger-big">Verlassen</button>
-          <p class="hint" id="settings-note">Verlassen beendet die Verbindung. Die Lobby l\u00e4uft weiter.</p>
+          <label class="settings-toggle">
+            <span data-i18n="settings.lang">Sprache</span>
+            <select id="opt-lang" class="lang-select">
+              <option value="de">Deutsch</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+          <button id="btn-leave-from-menu" class="danger-big" data-i18n="btn.leave">Verlassen</button>
+          <p class="hint" id="settings-note" data-i18n="settings.note">Verlassen beendet die Verbindung. Die Lobby läuft weiter.</p>
         </div>
       </div>
     </div>
   </section>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.4"></script>
-  <script src="/js/mapEditor.js?v=19.4"></script>
-  <script src="/js/tasks.js?v=19.4"></script>
-  <script src="/js/app.js?v=19.4"></script>
+  <script src="/js/osm.js?v=19.5"></script>
+  <script src="/js/mapEditor.js?v=19.5"></script>
+  <script src="/js/tasks.js?v=19.5"></script>
+  <script src="/js/app.js?v=19.5"></script>
 </body>
 </html>

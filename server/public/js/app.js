@@ -8,6 +8,172 @@
 const App = (() => {
   const $ = (id) => document.getElementById(id);
 
+  // ------------------------------------------------------- i18n (DE/EN) //
+  const I18N = {
+    de: {
+      // Rollen-Karte
+      'role.crew.title': 'CREWMATE',
+      'role.crew.line1': 'Erledige alle Tasks',
+      'role.crew.and': 'und finde den Impostor!',
+      'role.imp.title': 'IMPOSTOR',
+      'role.imp.line1': 'Sabotiere und töte heimlich.',
+      'role.tap': 'Tippe zum Fortfahren',
+      'banner.crew': 'DU BIST CREWMATE',
+      'banner.imp': 'DU BIST IMPOSTOR',
+      // Spielstatus
+      'phase.prepare': 'Lobby',
+      'phase.in_game': 'Runde läuft',
+      'phase.meeting': 'Meeting',
+      'phase.game_over': 'Spiel vorbei',
+      // Buttons
+      'btn.report': 'Report',
+      'btn.use': 'Use',
+      'btn.sabotage': 'Sabotage',
+      'btn.kill': 'Kill',
+      'btn.leave': 'Runde verlassen',
+      'settings.title': 'Einstellungen',
+      'settings.sound': 'Sounds & Klingeltöne',
+      'settings.vibration': 'Vibration',
+      'settings.bots': 'Bot-Positionen anzeigen',
+      'settings.lang': 'Sprache',
+      'settings.note': 'Verlassen beendet die Verbindung. Die Lobby läuft weiter.',
+      // GPS / Karte
+      'gps.denied': 'Standort ist blockiert! Erlaube GPS für diese Seite (Browser-Einstellungen), sonst siehst du dich nicht.',
+      'gps.unavailable': 'Kein GPS-Empfang — geh nach draußen oder warte.',
+      'gps.waiting': 'Warte auf GPS-Signal …',
+      'gps.lost': 'GPS-Signal verloren …',
+      'gps.noapi': 'Dein Browser kennt keinen Standort (GPS) — du siehst deinen Marker nicht.',
+      'gps.noanchor': 'Karte ohne GPS-Anker — Host muss den Setz-Punkt neu einmessen.',
+      'map.waiting': 'Warte auf GPS …',
+      'map.you': 'DU',
+      'map.noTasks': 'Aktiv gerade keine Task',
+      // Tasks
+      'tasks.summary': 'Deine Tasks',
+      'comms.down': 'Kommunikation gest\u00f6rt \u2014 keine Taskdaten!',
+      'tasks.done': 'erledigt',
+      'tasks.stage': 'Stufe',
+      'tasks.next': 'Danach',
+      'tasks.open': 'Tippe auf den Marker auf der Karte',
+      // Meeting
+      'meeting.title': 'Notfall-Meeting',
+      'meeting.voteTitle': 'Abstimmung',
+      'meeting.vote': 'Auf wen stimmst du?',
+      'meeting.skip': 'Überspringen',
+      'meeting.count': 'Abstimmen:',
+      // Gameover
+      'over.title': 'Spiel vorbei',
+      // Toasts
+      'toast.outside': 'Du bist außerhalb des Spielfelds! Komm zurück, sonst zählt die Runde nicht.',
+      'toast.taskdone': 'Task erledigt!',
+      'toast.stageNext': 'Nächster Stufenort:',
+      'toast.taskNear': 'Task-Marker in Reichweite',
+      'toast.noMoveYet': 'Beweg dich erst, dann kannst du reporten.',
+      'game.out': 'Du bist raus',
+      'game.ejected': 'wurde rausgewählt.',
+      'game.ejectedSkip': 'Niemand wurde rausgewählt (Skip).',
+      'map.back': 'Geh zurück aufs Spielfeld!',
+      'map.warning': 'Warnung',
+      'map.adminOut': 'ist so weit draußen:',
+      'game.youKilled': 'Du wurdest eliminiert! Beobachte weiter — Report geht als Geist.',
+      'game.someoneKilled': 'Jemand wurde eliminiert. Halte die Augen offen!',
+      'game.alive': 'Lebende Spieler:',
+      'game.someoneKilled': 'Jemand wurde eliminiert. Halte die Augen offen!',
+      'sab.reactor': '2 Crewmates müssen zusammen im Reactor fixen!',
+      'sab.o2': 'Sauerstoff! Fix in O2',
+      'sab.lights': 'Lichter aus — Leichen werden nicht gefunden. Fix in ELECTRICAL!',
+      'sab.comms': 'COMMS gestört — Taskliste deaktiviert. Fix in COMMUNICATIONS!',
+    },
+    en: {
+      'role.crew.title': 'CREWMATE',
+      'role.crew.line1': 'Complete all your tasks',
+      'role.crew.and': 'and find the impostor!',
+      'role.imp.title': 'IMPOSTOR',
+      'role.imp.line1': 'Sabotage and kill secretly.',
+      'role.tap': 'Tap to continue',
+      'banner.crew': 'YOU ARE A CREWMATE',
+      'banner.imp': 'YOU ARE THE IMPOSTOR',
+      'phase.prepare': 'Lobby',
+      'phase.in_game': 'Round in progress',
+      'phase.meeting': 'Meeting',
+      'phase.game_over': 'Game over',
+      'btn.report': 'Report',
+      'btn.use': 'Use',
+      'btn.sabotage': 'Sabotage',
+      'btn.kill': 'Kill',
+      'btn.leave': 'Leave round',
+      'settings.title': 'Settings',
+      'settings.sound': 'Sounds & ringtones',
+      'settings.vibration': 'Vibration',
+      'settings.bots': 'Show bot positions',
+      'settings.lang': 'Language',
+      'settings.note': 'Leaving ends your connection. The lobby keeps running.',
+      'gps.denied': 'Location is blocked! Allow GPS for this page (browser settings), otherwise you will not see yourself.',
+      'gps.unavailable': 'No GPS reception — go outside or wait.',
+      'gps.waiting': 'Waiting for GPS signal …',
+      'gps.lost': 'GPS signal lost …',
+      'gps.noapi': 'Your browser has no location support — you will not see your marker.',
+      'gps.noanchor': 'Map without GPS anchor — host must re-calibrate the origin point.',
+      'map.waiting': 'Waiting for GPS …',
+      'map.you': 'YOU',
+      'map.noTasks': 'No active task right now',
+      'tasks.summary': 'Your tasks',
+      'comms.down': 'Communications sabotaged \u2014 no task data!',
+      'tasks.done': 'completed',
+      'tasks.stage': 'Stage',
+      'tasks.next': 'Next',
+      'tasks.open': 'Tap the marker on the map',
+      'meeting.title': 'Emergency meeting',
+      'meeting.voteTitle': 'Vote',
+      'meeting.vote': 'Who do you vote for?',
+      'meeting.skip': 'Skip vote',
+      'meeting.count': 'Voting:',
+      'over.title': 'Game over',
+      'toast.outside': 'You are outside the play area! Come back or the round will not count.',
+      'toast.taskdone': 'Task completed!',
+      'toast.stageNext': 'Next stage location:',
+      'toast.taskNear': 'Task marker within range',
+      'toast.noMoveYet': 'Move first before you can report.',
+      'game.out': 'You are out',
+      'game.ejected': 'was voted out.',
+      'game.ejectedSkip': 'Nobody was voted out (skipped).',
+      'map.back': 'Back to the play area!',
+      'map.warning': 'Warning',
+      'map.adminOut': 'is this far outside:',
+      'game.youKilled': 'You were eliminated! Keep watching — you can report as a ghost.',
+      'game.someoneKilled': 'Someone was eliminated. Keep your eyes open!',
+      'game.alive': 'Players alive:',
+      'game.someoneKilled': 'Someone was eliminated. Keep your eyes open!',
+      'sab.reactor': '2 crewmates must fix it together in the reactor!',
+      'sab.o2': 'Oxygen! Fix at O2',
+      'sab.lights': 'Lights out — bodies will not be found. Fix in ELECTRICAL!',
+      'sab.comms': 'COMMS sabotaged — task list disabled. Fix in COMMUNICATIONS!',
+    },
+  };
+
+  function langActive() {
+    return localStorage.getItem('rlaus_lang') === 'en' ? 'en' : 'de';
+  }
+  /** Übersetzung: fehlt ein Key, fällt EN auf DE zurück (nie leeres UI). */
+  function t(key) {
+    return I18N[langActive()][key] ?? I18N.de[key] ?? key;
+  }
+  /** Statische Texte im HTML tauschen (data-i18n Attribute). */
+  function applyStaticI18n() {
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      el.textContent = t(el.dataset.i18n);
+    });
+    document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+      el.placeholder = t(el.dataset.i18nPh);
+    });
+  }
+  function setLang(lang) {
+    localStorage.setItem('rlaus_lang', lang === 'en' ? 'en' : 'de');
+    applyStaticI18n();
+    renderGameHud();
+    drawGameMap();
+  }
+  applyStaticI18n();
+
   const screens = {
     home: $('screen-home'),
     lobby: $('screen-lobby'),
@@ -221,13 +387,13 @@ const App = (() => {
     });
     socket.on('game:boundary_warning', ({ distanceM, limitM, strikes }) => {
       const banner = $('boundary-banner');
-      banner.textContent = `Geh zur\u00fcck aufs Spielfeld! (${Math.round(distanceM)}m > ${Math.round(limitM)}m) Warnung ${strikes}/3`;
+      banner.textContent = `${t('map.back')} (${Math.round(distanceM)}m > ${Math.round(limitM)}m) ${t('map.warning')} ${strikes}/3`;
       banner.classList.remove('hidden');
       vibrate([60, 40, 60, 40, 120]);
     });
     socket.on('admin:player_out_of_bounds', ({ name, distanceM }) => {
       const banner = $('boundary-banner');
-      banner.textContent = `ADMIN: ${name} ist ${Math.round(distanceM)}m drau\u00dfen!`;
+      banner.textContent = `ADMIN: ${name} ${t('map.adminOut')} ${Math.round(distanceM)}m!`;
       banner.classList.remove('hidden');
       vibrate([200, 100, 200]);
     });
@@ -246,29 +412,29 @@ const App = (() => {
       beep(200, 320);
       vibrate([200, 80, 200]);
       if (killedPlayerId === state.playerId) {
-        $('game-phase-hint').textContent = 'Du wurdest eliminiert! Beobachte weiter — Report geht als Geist.';
+        $('game-phase-hint').textContent = t('game.youKilled');
       } else {
-        $('game-phase-hint').textContent = 'Jemand wurde eliminiert. Halte die Augen offen!';
+        $('game-phase-hint').textContent = t('game.someoneKilled');
       }
     });
     socket.on('game:meeting_started', (payload) => renderMeeting(payload));
     socket.on('game:voting_started', ({ votingDeadline }) => {
-      $('meeting-title').textContent = 'Abstimmung!';
+      $('meeting-title').textContent = t('meeting.voteTitle');
       $('meeting-hint').textContent = deadlineText(votingDeadline);
     });
     socket.on('game:vote_progress', ({ votedCount, totalVoters }) => {
-      $('meeting-hint').textContent = `Abstimmen: ${votedCount}/${totalVoters}`;
+      $('meeting-hint').textContent = `${t('meeting.count')} ${votedCount}/${totalVoters}`;
     });
     socket.on('game:meeting_result', ({ ejectedPlayerId, ejectedPlayerName, status }) => {
       $('meeting-overlay').classList.add('hidden');
       state.voted = false;
       if (ejectedPlayerId === state.playerId) {
-        $('role-banner').textContent = 'Du bist raus (bot)';
+        $('role-banner').textContent = t('game.out');
         vibrate([120, 60, 120]);
       } else if (ejectedPlayerName) {
-        $('game-phase-hint').textContent = `${ejectedPlayerName} wurde rausgew\u00e4hlt.`;
+        $('game-phase-hint').textContent = `${ejectedPlayerName} ${t('game.ejected')}`;
       } else {
-        $('game-phase-hint').textContent = 'Niemand wurde rausgew\u00e4hlt (Skip).';
+        $('game-phase-hint').textContent = t('game.ejectedSkip');
       }
       if (status === 'GAME_OVER') stopGpsLoop();
       else if (status === 'IN_GAME') ensureGpsLoop();
@@ -734,13 +900,13 @@ const App = (() => {
     const overlay = $('role-overlay');
     const impostor = payload.role === 'IMPOSTOR';
     $('role-card').className = impostor ? 'role-card impostor' : 'role-card crew';
-    $('role-card-title').textContent = impostor ? 'IMPOSTOR' : 'CREWMATE';
+    $('role-card-title').textContent = impostor ? t('role.imp.title') : t('role.crew.title');
     const mates = (payload.teammates ?? []).map((t) => t.name).join(', ');
-    $('role-card-detail').textContent = impostor
-      ? mates
-        ? `Dein Partner: ${mates}`
-        : 'Du arbeitest allein.'
-      : `${payload.tasks?.length ?? 0} Tasks warten \u2014 Fake-Tasks f\u00fcr Impostoren z\u00e4hlen nicht.`;
+    $('role-card-detail').innerHTML = impostor
+      ? (mates
+        ? `${t('role.imp.line1')}<br><small>Partner: ${mates}</small>`
+        : `${t('role.imp.line1')}<br><small>${t('role.tap')}</small>`)
+      : `${t('role.crew.line1')} ${t('role.crew.and')}<br><small>${t('role.tap')}</small>`;
     overlay.classList.remove('hidden');
     $('role-banner').classList.add('hidden');
     $('btn-kill').classList.toggle('hidden', !impostor);
@@ -779,8 +945,8 @@ const App = (() => {
       const li = document.createElement('li');
       li.className = 'task-item';
       li.dataset.taskId = task.id;
-      li.innerHTML = `<span>${escapeHtml(task.title)}</span>` +
-        (task.roomName ? `<small>${escapeHtml(task.roomName)}${task.stages?.length > 1 ? ` \u2022 Stufe ${(task.stageIndex ?? 0) + 1}` : ''}</small>` : '');
+      li.innerHTML = `<span>${TASK_ICONS[task.type] ?? '\u{1F4DD}'} ${escapeHtml(task.title)}</span>` +
+        (task.roomName ? `<small>${escapeHtml(task.roomName)}${task.stages?.length > 1 ? ` \u2022 ${t('tasks.stage')} ${(task.stageIndex ?? 0) + 1}` : ''}</small>` : '');
       li.addEventListener('click', () => openTask(task));
       list.appendChild(li);
     }
@@ -823,8 +989,8 @@ const App = (() => {
     const taskbox = $('taskbox');
     const commsBlind = commsDown && notImpostor;
     taskbox.querySelector('summary').textContent = commsBlind
-      ? 'Kommunikation gest\u00f6rt \u2014 keine Taskdaten!'
-      : `Deine Tasks (${state.tasks?.filter((t) => !t.completed).length ?? 0})`;
+      ? t('comms.down')
+      : `${t('tasks.summary')} (${state.tasks?.filter((x) => !x.completed).length ?? 0})`;
     $('task-list').style.display = commsBlind ? 'none' : '';
     const bodies = state.nearbyBodies ?? [];
     const reportBtn = $('btn-report');
@@ -1026,8 +1192,9 @@ const App = (() => {
     return allowed;
   };
   setInterval(renderGameHud, 500);
-  // Selbst-Marker-Puls: weiche Dauerwelle auf der Karte.
+  // Selbst-Marker-Puls: weiche Dauerwelle auf der Karte + GPS-Status.
   setInterval(() => {
+    renderGpsStatus();
     if (state.room?.status === 'IN_GAME') drawGameMap();
   }, 800);
 
@@ -1043,15 +1210,15 @@ const App = (() => {
     }
     const remaining = Math.max(0, Math.round((Date.parse(sab.deadline) - Date.now()) / 1000));
     if (sab.type === 'REACTOR' && sab.deadline) {
-      banner.textContent = `\u2622\uFE0F REACTOR MELTDOWN \u2014 2 Crewmates m\u00fcssen zusammen im Reactor fixen! ${remaining}s`;
+      banner.textContent = `\u2622\uFE0F REACTOR MELTDOWN \u2014 ${t('sab.reactor')} ${remaining}s`;
     } else if (sab.type === 'O2' && sab.deadline) {
       const o2 = sab.panels?.o2 ? '\u2705' : '\u274C';
       const admin = sab.panels?.admin ? '\u2705' : '\u274C';
-      banner.textContent = `\u26A0\uFE0F Sauerstoff! Fix in O2 ${o2} + Admin ${admin} \u2014 ${remaining}s`;
+      banner.textContent = `\u26A0\uFE0F ${t('sab.o2')} ${o2} + Admin ${admin} \u2014 ${remaining}s`;
     } else if (sab.type === 'LIGHTS') {
-      banner.textContent = '\u{1F4A1} Lichter aus \u2014 Leichen werden nicht gefunden. Fix in ELECTRICAL!';
+      banner.textContent = `\u{1F4A1} ${t('sab.lights')}`;
     } else if (sab.type === 'COMMS') {
-      banner.textContent = '\u{1F4E1} COMMS gest\u00f6rt \u2014 Taskliste deaktiviert. Fix in COMMUNICATIONS!';
+      banner.textContent = `\u{1F4E1} ${t('sab.comms')}`;
     } else {
       return;
     }
@@ -1084,7 +1251,31 @@ const App = (() => {
     navigator.geolocation.watchPosition((pos) => {
       state.gpsFix = pos.coords;
       state.gpsFixAt = Date.now();
-    }, () => {}, { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
+      state.gpsError = null;
+    }, (err) => {
+      // Kein stillschweigendes Schlucken mehr: der Spieler sieht WARUM
+      // sein Marker fehlt (Berechtigung verweigert / kein Fix / Timeout).
+      state.gpsError = err?.code === 1 ? 'denied'
+        : err?.code === 2 ? 'unavailable' : 'waiting';
+    }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
+  }
+
+  /** GPS-Hinweiszeile im Spiel: nur sichtbar, wenn etwas nicht stimmt. */
+  function renderGpsStatus() {
+    const el = document.getElementById('gps-status');
+    if (!el) return;
+    const inGame = state.room?.status === 'IN_GAME';
+    if (!inGame) { el.classList.add('hidden'); return; }
+    const proj = projectorFor();
+    let msg = null;
+    if (!('geolocation' in navigator)) msg = t('gps.noapi');
+    else if (state.gpsError === 'denied') msg = t('gps.denied');
+    else if (state.gpsError === 'unavailable') msg = t('gps.unavailable');
+    else if (!state.gpsFixAt) msg = t('gps.waiting');
+    else if (!proj) msg = t('gps.noanchor');
+    else if (Date.now() - state.gpsFixAt > 10000) msg = t('gps.lost');
+    if (msg) { el.textContent = `\ud83d\udcdb ${msg}`; el.classList.remove('hidden'); }
+    else el.classList.add('hidden');
   }
 
   function stopGpsLoop() {
@@ -1117,7 +1308,33 @@ const App = (() => {
     });
   }
 
-  // --------------------------------------------------------- live map draw //
+  // Icon je Task-Typ — der Marker auf der Karte zeigt das Symbol statt
+  // einer Nummer, die Task-Liste nutzt dasselbe Icon (wiedererkennbar).
+  const TASK_ICONS = {
+    fix_wiring: '\u{1F50C}',
+    swipe_card: '\u{1F4B3}',
+    upload_data: '\u{1F4E4}',
+    calibrate_distributor: '\u2699\uFE0F',
+    start_reactor: '\u2622\uFE0F',
+    unlock_manifolds: '\u{1F513}',
+    enter_id_code: '\u{1F194}',
+    reset_breakers: '\u26A1',
+    chart_course: '\u{1F5FA}\uFE0F',
+    clean_o2_filter: '\u{1F343}',
+    empty_garbage: '\u{1F5D1}\uFE0F',
+    divert_power: '\u{1F500}',
+    align_engine_output: '\u{1F4CF}',
+    stabilize_steering: '\u{1F3AF}',
+    clear_asteroids: '\u2604\uFE0F',
+    prime_shields: '\u{1F6E1}\uFE0F',
+    inspect_sample: '\u{1F9EA}',
+    submit_scan: '\u{1FA7A}',
+    fuel_engines: '\u26FD',
+    align_engine: '\u{1F4CF}',
+    align_engine_output: '\u{1F4CF}',
+  };
+
+  // -------------------------------------------------------- live map draw //
 
   function drawGameMap() {
     const canvas = $('game-map');
@@ -1211,19 +1428,36 @@ const App = (() => {
         const wedge = waypoints[(taskIdx * 7) % waypoints.length];
         [tx, ty] = toPx(wedge.x + (taskIdx % 3) * 6, wedge.y);
       }
-      ctx.fillStyle = '#ffd166';
+      const icon = TASK_ICONS[task.type] ?? '\u{1F4DD}';
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+      ctx.fillStyle = `rgba(255,209,102,${0.35 + 0.25 * pulse})`;
       ctx.beginPath();
-      ctx.arc(tx, ty, 9, 0, Math.PI * 2);
+      ctx.arc(tx, ty, 16, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#1c1204';
-      ctx.font = 'bold 12px system-ui';
+      ctx.fillStyle = '#ffd166';
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = '13px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText(String(taskIdx + 1), tx, ty + 4);
+      ctx.fillText(icon, tx, ty + 4.5);
       ctx.textAlign = 'left';
       taskHits.push({ x: tx, y: ty, task });
       taskIdx += 1;
     }
     state._taskHits = taskHits;
+
+    // Kein eigener Fix: deutlicher Hinweis mitten auf der Karte.
+    if (!state.selfPos?.x && !commsBlind) {
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.font = 'bold 14px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(t('map.waiting'), canvas.width / 2, 30);
+      ctx.textAlign = 'left';
+    }
 
     // Bots (nur virtuelle Bewohner): hellblaue Pinguin-Dots mit Namen.
     if (showBotsEnabled()) {
@@ -1317,8 +1551,8 @@ const App = (() => {
     if (!state.role) return;
     const aliveCount = room.players.filter((p) => p.isAlive).length;
     $('game-phase-hint').textContent = room.status === 'MEETING'
-      ? 'Meeting l\u00e4uft'
-      : `Lebende Spieler: ${aliveCount}`;
+      ? t('phase.meeting')
+      : `${t('game.alive')} ${aliveCount}`;
   }
 
   function showToast(message) {
@@ -1402,38 +1636,44 @@ const App = (() => {
     if (best) openTask(best);
   });
 
-  $('btn-leave-from-menu').addEventListener('click', () => {
-    $('settings-menu').classList.add('hidden');
-    state.role = null;
-    state.teammates = [];
-    state.socket?.disconnect();
-    state.socket = null;
-    state.room = null;
-    state.selfPos = null;
-    state.botPositions = null;
-    localStorage.removeItem('rlaus_session');
-    show('home');
+  // Einstellungs-Men\u00fc: DELEGATION auf Dokumentebene, damit der Zahnrad-
+  // Button in keinem Fall verdeckt/blockiert sein kann (IRL-Bugfix).
+  document.addEventListener('click', (event) => {
+    const target = event.target.closest('#btn-settings, #btn-settings-close, #btn-leave-from-menu');
+    if (!target) return;
+    if (target.id === 'btn-settings') {
+      $('opt-sound').checked = optEnabled('rlaus_sound', true);
+      $('opt-vibration').checked = optEnabled('rlaus_vibration', true);
+      $('opt-show-bots').checked = optEnabled('rlaus_showBots', true);
+      $('opt-lang').value = langActive();
+      $('settings-menu').classList.remove('hidden');
+    } else if (target.id === 'btn-settings-close') {
+      $('settings-menu').classList.add('hidden');
+    } else if (target.id === 'btn-leave-from-menu') {
+      $('settings-menu').classList.add('hidden');
+      state.role = null;
+      state.teammates = [];
+      state.socket?.disconnect();
+      state.socket = null;
+      state.room = null;
+      state.selfPos = null;
+      state.botPositions = null;
+      localStorage.removeItem('rlaus_session');
+      show('home');
+    }
   });
-
-  // Einstellungs-Men\u00fc: pers\u00f6nliche Optionen + Verlassen-Button.
-  $('btn-settings').addEventListener('click', () => {
-    $('opt-sound').checked = optEnabled('rlaus_sound', true);
-    $('opt-vibration').checked = optEnabled('rlaus_vibration', true);
-    $('opt-show-bots').checked = optEnabled('rlaus_showBots', true);
-    $('settings-menu').classList.remove('hidden');
-  });
-  $('btn-settings-close').addEventListener('click', () => {
-    $('settings-menu').classList.add('hidden');
-  });
-  $('opt-sound').addEventListener('change', (event) => {
-    localStorage.setItem('rlaus_sound', event.target.checked ? '1' : '0');
-  });
-  $('opt-vibration').addEventListener('change', (event) => {
-    localStorage.setItem('rlaus_vibration', event.target.checked ? '1' : '0');
-  });
-  $('opt-show-bots').addEventListener('change', (event) => {
-    localStorage.setItem('rlaus_showBots', event.target.checked ? '1' : '0');
-    drawGameMap();
+  document.addEventListener('change', (event) => {
+    const id = event.target.id;
+    if (id === 'opt-sound') {
+      localStorage.setItem('rlaus_sound', event.target.checked ? '1' : '0');
+    } else if (id === 'opt-vibration') {
+      localStorage.setItem('rlaus_vibration', event.target.checked ? '1' : '0');
+    } else if (id === 'opt-show-bots') {
+      localStorage.setItem('rlaus_showBots', event.target.checked ? '1' : '0');
+      drawGameMap();
+    } else if (id === 'opt-lang') {
+      setLang(event.target.value);
+    }
   });
   $('btn-rematch').addEventListener('click', () => {
     ensureSocket().emit('game:reset', { code: state.code });
@@ -1446,7 +1686,7 @@ const App = (() => {
   function renderMeeting({ phase, reporterId, discussionDeadline }) {
     $('gameover-overlay').classList.add('hidden');
     $('meeting-overlay').classList.remove('hidden');
-    $('meeting-title').textContent = phase === 'DISCUSSION' ? 'Notfall-Meeting' : 'Abstimmung';
+    $('meeting-title').textContent = phase === 'DISCUSSION' ? t('meeting.title') : t('meeting.voteTitle');
     $('meeting-hint').textContent =
       reporterId === state.playerId
         ? 'Du hast gemeldet! Diskutieren\u2026'
