@@ -1210,7 +1210,8 @@ const App = (() => {
     document.body.appendChild(overlay);
   }
 
-  sabotageTypesAvailable = () => {
+  /** Sabotage-Typen, die die aktuelle Karte hergibt (React/O2/EC/COMMS). */
+  function sabotageTypesAvailable() {
     const types = (state.room?.map?.rooms ?? []).map((room) => room.type);
     const allowed = [];
     if (types.includes('REACTOR')) allowed.push('REACTOR');
@@ -1218,7 +1219,7 @@ const App = (() => {
     if (types.includes('ELECTRICAL')) allowed.push('LIGHTS');
     if (types.includes('COMMUNICATIONS')) allowed.push('COMMS');
     return allowed;
-  };
+  }
   setInterval(renderGameHud, 500);
   // Selbst-Marker-Puls: weiche Dauerwelle auf der Karte + GPS-Status.
   setInterval(() => {
