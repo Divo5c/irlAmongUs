@@ -1464,7 +1464,7 @@ const App = (() => {
     // 1 = NAH (2.4x, zentriert auf dich — folgt dir beim Laufen).
     state.mapZoomIdx = Number(localStorage.getItem('rlaus_mapZoom')) === 1 ? 1 : 0;
     const zoomed = state.mapZoomIdx === 1;
-    let minX; let minY; let scale;
+    let minX; let minY; let maxX = 0; let maxY = 0; let scale;
     if (zoomed && state.selfPos?.x != null) {
       const z = 2.4;
       scale = fitScale * z;
