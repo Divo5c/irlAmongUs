@@ -7,7 +7,7 @@ const {
   sanitizeGameConfig,
 } = require('../game/config');
 const { createTasks, groupTasksByPlayer } = require('../game/taskCatalog');
-const { evaluateVictory } = require('../game/victory');
+const { evaluateVictory, evaluateVictoryDetailed } = require('../game/victory');
 const { sanitizeGameMap, validateForSave } = require('../game/map');
 const {
   sanitizePositionEstimate,
@@ -144,6 +144,18 @@ class RoomStore {
     return this.#roomsByCode.get(code) ?? null;
   }
 
+  /** All active codes (watchdogs/health checks iterate rooms safely). */
+  listCodes() {
+    return [...this.#roomsByCode.keys()];
+  }
+
+  /** Why would the game end right now? (UI explains crew win after kill) */
+  getVictoryDetails(code) {
+    const room = this.getRoom(code);
+    if (!room) return null;
+    return evaluateVictoryDetailed({ players: room.players, tasks: room.tasks ?? [] });
+  }
+
   getRequiredRoom(code) {
     const room = this.getRoom(code);
     if (!room) {
@@ -180,6 +192,9 @@ class RoomStore {
       ...this.#publicMeetingInfo(room),
       ...this.#publicKillInfo(room),
       ...this.#publicSabotageInfo(room),
+      ...(room.sabotageCooldownUntil
+        ? { sabotageCooldownUntil: room.sabotageCooldownUntil }
+        : {}),
       taskProgress: getTaskProgress(room),
       createdAt: room.createdAt,
       updatedAt: room.updatedAt,
@@ -272,7 +287,7 @@ class RoomStore {
     if (!joinable) {
       throw new GameError(
         'ROOM_NOT_JOINABLE',
-        'This game has already started; joining is only possible before it begins.',
+        'Dieses Spiel ist schon im Gange \u2014 beitreten geht nur vor dem Start.',
       );
     }
 

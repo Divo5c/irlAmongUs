@@ -190,9 +190,10 @@
     <div id="role-banner" class="role-crew hidden">DU BIST CREWMATE</div>
     <div id="teammates" class="hint hidden"></div>
     <div id="gps-status" class="gps-status hidden"></div>
+    <div id="sabotage-banner-line"><div id="sabotage-banner" class="hidden"></div></div>
     <div id="live-map-wrap">
       <canvas id="game-map"></canvas>
-      <div id="sabotage-banner" class="hidden"></div>
+      <button id="btn-map-zoom" aria-label="Karten-Zoom">&#x2922;&#xFE0E;</button>
       <div id="boundary-banner" class="hidden">Geh zur&uuml;ck ins Spielfeld!</div>
     </div>
     <div class="game-actions">
@@ -254,10 +255,32 @@
     </div>
   </section>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.5.5"></script>
-  <script src="/js/mapEditor.js?v=19.5.5"></script>
-  <script src="/js/tasks.js?v=19.5.5"></script>
-  <script src="/js/app.js?v=19.5.5"></script>
+    <div id="calib-overlay" class="task-overlay hidden">
+      <div class="task-card settings-card">
+        <div class="task-head">
+          <div class="task-title">&#128205; Setz-Punkt kalibrieren</div>
+          <button id="btn-calib-close" class="task-close">&#10005;</button>
+        </div>
+        <p class="hint">1) Stell dich &#252;berall da hin (z.B. Cafeteria), wo du GENAU jenen Ort auf der Karte antippst. 2) W&#228;hle den Raum auf der Mini-Karte. 3) &quot;Ich stehe hier&quot;.</p>
+        <canvas id="calib-map"></canvas>
+        <div id="calib-status" class="hint">Kein GPS-Signal — geh raus.</div>
+        <button id="btn-calib-here" class="primary big" disabled>Ich stehe hier</button>
+      </div>
+    </div>
+    <div id="rejoin-overlay" class="task-overlay hidden">
+      <div class="task-card settings-card">
+        <div class="task-head">
+          <div class="task-title" id="rejoin-title">Runde gefunden</div>
+        </div>
+        <p class="hint" id="rejoin-text"></p>
+        <button id="btn-rejoin-yes" class="primary big">Wieder beitreten</button>
+        <button id="btn-rejoin-no" class="ghost">Nicht jetzt</button>
+      </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/osm.js?v=19.6.0"></script>
+  <script src="/js/mapEditor.js?v=19.6.0"></script>
+  <script src="/js/tasks.js?v=19.6.0"></script>
+  <script src="/js/app.js?v=19.6.0"></script>
 </body>
 </html>

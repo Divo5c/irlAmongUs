@@ -761,6 +761,36 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
   }
 
   /**
+   * Failsafe sweep: every 5 s all rooms get checked for expired critical
+   * sabotage. Catches cases where the precise timer was lost (server
+   * restart between deploy, drift, missed setTimeout).
+   */
+  const sabotageSweeper = setInterval(() => {
+    for (const code of roomStore.listCodes()) {
+      try {
+        const room = roomStore.getRoom(code);
+        if (!room || room.status !== 'IN_GAME') continue;
+        if (!roomStore.isSabotageExpired(code)) continue;
+        clearMeetingTimer(code);
+        const gameOver = roomStore.endGame(code, 'IMPOSTOR');
+        io.to(code).emit('room:updated', gameOver.room);
+        io.to(code).emit('game:over', {
+          code,
+          winner: 'IMPOSTOR',
+          players: gameOver.room.players,
+          reason: 'SABOTAGE_EXPIRED',
+        });
+      } catch (error) {
+        // room gone / not over yet: sweep keeps running for other rooms.
+        if (error?.code !== 'ROOM_NOT_FOUND') {
+          console.error(`Sabotage sweep failed for room ${code}:`, error.message);
+        }
+      }
+    }
+  }, 5000);
+  sabotageSweeper.unref();
+
+  /**
    * Schedules the next phase transition of an active meeting based on its
    * stored deadlines (robust against drift and stale timers).
    */
@@ -839,6 +869,9 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
 
   function broadcastGameOver(ioInstance, code, winner) {
     clearMeetingTimer(code);
+    // Grund ermitteln, BEVOR endGame laeuft (UI erklaert den Sieg).
+    const details = roomStore.getVictoryDetails(code);
+    const reason = details?.winner === winner ? details.reason : null;
     const { room, winner: confirmedWinner } = roomStore.endGame(code, winner);
     // Roles are revealed to everyone once the game is over.
     ioInstance.to(code).emit('room:updated', room);
@@ -846,6 +879,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
       code,
       status: 'GAME_OVER',
       winner: confirmedWinner,
+      ...(reason ? { reason } : {}),
       players: room.players,
     });
   }

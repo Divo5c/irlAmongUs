@@ -305,6 +305,7 @@ const App = (() => {
       // GPS-Sender nur während des echten Spiels (Kill-Gates brauchen Positionen).
       if (room.status === 'IN_GAME') ensureGpsLoop();
       else stopGpsLoop();
+      tryRestoreAnchor(room);
       renderTeamProgress(room);
       drawGameMap();
       // MAP_READY: the host may go back to the lobby and start the game.
@@ -479,14 +480,21 @@ const App = (() => {
       if (status === 'GAME_OVER') stopGpsLoop();
       else if (status === 'IN_GAME') ensureGpsLoop();
     });
-    socket.on('game:over', ({ winner, players }) => {
+    socket.on('game:over', ({ winner, players, reason }) => {
       stopGpsLoop();
       $('boundary-banner').classList.add('hidden');
       $('gameover-overlay').classList.remove('hidden');
       $('gameover-title').textContent =
         winner === 'CREWMATE' ? 'Crewmates haben gewonnen!' : 'Impostoren haben gewonnen!';
+      const reasonText = {
+        TASKS_COMPLETE: 'Alle Tasks wurden erledigt.',
+        IMPOSTORS_DEAD: 'Kein Impostor mehr am Leben.',
+        IMPOSTOR_PARITY: 'Impostor in \u00dcberzahl (h\u00e4tten Crew nicht mehr stoppen k\u00f6nnen).',
+        SABOTAGE_EXPIRED: 'Sabotage nicht rechtzeitig gefixt!',
+      }[reason];
       const alivePlayers = (players ?? []).filter((p) => p.isAlive).map((p) => p.name);
-      $('gameover-detail').textContent = `Am Ende \u00fcbrig: ${alivePlayers.join(', ')}`;
+      $('gameover-detail').textContent =
+        `${reasonText ?? ''}${reasonText ? ' ' : ''}Am Ende \u00fcbrig: ${alivePlayers.join(', ')}`;
       $('btn-rematch').classList.toggle('hidden', !state.isHost);
     });
     socket.on('task:progress', ({ completedTaskId, advancedTaskId, stageIndex }) => {
@@ -1060,11 +1068,15 @@ const App = (() => {
     if (!killBtn.classList.contains('hidden')) {
       const targets = state.killTargets ?? [];
       const cooldownLeft = Math.max(0, state.killReadyAt - Date.now());
-      killBtn.disabled = !targets.length || cooldownLeft > 0;
+      if (cooldownLeft > 0) {
+        // Cooldown IMMER auf dem Knopf sichtbar (auch ohne Ziel in	range).
+        killBtn.disabled = true;
+        killBtn.textContent = `${Math.ceil(cooldownLeft / 1000)}s`;
+      } else {
+        killBtn.disabled = !targets.length;
+        killBtn.textContent = 'Kill';
+      }
       killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
-      killBtn.textContent = cooldownLeft && targets.length
-        ? `${Math.ceil(cooldownLeft / 1000)}s`
-        : 'Kill';
     }
     updateUseButton();
     updateSabotageButton();
@@ -1192,8 +1204,27 @@ const App = (() => {
       state.room?.players?.find((p) => p.id === state.playerId)?.isAlive === false);
     if (!impostor) return;
     const sab = state.room?.sabotage;
-    sabBtn.disabled = !!sab && sab.deadline != null;
-    sabBtn.textContent = sab ? 'L\u00e4uft' : 'Sabotage';
+    if (sab) {
+      // Aktive Sabotage: Restzeit mit auf den Knopf statt vages "Laeuft".
+      if (sab.deadline) {
+        const left = Math.max(0, Math.ceil((Date.parse(sab.deadline) - Date.now()) / 1000));
+        sabBtn.textContent = `${sab.type} ${left}s`;
+      } else {
+        sabBtn.textContent = 'L\u00e4uft';
+      }
+      sabBtn.disabled = true;
+      return;
+    }
+    // Cooldown bis zur naechsten Sabotage als Countdown auf dem Knopf.
+    const cd = state.room?.sabotageCooldownUntil ?? 0;
+    const left = Math.max(0, Math.ceil((cd - Date.now()) / 1000));
+    if (left > 0) {
+      sabBtn.textContent = `${left}s`;
+      sabBtn.disabled = true;
+      return;
+    }
+    sabBtn.textContent = 'Sabotage';
+    sabBtn.disabled = false;
   }
 
   /**
@@ -1319,6 +1350,15 @@ const App = (() => {
       state.gpsError = err?.code === 1 ? 'denied'
         : err?.code === 2 ? 'unavailable' : 'waiting';
     }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
+    // Grobe Rucksack-Quelle: falls High-Accuracy h\u00e4ngt, liefert der
+    // Coarse-Watcher sp\u00e4testens f\u00fcr die Marker-Position etwas.
+    navigator.geolocation.watchPosition((pos) => {
+      if (Date.now() - (state.gpsFixAt ?? 0) > 20000) {
+        state.gpsFix = pos.coords;
+        state.gpsFixAt = Date.now();
+        state.gpsError ??= null;
+      }
+    }, () => {}, { enableHighAccuracy: false, maximumAge: 15000, timeout: 30000 });
   }
 
   /** GPS-Hinweiszeile im Spiel: nur sichtbar, wenn etwas nicht stimmt. */
@@ -1409,20 +1449,57 @@ const App = (() => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const nodes = Object.fromEntries(map.nodes.map((n) => [n.id, n]));
-    const pts = [...map.nodes.map((n) => [n.x, n.y])];
-    if (state.selfPos) pts.push([state.selfPos.x, state.selfPos.y]);
-    const minX = Math.min(...pts.map((p) => p[0]));
-    const maxX = Math.max(...pts.map((p) => p[0]));
-    const minY = Math.min(...pts.map((p) => p[1]));
-    const maxY = Math.max(...pts.map((p) => p[1]));
-    const w = maxX - minX || 50;
-    const h = maxY - minY || 50;
+    const fitMinX = Math.min(...map.nodes.map((n) => n.x));
+    const fitMaxX = Math.max(...map.nodes.map((n) => n.x));
+    const fitMinY = Math.min(...map.nodes.map((n) => n.y));
+    const fitMaxY = Math.max(...map.nodes.map((n) => n.y));
+    const fitW = fitMaxX - fitMinX || 50;
+    const fitH = fitMaxY - fitMinY || 50;
     const pad = 20;
-    const scale = Math.min((canvas.width / 2 - pad * 2) / w, (canvas.height / 2 - pad * 2) / h);
-    const toPx = (x, y) => [
-      pad + (x - minX) * scale,
-      pad + (y - minY) * scale,
-    ];
+    const halfW = canvas.width / 2 - pad * 2;
+    const halfH = canvas.height / 2 - pad * 2;
+    const fitScale = Math.min(halfW / fitW, halfH / fitH);
+
+    // Zwei Modi: 0 = ganze Karte ( Alles auf einen Blick),
+    // 1 = NAH (2.4x, zentriert auf dich — folgt dir beim Laufen).
+    state.mapZoomIdx = Number(localStorage.getItem('rlaus_mapZoom')) === 1 ? 1 : 0;
+    const zoomed = state.mapZoomIdx === 1;
+    let minX; let minY; let scale;
+    if (zoomed && state.selfPos?.x != null) {
+      const z = 2.4;
+      scale = fitScale * z;
+      const viewW = halfW / scale;
+      const viewH = halfH / scale;
+      minX = state.selfPos.x - viewW / 2;
+      minY = state.selfPos.y - viewH / 2;
+    } else {
+      let pts = map.nodes.map((n) => [n.x, n.y]);
+      // Eigener Pin zwingt die Karte nicht mehr ins Schrumpfen.
+      if (state.selfPos?.x != null
+        && state.selfPos.x >= fitMinX - fitW * 0.15 && state.selfPos.x <= fitMaxX + fitW * 0.15
+        && state.selfPos.y >= fitMinY - fitH * 0.15 && state.selfPos.y <= fitMaxY + fitH * 0.15) {
+        pts = [...pts, [state.selfPos.x, state.selfPos.y]];
+      }
+      minX = Math.min(...pts.map((p) => p[0]));
+      maxX = Math.max(...pts.map((p) => p[0]));
+      minY = Math.min(...pts.map((p) => p[1]));
+      maxY = Math.max(...pts.map((p) => p[1]));
+      const w = maxX - minX || 50;
+      const h = maxY - minY || 50;
+      scale = Math.min(halfW / w, halfH / h);
+    }
+    const clamped = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const toPx = (x, y) => {
+      const [px, py] = [pad + (x - minX) * scale, pad + (y - minY) * scale];
+      // Out-of-bounds (z.B. bist du vor map border): Pin bleibt am Rand.
+      if (zoomed) {
+        return [
+          clamped(px, pad, canvas.width / 2 - pad),
+          clamped(py, pad, canvas.height / 2 - pad),
+        ];
+      }
+      return [px, py];
+    };
 
     // corridors: server format is { id, a, b } between two nodes
     ctx.lineWidth = 5;
@@ -1492,12 +1569,18 @@ const App = (() => {
     const commsBlind = state.room?.sabotage?.type === 'COMMS' &&
       state.role?.role !== 'IMPOSTOR';
     const taskHits = [];
+    // Mehrere Tasks im selben Raum: Marker leicht versetzt (kein Stack).
+    const roomTaskSeen = {};
     let taskIdx = 0;
     for (const task of commsBlind ? [] : eta) {
       if (task.completed) continue;
       let tx, ty;
       if (task.x != null) {
+        const perRoom = roomTaskSeen[task.roomId] ?? 0;
+        roomTaskSeen[task.roomId] = perRoom + 1;
         [tx, ty] = toPx(task.x, task.y);
+        tx += (perRoom % 2 === 0 ? -1 : 1) * Math.floor(perRoom / 2 + 1) * 13;
+        ty -= Math.floor(perRoom / 2) * 6;
       } else {
         const waypoints = [];
         for (const corridor of map.corridors ?? []) {
@@ -1529,7 +1612,6 @@ const App = (() => {
       ctx.fillText(icon, tx, ty + 4.5);
       ctx.textAlign = 'left';
       taskHits.push({ x: tx, y: ty, task });
-      taskIdx += 1;
     }
     state._taskHits = taskHits;
 
@@ -1626,16 +1708,18 @@ const App = (() => {
       ctx.textAlign = 'left';
     }
   }
+  $('btn-map-zoom').addEventListener('click', () => {
+    const next = (Number(localStorage.getItem('rlaus_mapZoom')) === 1) ? 0 : 1;
+    localStorage.setItem('rlaus_mapZoom', String(next));
+    beep(next ? 520 : 380);
+    drawGameMap();
+  });
   window.addEventListener('resize', () => drawGameMap());
   window.addEventListener('orientationchange', () => setTimeout(drawGameMap, 300));
 
-  /** Landscape: lock wenn unterstützt (Android), sonst iOS-Dreh-Hinweis via CSS. */
   function renderPhaseHint(room) {
     if (!state.role) return;
-    const aliveCount = room.players.filter((p) => p.isAlive).length;
-    $('game-phase-hint').textContent = room.status === 'MEETING'
-      ? t('phase.meeting')
-      : `${t('game.alive')} ${aliveCount}`;
+    $('game-phase-hint').textContent = ''; // Lebenden-Count nur im Meeting
     // Raumcode oben links (war "——" weil nie gesetzt).
     $('game-code').textContent = state.code || '——';
   }
@@ -1721,12 +1805,189 @@ const App = (() => {
     if (best) openTask(best);
   });
 
-  // Setz-Punkt nachtragen (Host): Wenn die Karte ohne GPS-Anker gespeichert
-  // wurde (z. B. alter Cache), kann der Host im Spiel einmalig neu einmessen.
+  // ------------------------------------------------------ Setz-Punkt ---- //
+
+  /** Mini-Karten-Kalibrierung: Tap Raum = dort stehe ich wirklich. */
+  const calib = { points: null, selected: null };
+
+  function currentGps() {
+    if (!state.gpsFixAt || Date.now() - state.gpsFixAt > 20000) return null;
+    return { lat: state.gpsFix.latitude, lon: state.gpsFix.longitude };
+  }
+
+  function openCalibration() {
+    const map = state.room?.map;
+    if (!map?.rooms?.length) return;
+    calib.points = map.rooms;
+    calib.selected = null;
+    $('btn-calib-here').textContent = 'Ich stehe hier';
+    $('calib-overlay').classList.remove('hidden');
+    clearInterval(drawCalibMap._iv);
+    drawCalibMap();
+    drawCalibMap._iv = setInterval(drawCalibMap, 700); // GPS-Puls & Status live
+  }
+
+  function drawCalibMap() {
+    const canvas = $('calib-map');
+    if (!canvas || calib.points == null) return;
+    const pts = calib.points.flatMap((r) => (r.polygon ?? []));
+    if (!pts.length) return;
+    const minX = Math.min(...pts.map((p) => p.x));
+    const maxX = Math.max(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y));
+    const maxY = Math.max(...pts.map((p) => p.y));
+    const w = maxX - minX || 10;
+    const h = maxY - minY || 10;
+    const pad = 18;
+    const scale = Math.min(
+      (canvas.clientWidth - pad * 2) / w,
+      (canvas.clientHeight - pad * 2) / h,
+    );
+    const toPx = (x, y) => [
+      pad + (x - minX) * scale,
+      pad + (y - minY) * scale,
+    ];
+    canvas.width = canvas.clientWidth * 2;
+    canvas.height = canvas.clientHeight * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    for (const r of calib.points) {
+      const poly = r.polygon ?? [];
+      if (poly.length < 3) continue;
+      ctx.beginPath();
+      poly.forEach((p, i) => {
+        const [px, py] = toPx(p.x, p.y);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      const hit = calib.selected === r;
+      ctx.fillStyle = hit ? 'rgba(74,222,128,0.35)' : 'rgba(255,209,102,0.14)';
+      ctx.strokeStyle = hit ? '#4ade80' : 'rgba(255,209,102,0.6)';
+      ctx.lineWidth = hit ? 3 : 1.5;
+      ctx.stroke();
+      ctx.fill();
+      if (r.name) {
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.font = '600 10px system-ui';
+        ctx.textAlign = 'center';
+        const [cx, cy] = toPx(
+          poly.reduce((s, p) => s + p.x, 0) / poly.length,
+          poly.reduce((s, p) => s + p.y, 0) / poly.length,
+        );
+        ctx.fillText(r.name, cx, cy);
+      }
+    }
+    // Fingerprint: aktueller GPS-Puls zeigt, WO der Fix denkt, dass du bist.
+    $('calib-status').textContent = currentGps()
+      ? '\u00b1 GPS fix da. Tippe den Raum, in dem du stehst.'
+      : 'Kein GPS-Signal — nach drau\u00dfen gehen!';
+    $('btn-calib-here').disabled = !(calib.selected && currentGps());
+  }
+
+  function applyAnchorFrom(gpsFix, chosenPoint) {
+    // anchor = GPS-Koordinaten, deren Projektion (0,0) genau der
+    // gew\u00e4hlte Kartenpunkt ist. Equirectangular-Grobfahrung:
+    const metersPerDeg = 111_320;
+    const cosLat = Math.cos((gpsFix.lat * Math.PI) / 180);
+    const lat0 = gpsFix.lat - chosenPoint.y / metersPerDeg;
+    const lon0 = gpsFix.lon - chosenPoint.x / (metersPerDeg * Math.max(0.2, cosLat));
+    return { lat: lat0, lon: lon0 };
+  }
+
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('#btn-set-anchor')) {
+      openCalibration();
+      return;
+    }
+    if (!event.target.closest('#btn-calib-here')) return;
+    const gpsFix = currentGps();
+    if (!gpsFix) {
+      showToast('Kein GPS-Signal! Geh raus und warte, dann wieder dr\u00fccken.');
+      return;
+    }
+    const chosen = calib.selected;
+    if (!chosen) return;
+    const poly = chosen.polygon ?? [];
+    const cxy = {
+      x: poly.reduce((s, p) => s + p.x, 0) / Math.max(1, poly.length),
+      y: poly.reduce((s, p) => s + p.y, 0) / Math.max(1, poly.length),
+    };
+    ensureSocket().emit('map:anchor', {
+      code: state.code,
+      anchor: applyAnchorFrom(gpsFix, cxy),
+    });
+    $('calib-overlay').classList.add('hidden');
+    clearInterval(drawCalibMap._iv);
+    showToast('\ud83d\udcdb Setz-Punkt gespeichert \u2014 dein Marker erscheint mit dem n\u00e4chsten GPS-Fix.');
+  });
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('#btn-calib-close')) {
+      $('calib-overlay').classList.add('hidden');
+      clearInterval(drawCalibMap._iv);
+    }
+  });
+  $('calib-map').addEventListener('click', (event) => {
+    if (!calib.points) return;
+    const rect = event.target.getBoundingClientRect();
+    const px = event.clientX - rect.left;
+    const py = event.clientY - rect.top;
+    // R\u00e4ume f\u00fcr den Tap in Pixel \u00fcbertragen:
+    const pts = calib.points.flatMap((r) => (r.polygon ?? []));
+    if (!pts.length) return;
+    const minX = Math.min(...pts.map((p) => p.x));
+    const maxX = Math.max(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y));
+    const maxY = Math.max(...pts.map((p) => p.y));
+    const w = maxX - minX || 10;
+    const h = maxY - minY || 10;
+    const pad = 18;
+    const scale = Math.min(
+      (rect.width - pad * 2) / w,
+      (rect.height - pad * 2) / h,
+    );
+    const toPx = (x, y) => [pad + (x - minX) * scale, pad + (y - minY) * scale];
+    let best = null;
+    let bestDist = Infinity;
+    for (const r of calib.points) {
+      const poly = r.polygon ?? [];
+      if (poly.length < 3) continue;
+      const [cx, cy] = toPx(
+        poly.reduce((s, p) => s + p.x, 0) / poly.length,
+        poly.reduce((s, p) => s + p.y, 0) / poly.length,
+      );
+      const d = Math.hypot(cx - px, cy - py);
+      if (d < bestDist) { bestDist = d; best = r; }
+    }
+    if (best) {
+      calib.selected = best;
+      drawCalibMap();
+      $('btn-calib-here').textContent = `Ich stehe hier: ${best.type}`;
+    }
+  });
+
+  // Anker automatisch wiederherstellen, wenn die Karte deine Location
+  // kennt (lokal gecachte Karte = exakt dieselben Roads wie im Spiel).
+  function tryRestoreAnchor(room) {
+    if (!room?.map?.nodes?.length) return;
+    if (Number.isFinite(room.map.anchor?.lat)) return;
+    const cached = readSavedLocalMap();
+    if (!cached?.nodes || cached.nodes.length !== room.map.nodes.length) return;
+    const keyOf = (nodes) => nodes.map((n) => `${n.id}:${Math.round(n.x)}:${Math.round(n.y)}`).join('|');
+    if (keyOf(cached.nodes) === keyOf(room.map.nodes) && Number.isFinite(cached.anchor?.lat)) {
+      ensureSocket().emit('map:anchor', {
+        code: state.code,
+        anchor: cached.anchor,
+      });
+      showToast('\ud83d\udcdb GPS-Ursprung aus deiner gespeicherten Karte wiederhergestellt.');
+    }
+  }
+
+  /** Zahnrad-Hinweis: nur Host + Anker fehlt wirklich. */
   function refreshAnchorUi() {
     const room = state.room;
     const showBtn = !!room?.map && !Number.isFinite(room.map.anchor?.lat) && state.isHost
-      && room.status === 'IN_GAME';
+      && (room.status === 'IN_GAME' || room.status === 'MAP_READY');
     $('btn-set-anchor').classList.toggle('hidden', !showBtn);
     $('anchor-hint').classList.toggle('hidden', !showBtn);
   }
@@ -1798,10 +2059,12 @@ const App = (() => {
     $('gameover-overlay').classList.add('hidden');
     $('meeting-overlay').classList.remove('hidden');
     $('meeting-title').textContent = phase === 'DISCUSSION' ? t('meeting.title') : t('meeting.voteTitle');
-    $('meeting-hint').textContent =
-      reporterId === state.playerId
-        ? 'Du hast gemeldet! Diskutieren\u2026'
-        : `Jemand hat gemeldet \u2014 ${deadlineText(discussionDeadline)}`;
+    const players0 = state.room?.players ?? [];
+    const stillAlive0 = players0.filter((p) => p.isAlive).length;
+    const reportText = reporterId === state.playerId
+      ? 'Du hast gemeldet!'
+      : `Jemand hat gemeldet \u2014 ${deadlineText(discussionDeadline)}`;
+    $('meeting-hint').textContent = `${reportText} \u2014 ${t('game.alive')} ${stillAlive0}`;
     const players = state.room?.players ?? [];
     openVoteList(
       players.filter((p) => p.isAlive),
@@ -1851,11 +2114,26 @@ const App = (() => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
 
-  // Auto-rejoin seamlessly on page reload (e.g. app restart for PWA).
+  // Auto-rejoin: NICHT mehr still einschleichen — das Original-Popup fragt
+  // nach (Beim App-Öffnen zurück in die laufende Runde oder Lobby).
   if (localStorage.getItem('rlaus_session')) {
+    const saved = JSON.parse(localStorage.getItem('rlaus_session') ?? 'null');
+    if (saved?.code) {
+      $('rejoin-text').textContent =
+        `Du warst in der Runde ${saved.code}. Zur\u00fcck beitreten?`;
+      $('rejoin-overlay').classList.remove('hidden');
+    }
+  }
+  $('btn-rejoin-yes').addEventListener('click', () => {
+    $('rejoin-overlay').classList.add('hidden');
     ensureSocket();
     ensureSocket().once('connect', () => tryRejoin());
-  }
+  });
+  $('btn-rejoin-no').addEventListener('click', () => {
+    $('rejoin-overlay').classList.add('hidden');
+    localStorage.removeItem('rlaus_session');
+    showToast('Runde gelassen \u2014 du kannst sp\u00e4ter \u00fcber den Code joinen.');
+  });
 
   return {
     screens,

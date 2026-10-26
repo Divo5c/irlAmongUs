@@ -332,13 +332,20 @@ button.round {
   padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 600;
   background: rgba(239, 68, 68, 0.92); color: #fff; text-align: center;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); }
-#sabotage-banner { position: absolute; left: 8px; right: 8px; top: 12px;
-  z-index: 3; padding: 10px 12px; border-radius: 10px; font-size: 14px;
+/* Sabotage-Hinweiszeile ueber der Karte — verdeckt nichts mehr */
+#sabotage-banner-line { flex: none; padding: 0; }
+#sabotage-banner { position: static; width: 100%; box-sizing: border-box;
+  margin: 6px 0; padding: 8px 12px; border-radius: 10px; font-size: 13px;
   font-weight: 700; color: #fff; text-align: center;
   animation: sab-pulse 1s infinite; }
 #sabotage-banner.reactor-war { background: rgba(215, 38, 61, 0.95); }
 #sabotage-banner.o2-war { background: rgba(202, 138, 4, 0.95); }
 @keyframes sab-pulse { 50% { opacity: 0.75; } }
+/* Zoom-Toggle: kleiner Icon-Knopf rechts oben IN der Karte */
+#btn-map-zoom { position: absolute; top: 8px; right: 8px; z-index: 6;
+  width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(10, 12, 20, 0.65); color: #fff; font-size: 18px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; }
 #taskbox summary { cursor: pointer; font-weight: 600; color: rgba(255,255,255,0.85); }
 #taskbox { padding: 8px 12px; background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; }
@@ -657,6 +664,11 @@ button.round {
   border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 10px;
   font-weight: 600; }
 .gear-btn { position: relative; z-index: 45; pointer-events: auto; }
+
+/* Setz-Punkt-Kalibrier-Minimap */
+#calib-map { width: 100%; height: 44dvh; border-radius: 12px;
+  background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255,255,255,0.12);
+  touch-action: manipulation; }
 
 /* Regel-Panels im Lobby-Stil (Among-Us-Tabs) */
 .rules-panels { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }

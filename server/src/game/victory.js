@@ -45,3 +45,24 @@ function evaluateVictory({ players, tasks }) {
 }
 
 module.exports = { evaluateVictory };
+
+/**
+ * Rich variant for UI: explains WHY the game ended (clients show the
+ * reason so a crew win after a kill does not confuse players).
+ */
+function evaluateVictoryDetailed(sim) {
+  const players = sim.players ?? [];
+  const realTasks = Array.isArray(sim.tasks) ? sim.tasks.filter((t) => !t.isFake) : [];
+  const total = realTasks.length;
+  const completed = realTasks.filter((t) => t.completed).length;
+  const winner = evaluateVictory({ players, tasks: realTasks });
+  if (!winner) return null;
+  if (winner === 'CREWMATE') {
+    return total > 0 && completed >= total
+      ? { winner, reason: 'TASKS_COMPLETE' }
+      : { winner, reason: 'IMPOSTORS_DEAD' };
+  }
+  return { winner, reason: 'IMPOSTOR_PARITY' };
+}
+
+module.exports = { evaluateVictory, evaluateVictoryDetailed };

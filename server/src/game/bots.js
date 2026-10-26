@@ -18,7 +18,8 @@ const MOVE_INTERVAL_MS = 2000;
 const BOT_SPEED_MPS = 4.0;
 
 // One auto-completed crew task about every TASK_TICKS * MOVE_INTERVAL_MS.
-const TASK_TICKS = 15;
+// 45 * 2s = ~90s pro Task — Bots sollen IRL kein Turbo-Chefteam sein.
+const TASK_TICKS = 45;
 
 const MAX_BOTS = 5;
 
@@ -264,32 +265,65 @@ function createBotEngine(roomStore, {
     }
   }
 
-  function botCrewFixSabotage(code, room, bots) {
-    const sab = room.sabotage;
-    const panel = sab.type === 'REACTOR'
-      ? 'REACTOR'
-      : sab.type === 'O2'
-        ? (!sab.panels?.o2 ? 'o2' : 'admin')
-        : sab.type; // LIGHTS / COMMS fix via pressed panel named like the sabotage
-    for (const bot of bots) {
-      if (bot.role !== 'CREWMATE') continue;
-      try {
-        roomStore.fixSabotagePanel(code, bot.id, panel, {
-          skipPresenceCheck: true,
-        });
-        if (typeof broadcast === 'function') {
-          broadcast(code, 'game:toast', {
-            text: `\u{1F9F0} ${bot.name} hat die Sabotage mitrepariert.`,
-          });
-        }
-        return; // fixed — or one panel done per tick
-      } catch {
-        // Panel race / dead crew: try the next bot.
+/**
+ * Sabotage-Fixort (Raumzentroid) je Panel — Bots laufen sichtbar dorthin
+ * und fixen erst bei Ankunft (lokal ~2.5m), statt zu teleportieren.
+ */
+function sabotageFixSpot(room, sab) {
+  const targetsByType = {
+    REACTOR: ['REACTOR'],
+    O2: [!sab.panels?.o2 ? 'O2' : 'ADMIN'],
+    LIGHTS: ['ELECTRICAL'],
+    COMMS: ['COMMUNICATIONS'],
+  };
+  const taskTypes = targetsByType[sab.type] ?? [];
+  for (const candidate of room.map?.rooms ?? []) {
+    const points = candidate.polygon ?? [];
+    if (!taskTypes.includes(candidate.type) || !points.length) continue;
+    const sum = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
+    return { x: sum.x / points.length, y: sum.y / points.length };
+  }
+  return null;
+}
+
+function botCrewFixSabotage(code, room, bots) {
+  const sab = room.sabotage;
+  const panel = sab.type === 'REACTOR'
+    ? 'REACTOR'
+    : sab.type === 'O2'
+      ? (!sab.panels?.o2 ? 'o2' : 'admin')
+      : sab.type; // LIGHTS / COMMS fix via pressed panel named like the sabotage
+  const spot = sabotageFixSpot(room, sab);
+  for (const bot of bots) {
+    if (bot.role !== 'CREWMATE') continue;
+    const walk = walkers.get(code)?.get(bot.id);
+    if (spot && (!walk || Math.hypot(walk.x - spot.x, walk.y - spot.y) > 2.5)) {
+      // Bot ist noch unterwegs: Walker-Ziel auf den Fixort lenken.
+      if (walk) {
+        const near = findNearestNode(room.map, spot.x, spot.y);
+        if (near) walk.targetId = near.id;
       }
+      continue; // arrival required before pressing the panel
+    }
+    try {
+      roomStore.fixSabotagePanel(code, bot.id, panel, {
+        skipPresenceCheck: true,
+      });
+      if (typeof broadcast === 'function') {
+        broadcast(code, 'game:toast', {
+          text: `\u{1F9F0} ${bot.name} hat bei der Sabotage mitgeholfen.`,
+        });
+        broadcast(code, 'room:updated', roomStore.toPublicRoom(room));
+        broadcast(code, 'game:sabotage_fixed', { code, fixed: [panel] });
+      }
+      return; // fixed — or one panel done per tick
+    } catch {
+      // Panel race / dead crew: try the next bot.
     }
   }
+}
 
-  function autoCompleteOneTask(code, room, bots) {    for (const bot of bots) {
+function autoCompleteOneTask(code, room, bots) {    for (const bot of bots) {
       if (bot.role !== 'CREWMATE') continue;
       try {
         const tasks = roomStore
@@ -297,6 +331,10 @@ function createBotEngine(roomStore, {
           .filter((task) => !task.completed);
         if (!tasks.length) continue;
         roomStore.completeTask(code, bot.id, tasks[0].id, { skipProximity: true });
+        if (typeof broadcast === 'function') {
+          broadcast(code, 'room:updated', roomStore.toPublicRoom(room));
+          broadcast(code, 'task:progress', { completedTaskId: tasks[0].id });
+        }
         return; // one task per cycle keeps the game going long enough
       } catch (error) {
         // Already completed this tick / task race: try next bot.
