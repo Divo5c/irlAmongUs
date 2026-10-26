@@ -1216,3 +1216,25 @@ describe('sabotage & emergency meeting', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------- anchor --
+// In-game anchor recalibration: host can re-set ONLY the GPS origin while
+// the game runs (real-life fix when the map was saved without a fix).
+test('setMapAnchor updates the origin during IN_GAME and rejects garbage', () => {
+  const store = new RoomStore();
+  store.createRoom({ code: 'ANC234', hostId: 'host-1', hostName: 'Host' });
+  store.addPlayerToRoom('ANC234', { id: 'player-2', name: 'Player 2' });
+  store.startMapSetup('ANC234');
+  store.saveMap('ANC234', SAMPLE_MAP);
+  store.startGame('ANC234', 'host-1');
+  assert.equal(store.getRoom('ANC234').status, 'IN_GAME');
+
+  const updated = store.setMapAnchor('ANC234', { lat: 53.55, lon: 9.99 });
+  assert.equal(updated.map?.anchor?.lat, 53.55);
+  assert.equal(updated.map?.anchor?.lon, 9.99);
+  assert.equal(updated.status, 'IN_GAME');
+
+  // invalid coords -> error; unknown room -> error
+  assertGameError(() => store.setMapAnchor('ANC234', { lat: 999, lon: 'no' }), 'MAP_ANCHOR_INVALID');
+  assertGameError(() => store.setMapAnchor('NOPE99', { lat: 1, lon: 1 }), 'ROOM_NOT_FOUND');
+});

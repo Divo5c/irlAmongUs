@@ -350,11 +350,22 @@ const App = (() => {
       renderLobby(room);
       show('lobby');
     });
-    socket.on('room:error', ({ code: _error, message }) => {
+    socket.on('room:error', ({ code: errorCode, message }) => {
+      // Server meldet teils englische Fachtexte — unten deutsche Klartexte.
+      const friendly = {
+        MAP_LOCKED: 'Karte ist gerade gesperrt \u2014 das geht nur nach dem Speichern oder im Spiel (Setz-Punkt).',
+        MAP_MISSING: 'Keine Karte im Spiel \u2014 Host muss erst eine speichern.',
+        MAP_ANCHOR_INVALID: 'Der Setz-Punkt war ung\u00fcltig \u2014 nochmal mit GPS-Signal versuchen.',
+        CONFIG_INVALID: 'Eine Regel hatte einen unm\u00f6glichen Wert \u2014 bitte neu einstellen.',
+        INVALID_PHASE: 'Das geht in dieser Spielphase nicht.',
+        POSITION_NOT_ALLOWED: null, // still \u2014 normal in Meetings
+      }[errorCode];
+      const text = friendly ?? message ?? 'Aktion fehlgeschlagen.';
+      if (text == null) return;
       if (screens.home.classList.contains('active')) {
-        errorHome(message ?? 'Aktion fehlgeschlagen.');
+        errorHome(text);
       } else {
-        showToast(message ?? 'Aktion fehlgeschlagen.');
+        showToast(text);
       }
     });
     socket.onAny((event) => console.debug('[socket]', event));
@@ -405,6 +416,10 @@ const App = (() => {
       state.botPositions ??= {};
       state.botPositions[impostor ? 'impostor' : 'crew'] = positions ?? [];
       if (showBotsEnabled()) drawGameMap();
+    });
+    // Server-/Bot-Toast: "Bot hat Sabotage mitrepariert" u.a.
+    socket.on('game:toast', ({ text }) => {
+      if (text) showToast(text);
     });
     socket.on('position:error', ({ code }) => {
       if (code === 'POSITION_NOT_ALLOWED') return; // Meeting etc. – ruhig ignorieren
@@ -1448,6 +1463,28 @@ const App = (() => {
       }
     }
 
+    // Sabotage-Fixorte: rote pulsierende Badges zeigen, WO gefixt wird.
+    const fixSpots = state.room?.sabotage?.fixSpots ?? [];
+    for (const spot of fixSpots) {
+      const [fx, fy] = toPx(spot.x, spot.y);
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 220);
+      ctx.fillStyle = `rgba(239,68,68,${0.3 + 0.3 * pulse})`;
+      ctx.beginPath();
+      ctx.arc(fx, fy, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ef4444';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(fx, fy, 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = '15px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('\u{1F6E0}\uFE0F', fx, fy + 5);
+      ctx.textAlign = 'left';
+    }
+
     // task markers: echte Server-Koordinaten (roomId/roomName/x/y);
     // \u00e4ltere Runden ohne Spots fallen auf Karten-Knoten zur\u00fcck.
     // Comms-Sabotage: Crew sieht keine Marker (Impostor schon).
@@ -1702,12 +1739,9 @@ const App = (() => {
     }
     const map = state.room?.map;
     if (!map) return;
-    ensureSocket().emit('map:update', {
+    ensureSocket().emit('map:anchor', {
       code: state.code,
-      map: {
-        ...map,
-        anchor: { lat: state.gpsFix.latitude, lon: state.gpsFix.longitude },
-      },
+      anchor: { lat: state.gpsFix.latitude, lon: state.gpsFix.longitude },
     });
     showToast('\ud83d\udcdb Setz-Punkt gespeichert \u2014 dein Marker erscheint mit dem n\u00e4chsten GPS-Fix.');
   });

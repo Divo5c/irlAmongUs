@@ -190,6 +190,19 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
       }
     });
 
+    /** Host re-calibrates only the GPS anchor (in-game allowed). */
+    socket.on('map:anchor', (payload) => {
+      try {
+        const { code, anchor } = payload ?? {};
+        assertSocketInRoom(socket, code);
+        assertHost(socket, code);
+        const publicRoom = roomStore.setMapAnchor(code, anchor);
+        io.to(code).emit('room:updated', publicRoom);
+      } catch (error) {
+        emitRoomError(socket, error);
+      }
+    });
+
     /** Validates + persists the map and opens the game start. */
     socket.on('map:save', (payload) => {
       try {

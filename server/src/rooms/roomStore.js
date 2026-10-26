@@ -193,9 +193,39 @@ class RoomStore {
       sabotage: {
         type: room.sabotage.type,
         deadline: room.sabotage.deadline,
+        // Wo muss gefixt werden? Map-Marker fuer die Crew (rote Badges).
+        fixSpots: this.#sabotageFixSpots(room, room.sabotage.type),
         ...(room.sabotage.panels ? { panels: { ...room.sabotage.panels } } : {}),
       },
     };
+  }
+
+  /** Centroid(s) of the room(s) hosting the sabotage fix panels. */
+  #sabotageFixSpots(room, type) {
+    const targetsByType = {
+      REACTOR: ['REACTOR'],
+      O2: ['O2', 'ADMIN'],
+      LIGHTS: ['ELECTRICAL'],
+      COMMS: ['COMMUNICATIONS'],
+    };
+    const targetTypes = targetsByType[type] ?? [];
+    const spots = [];
+    for (const candidate of room.map?.rooms ?? []) {
+      if (!targetTypes.includes(candidate.type)) continue;
+      const points = candidate.polygon ?? [];
+      if (!points.length) continue;
+      const sum = points.reduce((acc, point) => {
+        acc.x += point.x; acc.y += point.y;
+        return acc;
+      }, { x: 0, y: 0 });
+      spots.push({
+        roomType: candidate.type,
+        roomId: candidate.id,
+        x: sum.x / points.length,
+        y: sum.y / points.length,
+      });
+    }
+    return spots;
   }
 
   #publicMeetingInfo(room) {
@@ -1184,6 +1214,37 @@ class RoomStore {
       };
     }
     room.status = STATUS_MAP_SETUP;
+    room.updatedAt = new Date().toISOString();
+    return this.toPublicRoom(room);
+  }
+
+  /**
+   * Host re-calibrates ONLY the GPS anchor of a saved map — allowed while
+   * warm (MAP_READY) and even IN GAME (real-life recalibration on the
+   * cafeteria spot). Nodes/corridors/rooms stay untouched.
+   */
+  setMapAnchor(code, anchor) {
+    const room = this.getRequiredRoom(code);
+
+    if (!room.map) {
+      throw new GameError('MAP_MISSING', 'The room has no map yet.');
+    }
+    if (room.status !== STATUS_MAP_READY && room.status !== STATUS_IN_GAME) {
+      throw new GameError(
+        'MAP_LOCKED',
+        'Der Setz-Punkt ist nur im Spiel oder bei fertigem Satz m\u00f6glich.',
+      );
+    }
+    const lat = Number(anchor?.lat);
+    const lon = Number(anchor?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)
+      || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      throw new GameError(
+        'MAP_ANCHOR_INVALID',
+        'Der Setz-Punkt braucht g\u00fcltige GPS-Koordinaten (lat/lon).',
+      );
+    }
+    room.map.anchor = { lat, lon };
     room.updatedAt = new Date().toISOString();
     return this.toPublicRoom(room);
   }

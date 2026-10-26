@@ -277,6 +277,11 @@ function createBotEngine(roomStore, {
         roomStore.fixSabotagePanel(code, bot.id, panel, {
           skipPresenceCheck: true,
         });
+        if (typeof broadcast === 'function') {
+          broadcast(code, 'game:toast', {
+            text: `\u{1F9F0} ${bot.name} hat die Sabotage mitrepariert.`,
+          });
+        }
         return; // fixed — or one panel done per tick
       } catch {
         // Panel race / dead crew: try the next bot.
