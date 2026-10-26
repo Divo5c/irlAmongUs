@@ -348,6 +348,38 @@ const App = (() => {
     } catch (_) { /* audio not available */ }
   }
 
+  /* -------------------------------------------------------- sfx ---
+   * Originales Sound-Paket aus dem Spiel verwendet die WAVs im Ordner
+   * /sfx/ (aus den 4 Zips kuratiert). Ausgabe nur wenn Sound an ist,
+   * Fehler schweigen (Sound ist Zuckerguss, kein Critical Path).
+   * Erste Berührung "entriegelt" die Mitte (iOS-Autoplay-Regel).
+   */
+  const sfxCache = {};
+  function sfx(name, volume = 1) {
+    if (!optEnabled('rlaus_sound', true)) return;
+    try {
+      let a = sfxCache[name];
+      if (!a) {
+        a = sfxCache[name] = new Audio(`/sfx/${name}.wav`);
+        a.preload = 'auto';
+      }
+      a.volume = Math.min(1, Math.max(0, volume));
+      a.currentTime = 0;
+      a.play().catch(() => {});
+    } catch (_) { /* sound best-effort */ }
+  }
+  const sfxUnlocked = { done: false };
+  document.addEventListener('touchend', () => {
+    if (sfxUnlocked.done) return;
+    sfxUnlocked.done = true;
+    try {
+      const a = new Audio('/sfx/task_open.wav');
+      a.volume = 0;
+      a.play().then(() => a.pause()).catch(() => {});
+    } catch (_) { /* unlock best-effort */ }
+  }, { once: true, passive: true });
+  window.RlausSfx = sfx;
+
   function randomCode() {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -465,14 +497,14 @@ const App = (() => {
           ...(type === 'O2' ? { panels: { o2: false, admin: false } } : {}),
         };
       }
-      beep(type === 'REACTOR' ? 120 : type === 'O2' ? 240 : 80);
+      sfx('sabotage_alarm');
       vibrate([80, 60, 80, 60, 160]);
       renderSabotage();
     });
     socket.on('game:sabotage_fixed', ({ code: _code }) => {
       if (state.room) delete state.room.sabotage;
       $('sabotage-banner').classList.add('hidden');
-      beep(700);
+      sfx('notification');
       renderGameHud();
     });
     socket.on('game:bodies_nearby', ({ bodies }) => {
@@ -521,6 +553,7 @@ const App = (() => {
       state.role = payload;
       state.killReadyAt = payload.killReadyAt ?? 0;
       state.teammates = payload.teammates ?? [];
+      sfx('round_start');
       showRoleOverlay(payload);
       ensureGpsLoop();
       vibrate([60, 60, 120]);
@@ -529,7 +562,7 @@ const App = (() => {
       state.killReadyAt = killReadyAt;
     });
     socket.on('game:killed', ({ killedPlayerId }) => {
-      beep(200, 320);
+      sfx('kill');
       vibrate([200, 80, 200]);
       if (killedPlayerId === state.playerId) {
         $('game-phase-hint').textContent = t('game.youKilled');
@@ -543,6 +576,8 @@ const App = (() => {
       $('meeting-hint').textContent = deadlineText(votingDeadline);
     });
     socket.on('game:vote_progress', ({ votedCount, totalVoters }) => {
+      // Eigene Stimme hat schon vote_locked -> nur für fremde klingeln.
+      if (Date.now() - (state.myVoteAt ?? 0) > 1500) sfx('vote_cast', 0.6);
       $('meeting-hint').textContent = `${t('meeting.count')} ${votedCount}/${totalVoters}`;
     });
     socket.on('game:meeting_result', ({ ejectedPlayerId, ejectedPlayerName, status }) => {
@@ -556,11 +591,13 @@ const App = (() => {
       } else {
         $('game-phase-hint').textContent = t('game.ejectedSkip');
       }
+      if (ejectedPlayerId != null) sfx('eject_text');
       if (status === 'GAME_OVER') stopGpsLoop();
       else if (status === 'IN_GAME') ensureGpsLoop();
     });
     socket.on('game:over', ({ winner, players, reason }) => {
       stopGpsLoop();
+      sfx(winner === 'CREWMATE' ? 'victory_crew' : 'victory_impostor');
       $('boundary-banner').classList.add('hidden');
       $('gameover-overlay').classList.remove('hidden');
       $('gameover-title').textContent =
@@ -1194,9 +1231,11 @@ const App = (() => {
       return;
     }
     window.RlausTasks?.launch(task, () => {
+      sfx('task_done');
       ensureSocket().emit('task:complete', { code: state.code, taskId: task.id });
       vibrate(80);
     });
+    if (window.RlausTasks?.launch) sfx('task_open');
   }
 
   /** Use-Knopf: Sabotage-Fix > Task > Notfall-Meeting (nur wenn anw\u00e4hlbar). */
@@ -1458,7 +1497,7 @@ const App = (() => {
       el.textContent = `\ud83d\udcdb ${msg}`;
       el.classList.add('hidden');
       el.classList.remove('hidden');
-      if (renderGpsStatus.lastMsg !== msg) {
+      if (renderGpsStatus.lastMsg !== msg && msg !== t('gps.waiting')) {
         logAppError('gps', msg);
         renderGpsStatus.lastMsg = msg;
       }
@@ -1844,6 +1883,7 @@ const App = (() => {
       return;
     }
     // Nearest victim wins: no extra pick dialog needed.
+    sfx('kill_knife');
     ensureSocket().emit('game:kill', { code: state.code, targetPlayerId: targets[0].playerId });
     $('btn-kill').disabled = true;
     $('btn-kill').textContent = 'Kill';
@@ -2058,12 +2098,19 @@ const App = (() => {
   // Anker automatisch wiederherstellen, wenn die Karte deine Location
   // kennt (lokal gecachte Karte = exakt dieselben Roads wie im Spiel).
   function tryRestoreAnchor(room) {
+    // Nur der Host darf den Ursprung setzen, und nur in den Phasen,
+    // die der Server akzeptiert (MAP_READY/IN_GAME). Alles andere gibt
+    // MAP_LOCKED -> wir wuerden das Fehler-Log fluten wie heute gesehen.
+    if (!state.isHost) return;
+    if (!['MAP_READY', 'IN_GAME'].includes(room?.status)) return;
+    if (state.anchorRestoreTried) return;
     if (!room?.map?.nodes?.length) return;
     if (Number.isFinite(room.map.anchor?.lat)) return;
     const cached = readSavedLocalMap();
     if (!cached?.nodes || cached.nodes.length !== room.map.nodes.length) return;
     const keyOf = (nodes) => nodes.map((n) => `${n.id}:${Math.round(n.x)}:${Math.round(n.y)}`).join('|');
     if (keyOf(cached.nodes) === keyOf(room.map.nodes) && Number.isFinite(cached.anchor?.lat)) {
+      state.anchorRestoreTried = true;
       ensureSocket().emit('map:anchor', {
         code: state.code,
         anchor: cached.anchor,
@@ -2146,6 +2193,9 @@ const App = (() => {
   // ------------------------------------------------------------- meeting //
 
   function renderMeeting({ phase, reporterId, discussionDeadline }) {
+    // Report -> Todes-Entdeckungs-Sting; Notknopf -> berühmte Hupe.
+    if (reporterId != null) sfx('report_body');
+    else sfx('emergency_alarm');
     $('gameover-overlay').classList.add('hidden');
     $('meeting-overlay').classList.remove('hidden');
     $('meeting-title').textContent = phase === 'DISCUSSION' ? t('meeting.title') : t('meeting.voteTitle');
@@ -2161,6 +2211,8 @@ const App = (() => {
       (targetId) => {
         ensureSocket().emit('game:vote_cast', { code: state.code, targetId });
         state.voted = true;
+        state.myVoteAt = Date.now();
+        sfx('vote_locked');
       },
     );
     if (state.voted) $('meeting-hint').textContent = 'Deine Stimme ist drin.';
@@ -2191,6 +2243,8 @@ const App = (() => {
     skip.addEventListener('click', () => {
       ensureSocket().emit('game:vote_cast', { code: state.code, skip: true });
       state.voted = true;
+      state.myVoteAt = Date.now();
+      sfx('vote_locked');
       list.innerHTML = '';
       $('meeting-hint').textContent = 'Stimme abgegeben \u2014 warte auf die anderen\u2026';
     });

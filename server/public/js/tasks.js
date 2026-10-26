@@ -57,6 +57,7 @@
       if (current) current = null;
     }
     closeBtn.addEventListener('click', () => {
+      window.RlausSfx?.('panel_close', 0.7);
       close();
       if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
     });
