@@ -246,7 +246,12 @@ const App = (() => {
         chip.addEventListener('click', () => chip.classList.add('hidden'));
         document.body.appendChild(chip);
       }
-      chip.textContent = `App-Fehler: ${(error?.message ?? String(error)).slice(0, 160)}`;
+      const stackLine = String(error?.stack ?? '').split('\n')
+        .filter((line) => /app\.js|tasks\.js|mapEditor\.js|osm\.js/.test(line))
+        .map((line) => line.trim())
+        .filter(Boolean)[0];
+      chip.textContent = `App-Fehler: ${(error?.message ?? String(error)).slice(0, 110)}` +
+        (stackLine ? ` @ ${stackLine.slice(-100)}` : '');
       chip.classList.remove('hidden');
       window.clearTimeout(showJsError._t);
       showJsError._t = window.setTimeout(() => chip.classList.add('hidden'), 15000);
