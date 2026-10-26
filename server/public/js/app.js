@@ -237,6 +237,71 @@ const App = (() => {
    * oben angezeigt (statt unsichtbar im Handy-Konsole-Log zu verschwinden).
    * Nach 15s verschwindet er von selbst — IRL-Debug w/o Laptop.
    */
+  /* ---------------------------------------------------- error diary --
+   * Alles Fehler laufen in ein Telefon-Log (localStorage): JS-Crashe,
+   * Server-Abweisungen (z.B. "Karte ist gesperrt"), GPS-Irrtümer.
+   * Der Superuser (Diraj/Divo) kann es im Zahnrad-Menü kopieren und
+   * schicken — kein Laptop-Kabel mehr nötig.
+   */
+  const ERROR_LOG_KEY = 'rlaus_errorlog.v1';
+  const ERROR_LOG_MAX = 50;
+
+  function logAppError(kind, message, stack = '') {
+    try {
+      const log = JSON.parse(localStorage.getItem(ERROR_LOG_KEY) ?? '[]');
+      log.push({
+        at: new Date().toLocaleTimeString('de-DE'),
+        kind,
+        message: String(message).slice(0, 220),
+        ...(stack ? { stack: String(stack).slice(0, 200) } : {}),
+      });
+      while (log.length > ERROR_LOG_MAX) log.shift();
+      localStorage.setItem(ERROR_LOG_KEY, JSON.stringify(log));
+    } catch (_) { /* log best-effort */ }
+  }
+
+  function renderErrorLogBox() {
+    const box = $('error-log-box');
+    if (!box) return;
+    let log = [];
+    try { log = JSON.parse(localStorage.getItem(ERROR_LOG_KEY) ?? '[]'); } catch (_) {}
+    const header = [
+      `RLAUS Log (${log.length}) — ${new Date().toLocaleString('de-DE')}`,
+      `Spieler: ${state.name || '?'} | Code: ${state.code || '—'}`,
+      '---',
+    ];
+    box.value = header.concat(log.map(
+      (entry) => `[${entry.at}] ${entry.kind}: ${entry.message}`,
+    )).join('\n');
+  }
+
+  function showErrorLogUi() {
+    const isSuperuser = ['Diraj', 'Divo'].includes(state.name);
+    $('dev-errorbox').classList.toggle('hidden', !isSuperuser);
+    if (isSuperuser) renderErrorLogBox();
+  }
+
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('#btn-error-copy')) {
+      const box = $('error-log-box');
+      box.select();
+      const done = () => showToast('Fehler-Log kopiert! Einfach an Divo schicken.');
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(box.value).then(done).catch(() => {
+          document.execCommand('copy');
+          done();
+        });
+      } else {
+        document.execCommand('copy');
+        done();
+      }
+    } else if (event.target.closest('#btn-error-clear')) {
+      localStorage.removeItem(ERROR_LOG_KEY);
+      renderErrorLogBox();
+      showToast('Fehler-Log gelöscht.');
+    }
+  });
+
   function showJsError(error) {
     try {
       let chip = document.getElementById('js-error-chip');
@@ -257,8 +322,15 @@ const App = (() => {
       showJsError._t = window.setTimeout(() => chip.classList.add('hidden'), 15000);
     } catch (_) { /* chip is best-effort */ }
   }
-  window.addEventListener('error', (event) => showJsError(event.error ?? event.message));
-  window.addEventListener('unhandledrejection', (event) => showJsError(event.reason));
+  window.addEventListener('error', (event) => {
+    showJsError(event.error ?? event.message);
+    logAppError('js', event.message, event.error?.stack ?? '');
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    showJsError(event.reason);
+    logAppError('promise', String(event.reason?.message ?? event.reason),
+      event.reason?.stack ?? '');
+  });
 
   function beep(freq = 660, durationMs = 140) {
     if (!optEnabled('rlaus_sound', true)) return;
@@ -358,6 +430,7 @@ const App = (() => {
     });
     socket.on('room:error', ({ code: errorCode, message }) => {
       // Server meldet teils englische Fachtexte — unten deutsche Klartexte.
+      logAppError('server', `${errorCode}: ${message ?? ''}`);
       const friendly = {
         MAP_LOCKED: 'Karte ist gerade gesperrt \u2014 das geht nur nach dem Speichern oder im Spiel (Setz-Punkt).',
         MAP_MISSING: 'Keine Karte im Spiel \u2014 Host muss erst eine speichern.',
@@ -427,8 +500,9 @@ const App = (() => {
     socket.on('game:toast', ({ text }) => {
       if (text) showToast(text);
     });
-    socket.on('position:error', ({ code }) => {
+    socket.on('position:error', ({ code, message }) => {
       if (code === 'POSITION_NOT_ALLOWED') return; // Meeting etc. – ruhig ignorieren
+      logAppError('position', `${code}: ${message ?? ''}`);
       $('game-phase-hint').textContent = `Position abgelehnt: ${code}`;
     });
     socket.on('game:boundary_warning', ({ distanceM, limitM, strikes }) => {
@@ -1380,8 +1454,18 @@ const App = (() => {
     else if (!state.gpsFixAt) msg = t('gps.waiting');
     else if (!proj) msg = t('gps.noanchor');
     else if (Date.now() - state.gpsFixAt > 10000) msg = t('gps.lost');
-    if (msg) { el.textContent = `\ud83d\udcdb ${msg}`; el.classList.remove('hidden'); }
-    else el.classList.add('hidden');
+    if (msg) {
+      el.textContent = `\ud83d\udcdb ${msg}`;
+      el.classList.add('hidden');
+      el.classList.remove('hidden');
+      if (renderGpsStatus.lastMsg !== msg) {
+        logAppError('gps', msg);
+        renderGpsStatus.lastMsg = msg;
+      }
+    } else {
+      el.classList.add('hidden');
+      renderGpsStatus.lastMsg = null;
+    }
   }
 
   function stopGpsLoop() {
@@ -2023,6 +2107,7 @@ const App = (() => {
       $('opt-show-bots').checked = optEnabled('rlaus_showBots', true);
       $('opt-lang').value = langActive();
       refreshAnchorUi();
+      showErrorLogUi();
       $('settings-menu').classList.remove('hidden');
     } else if (target.id === 'btn-settings-close') {
       $('settings-menu').classList.add('hidden');
