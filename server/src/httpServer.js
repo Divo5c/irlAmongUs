@@ -22,6 +22,8 @@ const MIME_TYPES = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
 };
 
 function serveStaticFile(response, relativePath) {
@@ -73,7 +75,8 @@ function createHttpServer(roomStore) {
           return;
         }
         const asset = path.normalize(url.pathname).replace(/^([/\\])+/, '');
-        if (asset.startsWith('css/') || asset.startsWith('js/') || asset.startsWith('icons/')) {
+        if (asset.startsWith('css/') || asset.startsWith('js/') || asset.startsWith('icons/')
+          || asset.startsWith('sfx/')) {
           serveStaticFile(response, asset);
           return;
         }
