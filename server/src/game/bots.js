@@ -189,10 +189,12 @@ function createBotEngine(roomStore, {
         return;
       }
       // Route toward the bot's own task spot when it has one (pose as a
-      // purposeful worker), otherwise wander.
+      // purposeful worker), otherwise wander. Long distances hop along
+      // the corridor graph so bots never cut across walls.
       const taskTarget = botTaskTarget(code, room, bot);
       if (taskTarget?.id && taskTarget.id !== walk.nodeId && nodeById.has(taskTarget.id)) {
-        walk.targetId = taskTarget.id;
+        walk.targetId = nextHopToward(corridors, walk.nodeId, taskTarget.id)
+          ?? taskTarget.id;
       } else {
         walk.targetId = options[Math.floor(Math.random() * options.length)];
       }
@@ -301,7 +303,10 @@ function botCrewFixSabotage(code, room, bots) {
       // Bot ist noch unterwegs: Walker-Ziel auf den Fixort lenken.
       if (walk) {
         const near = findNearestNode(room.map, spot.x, spot.y);
-        if (near) walk.targetId = near.id;
+        if (near) {
+          walk.targetId = nextHopToward(room.map.corridors ?? [], walk.nodeId, near.id)
+            ?? near.id;
+        }
       }
       continue; // arrival required before pressing the panel
     }
@@ -367,6 +372,39 @@ function autoCompleteOneTask(code, room, bots) {    for (const bot of bots) {
       }
     }
     return best;
+  }
+
+  /**
+   * Naechster Schritt auf dem Korridor-Graph (BFS vom Ziel zurueck zum
+   * Start). Ohne das laufen Bots in gerader Linie durch Waende der Karte
+   * (IRL: sie wuerden also quer durchs Haus rennen).
+   */
+  function nextHopToward(corridors, fromId, toId) {
+    if (!fromId || !toId) return null;
+    if (fromId === toId) return toId;
+    const neighbors = new Map();
+    for (const corridor of corridors) {
+      const pushA = neighbors.get(corridor.a) ?? [];
+      pushA.push(corridor.b);
+      neighbors.set(corridor.a, pushA);
+      const pushB = neighbors.get(corridor.b) ?? [];
+      pushB.push(corridor.a);
+      neighbors.set(corridor.b, pushB);
+    }
+    const prev = new Map([[toId, null]]);
+    const queue = [toId];
+    while (queue.length) {
+      const current = queue.shift();
+      for (const neighbor of neighbors.get(current) ?? []) {
+        if (prev.has(neighbor)) continue;
+        prev.set(neighbor, current);
+        if (neighbor === fromId) {
+          return current; // erster HOP ab fromId in Richtung toId
+        }
+        queue.push(neighbor);
+      }
+    }
+    return null; // nicht verbunden — wander statt Teleport durch Waende
   }
 
   function castBotVote(code, room, botId, alive) {

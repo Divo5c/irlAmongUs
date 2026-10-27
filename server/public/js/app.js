@@ -341,7 +341,7 @@ const App = (() => {
       const gain = ctx.createGain();
       osc.frequency.value = freq;
       osc.type = 'sine';
-      gain.gain.value = 0.15;
+      gain.gain.value = 0.15 * sfxVolumeBase();
       osc.connect(gain).connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + durationMs / 1000);
@@ -355,15 +355,21 @@ const App = (() => {
    * Erste Berührung "entriegelt" die Mitte (iOS-Autoplay-Regel).
    */
   const sfxCache = {};
+  function sfxVolumeBase() {
+    const raw = Number(localStorage.getItem('rlaus_sfx_vol'));
+    return Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0.8;
+  }
   function sfx(name, volume = 1) {
     if (!optEnabled('rlaus_sound', true)) return;
+    const effective = sfxVolumeBase() * Math.max(0, volume);
+    if (effective <= 0) return;
     try {
       let a = sfxCache[name];
       if (!a) {
         a = sfxCache[name] = new Audio(`/sfx/${name}.wav`);
         a.preload = 'auto';
       }
-      a.volume = Math.min(1, Math.max(0, volume));
+      a.volume = Math.min(1, effective);
       a.currentTime = 0;
       a.play().catch(() => {});
     } catch (_) { /* sound best-effort */ }
@@ -379,6 +385,11 @@ const App = (() => {
     } catch (_) { /* unlock best-effort */ }
   }, { once: true, passive: true });
   window.RlausSfx = sfx;
+
+  // Menue/Lobby-Sound: JEDER Button-Druck gibt ein kurzes UI-Klick-Geräusch.
+  document.addEventListener('pointerdown', (event) => {
+    if (event.target?.closest?.('button')) sfx('ui_select', 0.5);
+  }, true);
 
   function randomCode() {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -600,8 +611,17 @@ const App = (() => {
       sfx(winner === 'CREWMATE' ? 'victory_crew' : 'victory_impostor');
       $('boundary-banner').classList.add('hidden');
       $('gameover-overlay').classList.remove('hidden');
-      $('gameover-title').textContent =
-        winner === 'CREWMATE' ? 'Crewmates haben gewonnen!' : 'Impostoren haben gewonnen!';
+      // Perspektive: Eigenes Team gewonnen -> Victory, sonst Defeat.
+      // Farbe wie im Original: Crew-Sieg cyan, Impostor-Sieg rot.
+      const myRole = state.role?.role;
+      const teamWon = (winner === 'CREWMATE' && myRole === 'CREWMATE')
+        || (winner === 'IMPOSTOR' && myRole === 'IMPOSTOR');
+      const goTitle = $('gameover-title');
+      goTitle.textContent = teamWon ? 'Victory' : 'Defeat';
+      goTitle.classList.add('pixel-title', 'gameover-title');
+      goTitle.dataset.tone = winner === 'CREWMATE' ? 'crew' : 'imp';
+      $('gameover-overlay').querySelector('.card')
+        ?.setAttribute('data-win', winner === 'CREWMATE' ? 'crew' : 'imp');
       const reasonText = {
         TASKS_COMPLETE: 'Alle Tasks wurden erledigt.',
         IMPOSTORS_DEAD: 'Kein Impostor mehr am Leben.',
@@ -1088,13 +1108,34 @@ const App = (() => {
     try {
       overlay.classList.remove('hidden');
       $('role-card').className = impostor ? 'role-card impostor' : 'role-card crew';
-      $('role-card-title').textContent = impostor ? t('role.imp.title') : t('role.crew.title');
-      const mates = (payload.teammates ?? []).map((mate) => mate.name).join(', ');
-      $('role-card-detail').innerHTML = impostor
-        ? (mates
-          ? `${t('role.imp.line1')}<br><small>${t('game.partner')}: ${escapeHtml(mates)}</small>`
-          : `${t('role.imp.line1')}<br><small>${t('role.tap')}</small>`)
-        : `${t('role.crew.line1')} ${t('role.crew.and')}<br><small>${t('role.tap')}</small>`;
+      const title = $('role-card-title');
+      title.textContent = impostor ? t('role.imp.title') : t('role.crew.title');
+      title.classList.add('pixel-title');
+      const chipOf = (name, self, mate) => {
+        const label = `${escapeHtml(name)}${self ? ' (Du)' : ''}`;
+        return `<span class="role-chip${mate ? ' mate' : ''}${self ? ' self' : ''}">${label}</span>`;
+      };
+      const playerNames = (state.room?.players ?? []).map((p) => p.name);
+      const selfName = state.room?.players?.find((p) => p.id === state.playerId)?.name;
+      const impCount = impostor
+        ? (payload.teammates?.length ?? 0) + 1
+        : (state.room?.config?.impostorCount ?? 1);
+      if (impostor) {
+        const mates = (payload.teammates ?? []);
+        $('role-card-detail').innerHTML =
+          `${t('role.imp.line1')}<br>`
+          + `<span class="pixel-sub">Es ${impCount === 1 ? 'ist' : 'sind'} ${impCount} Impostor${impCount === 1 ? '' : 'en'} unter euch${mates.length ? ` &mdash; ${t('game.partner')}:</span>` : '.</span>'}`
+          + (mates.length
+            ? `<div class="role-row">${mates.map((mate) => chipOf(mate.name, false, true)).join('')}</div>`
+            : '<div class="role-row"><span class="role-chip mate">Du bist alleiniger Impostor</span></div>')
+          + `<small>${t('role.tap')}</small>`;
+      } else {
+        $('role-card-detail').innerHTML =
+          `${t('role.crew.line1')} ${t('role.crew.and')}<br>`
+          + `<span class="pixel-sub">Es ${impCount === 1 ? 'ist' : 'sind'} <b class="imp-count">${impCount}</b> Impostor${impCount === 1 ? '' : 'en'} unter uns:</span>`
+          + `<div class="role-row">${playerNames.map((name) => chipOf(name, name === selfName, false)).join('')}</div>`
+          + `<small>${t('role.tap')}</small>`;
+      }
       $('role-banner').classList.add('hidden');
       $('btn-kill').classList.toggle('hidden', !impostor);
       renderRole(payload); // task list build + flags + teammates line
@@ -2152,6 +2193,7 @@ const App = (() => {
       $('opt-sound').checked = optEnabled('rlaus_sound', true);
       $('opt-vibration').checked = optEnabled('rlaus_vibration', true);
       $('opt-show-bots').checked = optEnabled('rlaus_showBots', true);
+      $('opt-sfx-vol').value = Math.round(sfxVolumeBase() * 100);
       $('opt-lang').value = langActive();
       refreshAnchorUi();
       showErrorLogUi();
@@ -2175,6 +2217,10 @@ const App = (() => {
     const id = event.target.id;
     if (id === 'opt-sound') {
       localStorage.setItem('rlaus_sound', event.target.checked ? '1' : '0');
+    } else if (id === 'opt-sfx-vol') {
+      localStorage.setItem('rlaus_sfx_vol', String(Number(event.target.value) / 100));
+      // Losgelassen -> ein Preview-Beep, damit man die Lautstaerke hoert.
+      sfx('task_done');
     } else if (id === 'opt-vibration') {
       localStorage.setItem('rlaus_vibration', event.target.checked ? '1' : '0');
     } else if (id === 'opt-show-bots') {
@@ -2184,6 +2230,12 @@ const App = (() => {
       setLang(event.target.value);
     }
   });
+  document.addEventListener('input', (event) => {
+    if (event.target.id === 'opt-sfx-vol') {
+      localStorage.setItem('rlaus_sfx_vol', String(Number(event.target.value) / 100));
+    }
+  });
+
   $('btn-rematch').addEventListener('click', () => {
     ensureSocket().emit('game:reset', { code: state.code });
     hideOverlaysNot();

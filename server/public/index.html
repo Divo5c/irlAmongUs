@@ -8,6 +8,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png">
   <title>Real Life Among Us</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -231,6 +234,10 @@
             <input type="checkbox" id="opt-sound" checked>
             <span data-i18n="settings.sound">Sound &amp; Klingeltöne</span>
           </label>
+          <label class="settings-toggle settings-slider">
+            <span>&#128266; Lautstärke</span>
+            <input type="range" id="opt-sfx-vol" min="0" max="100" value="80" style="flex:1;">
+          </label>
           <label class="settings-toggle">
             <input type="checkbox" id="opt-vibration" checked>
             <span data-i18n="settings.vibration">Vibration</span>
@@ -286,9 +293,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.7.1"></script>
-  <script src="/js/mapEditor.js?v=19.7.1"></script>
-  <script src="/js/tasks.js?v=19.7.1"></script>
-  <script src="/js/app.js?v=19.7.1"></script>
+  <script src="/js/osm.js?v=19.8.0"></script>
+  <script src="/js/mapEditor.js?v=19.8.0"></script>
+  <script src="/js/tasks.js?v=19.8.0"></script>
+  <script src="/js/app.js?v=19.8.0"></script>
 </body>
 </html>

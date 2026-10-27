@@ -699,3 +699,49 @@ button.round {
 @media (min-width: 700px) {
   .screen { justify-content: flex-start; padding-top: 40px; }
 }
+
+/* Among-Us-Pixel-Momente: Rollen-Reveal + Victory/Defeat (v19.8) */
+.pixel-title {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  text-shadow: 0 0 14px currentColor, 0 0 40px currentColor;
+  letter-spacing: 2px;
+}
+#role-card-title { line-height: 1.35; }
+.role-card.crew #role-card-title { color: #9df3ff; }
+.role-card.impostor #role-card-title { color: #ff3838; }
+.pixel-sub { display: block; margin-top: 10px; font-size: 13px; opacity: 0.95; }
+.imp-count { color: #ff5c69; font-weight: 800; }
+.role-row {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+  margin: 12px 0 8px;
+}
+.role-chip {
+  padding: 4px 10px; border-radius: 999px; font-size: 12px;
+  background: rgba(88, 166, 255, 0.16); border: 1px solid rgba(88, 166, 255, 0.4);
+}
+.role-chip.self { background: rgba(157, 243, 255, 0.22); border-color: #9df3ff; }
+.role-chip.mate {
+  background: rgba(255, 80, 90, 0.2); border-color: #ff5c69; color: #ffb9be;
+  box-shadow: 0 0 10px rgba(255, 60, 70, 0.45);
+}
+.gameover-title { font-size: clamp(22px, 7.6vw, 40px); margin-bottom: 6px; }
+.gameover-title[data-tone='crew'] { color: #58c2ff; }
+.gameover-title[data-tone='imp'] { color: #ff4552; }
+#gameover-overlay .card::before {
+  content: ''; display: block; height: 4px; border-radius: 2px; margin-bottom: 12px;
+}
+#gameover-overlay .card[data-win='crew']::before { background: linear-gradient(90deg, #58c2ff, transparent); }
+#gameover-overlay .card[data-win='imp']::before { background: linear-gradient(90deg, #ff4552, transparent); }
+/* Lautstaerke-Schieberegler */
+.settings-slider input[type='range'] {
+  -webkit-appearance: none; appearance: none; height: 22px; background: transparent;
+}
+.settings-slider input[type='range']::-webkit-slider-runnable-track {
+  height: 8px; border-radius: 4px;
+  background: linear-gradient(90deg, #58a6ff, #1f3a5f);
+}
+.settings-slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 22px; height: 22px; margin-top: -7px;
+  border-radius: 50%; background: #9df3ff; border: 2px solid #0d1117;
+  box-shadow: 0 0 8px rgba(88, 166, 255, 0.8);
+}
