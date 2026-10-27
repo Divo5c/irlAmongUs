@@ -745,3 +745,26 @@ button.round {
   border-radius: 50%; background: #9df3ff; border: 2px solid #0d1117;
   box-shadow: 0 0 8px rgba(88, 166, 255, 0.8);
 }
+
+/* Grenz-Eskalation: Stufe-2-Banner kehre-sofort-zurueck (Pixel-Look) */
+#boundary-banner.escalate {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: clamp(11px, 3.4vw, 17px);
+  padding: 14px 12px;
+  background: rgba(180, 12, 24, 0.96);
+  border: 2px solid #ff4552;
+  box-shadow: 0 0 18px rgba(255, 60, 70, 0.65);
+  animation: banner-flash 0.7s infinite;
+}
+@keyframes banner-flash {
+  50% { background: rgba(255, 30, 44, 0.96); box-shadow: 0 0 30px rgba(255, 60, 70, 0.9); }
+}
+/* Tasks-Completed-Label in Pixel-Schrift ueber dem Balken */
+#task-progress-strip-label {
+  text-align: center;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 10px;
+  color: #a7f3d0;
+  text-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+  margin-bottom: 2px;
+}

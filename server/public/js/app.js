@@ -548,17 +548,38 @@ const App = (() => {
       logAppError('position', `${code}: ${message ?? ''}`);
       $('game-phase-hint').textContent = `Position abgelehnt: ${code}`;
     });
-    socket.on('game:boundary_warning', ({ distanceM, limitM, strikes }) => {
+    socket.on('game:boundary_warning', ({ distanceM, limitM, escalationLevel }) => {
       const banner = $('boundary-banner');
-      banner.textContent = `${t('map.back')} (${Math.round(distanceM)}m > ${Math.round(limitM)}m) ${t('map.warning')} ${strikes}/3`;
+      // Divo-Regelwerk: Stufe 1 = Countdown-Frist, Stufe 2 = ohne Frist
+      // hart "Kehre sofort zurück!", Stufe 3 = Host wurde gealarmiert.
+      banner.classList.toggle('escalate', (escalationLevel ?? 1) >= 2);
+      if (escalationLevel >= 2) {
+        banner.textContent = `KEHRE SOFORT ZURÜCK! (±${Math.round(distanceM)}m)`;
+      } else {
+        banner.textContent = `Geh zurück ins Spielfeld! (${Math.round(distanceM)}m > ${Math.round(limitM)}m)`;
+      }
       banner.classList.remove('hidden');
-      vibrate([60, 40, 60, 40, 120]);
+      if (Date.now() - (state._bdVibrateAt ?? 0) > 4000) {
+        state._bdVibrateAt = Date.now();
+        vibrate([60, 40, 60, 40, 120]);
+      }
+    });
+    socket.on('game:boundary_back', ({ playerId }) => {
+      if (state.isHost || playerId === state.playerId) {
+        $('boundary-banner').classList.add('hidden');
+      }
     });
     socket.on('admin:player_out_of_bounds', ({ name, distanceM }) => {
+      // Daueralarm (nicht 10s-Toast): Host-Banner bleibt bis game:
+      // boundary_back andkommt.
       const banner = $('boundary-banner');
-      banner.textContent = `ADMIN: ${name} ${t('map.adminOut')} ${Math.round(distanceM)}m!`;
+      banner.textContent = `ADMIN: ${name} ist ${Math.round(distanceM)}m draußen und WEIGERT sich!`;
+      banner.classList.add('escalate');
       banner.classList.remove('hidden');
-      vibrate([200, 100, 200]);
+      if (Date.now() - (state._adVibrateAt ?? 0) > 4000) {
+        state._adVibrateAt = Date.now();
+        vibrate([200, 100, 200]);
+      }
     });
     socket.on('game:role_assigned', (payload) => {
       state.role = payload;
@@ -1061,6 +1082,7 @@ const App = (() => {
     $('cfg-impostors').value = `${cfg.impostorCount ?? 1}`;
     $('cfg-tasks').value = `${cfg.tasksPerCrewmate ?? 4}`;
     $('cfg-kill-radius').value = `${cfg.killRadiusM ?? 2}`;
+    $('cfg-taskradius').value = `${cfg.taskRadiusM ?? 8}`;
     $('cfg-cooldown').value = `${Math.round((cfg.killCooldownMs ?? 0) / 1000)}`;
     $('cfg-discuss').value = `${Math.round((cfg.discussionDurationMs ?? 0) / 1000)}`;
     $('cfg-vote').value = `${Math.round((cfg.votingDurationMs ?? 60_000) / 1000)}`;
@@ -1079,6 +1101,7 @@ const App = (() => {
         impostorCount: Number($('cfg-impostors').value),
         tasksPerCrewmate: Number($('cfg-tasks').value),
         killRadiusM: Number($('cfg-kill-radius').value),
+        taskRadiusM: Number($('cfg-taskradius').value),
         killCooldownMs: Number($('cfg-cooldown').value) * 1000,
         discussionDurationMs: Number($('cfg-discuss').value) * 1000,
         votingDurationMs: Number($('cfg-vote').value) * 1000,
@@ -1191,10 +1214,13 @@ const App = (() => {
     const strip = document.getElementById('task-progress-strip');
     if (!strip) return;
     // Host kann den Balken komplett verstecken (Info-Control-Knopf).
+    const label = document.getElementById('task-progress-strip-label');
     if (state.taskbarAlways === false) {
       strip.style.display = 'none';
+      if (label) label.style.display = 'none';
       return;
     }
+    if (label) label.style.display = '';
     strip.style.display = '';
     const before = document.getElementById('task-progress-fill').style.width;
     // COMMS gest\u00f6rt: Crew kann den Team-Fortschritt nicht sehen.
@@ -1247,9 +1273,10 @@ const App = (() => {
 
   /** Task-Distanz: gleicher Raum \u00fcber roomId oder <4.2m (Server-Gate). */
   function taskNear(task) {
+    const radius = state.room?.config?.taskRadiusM ?? 8;
     if (task.roomId && state.selfPos?.roomId === task.roomId) return true;
     if (task.x == null || !state.selfPos || state.selfPos.x == null) return false;
-    return Math.hypot(state.selfPos.x - task.x, state.selfPos.y - task.y) <= 4.2;
+    return Math.hypot(state.selfPos.x - task.x, state.selfPos.y - task.y) <= radius;
   }
 
   /** \u00d6ffnet das Task-Minigame, wenn N\u00e4he + Regeln passen. */
@@ -1329,6 +1356,7 @@ const App = (() => {
   /** Innerhalb 4 m (Server-Gate) des n\u00e4chsten offenen Tasks. */
   function nearestIncompleteTask() {
     const self = state.selfPos;
+    const radius = state.room?.config?.taskRadiusM ?? 8;
     if (!self) return null;
     let best = null;
     let bestDist = Infinity;
@@ -1340,7 +1368,7 @@ const App = (() => {
         best = task;
       }
     }
-    return bestDist <= 4.2 ? best : null;
+    return bestDist <= radius ? best : null;
   }
 
   function emergencyLeft() {
@@ -1450,10 +1478,12 @@ const App = (() => {
   }
   setInterval(renderGameHud, 500);
   // Selbst-Marker-Puls: weiche Dauerwelle auf der Karte + GPS-Status.
+  // 300ms statt 800ms: Der Marker "fliegt" live mit dir (Feedback aus
+  // dem Draußen-Test: 2s-Schritte sahen hackelich aus).
   setInterval(() => {
     renderGpsStatus();
     if (state.room?.status === 'IN_GAME') drawGameMap();
-  }, 800);
+  }, 300);
 
   // -------------------------------------------------------- sabotage HUD //
 
@@ -1564,8 +1594,47 @@ const App = (() => {
     state.nearbyBodies = [];
   }
 
+  /**
+   * Straßen-Daten: das SAVED map hat nodes+corridors aus den geladenen
+   * OSM-Straßen — genau die Segmente gelten im Spiel als begehbar.
+   * Wir schnappen die Position an das naheste korridor-Segment, sofern
+   * wir NICHT in einem Raum stehen (drin gilt exakte GPS-Wahrheit).
+   * Resultat: der Pin klebt draußen an der Straße statt im Gebüsch,
+   * und Position/-Abstände stimmen mit der Server-Logik überein.
+   */
+  function snapToStreets(x, y) {
+    const map = state.room?.map;
+    const corridors = map?.corridors ?? [];
+    if (!map?.nodes?.length || !corridors.length) return null;
+    const nodeById = new Map(map.nodes.map((n) => [n.id, n]));
+    let best = null;
+    let bestDist = Infinity;
+    for (const corridor of corridors) {
+      const a = nodeById.get(corridor.a);
+      const b = nodeById.get(corridor.b);
+      if (!a || !b) continue;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lenSq = dx * dx + dy * dy;
+      const t = lenSq
+        ? Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / lenSq))
+        : 0;
+      const px = a.x + dx * t;
+      const py = a.y + dy * t;
+      const d = Math.hypot(x - px, y - py);
+      if (d < bestDist) {
+        bestDist = d;
+        best = [px, py];
+      }
+    }
+    // Nur nah genug (12m) darf ziehen — weit Draußen bleibt ehrlich Draußen.
+    return best && bestDist <= 12 ? best : null;
+  }
+
   setInterval(() => {
     const room = state.room;
+    // Nur im Spiel senden — sonst stoppen (Fix für NOT_IN_ROOM-Spam
+    // aus dem Fehler-Tagebuch: Nach Rundenende flippte die Schleife).
     if (!room || room.status !== 'IN_GAME' || !state.gpsFixAt) return;
     if (Date.now() - state.gpsFixAt > 10000) return;
     const proj = projectorFor();
@@ -1584,15 +1653,27 @@ const App = (() => {
     if (jump > 15) alpha = 1;
     smooth.x += (raw[0] - smooth.x) * alpha;
     smooth.y += (raw[1] - smooth.y) * alpha;
+    // Straßen-Fixierung außerhalb von Räumen: Der Pin "liegt" auf der
+    // Straße. In Räumen bleibt exakte GPS-Wahrheit (Task/Kill-Nähe).
+    state.snapped = !state.selfPos?.roomId && snapToStreets(smooth.x, smooth.y);
+    const [tx, ty] = state.snapped ?? [smooth.x, smooth.y];
     state.posSmooth = smooth;
+    state.displayPos = { x: state.snapped ? tx : smooth.x, y: state.snapped ? ty : smooth.y };
     const confidence = Math.min(1, Math.max(0, (60 - accuracy) / 60));
-    emitPosition({ x: smooth.x, y: smooth.y, confidence });
-  }, 2000);
+    const moved = state.lastSentPos
+      ? Math.hypot(state.displayPos.x - state.lastSentPos.x, state.displayPos.y - state.lastSentPos.y)
+      : Infinity;
+    const sinceSend = Date.now() - (state.lastSent?.at ?? 0);
+    // Bewegen sich wir >1,5m -> so schnell wie sinnvoll (>=600ms);
+    // stehen wir -> nur alle 2s (Batterie + Serverlast).
+    if (moved > 1.5 && sinceSend < 600) return;
+    if (moved <= 1.5 && sinceSend < 2000) return;
+    emitPosition({ x: state.displayPos.x, y: state.displayPos.y, confidence });
+  }, 300);
 
   function emitPosition({ x, y, confidence }) {
-    const last = state.lastSent;
-    if (last && Date.now() - last.at < 1000) return;
     state.lastSent = { at: Date.now() };
+    state.lastSentPos = { x, y };
     const socket = ensureSocket();
     socket.emit('position:update', {
       code: state.code,
@@ -1850,11 +1931,11 @@ const App = (() => {
       ctx.fill();
     }
 
-    // self marker: kr\u00e4ftiger "Du bist hier"-Pin, weich interpoliert
+    // self marker: kräftiger "Du bist hier"-Pin, weich interpoliert
     if (state.selfPos?.x != null) {
       const smooth = (state._smoothPos ??= { x: state.selfPos.x, y: state.selfPos.y });
-      smooth.x += (state.selfPos.x - smooth.x) * 0.35;
-      smooth.y += (state.selfPos.y - smooth.y) * 0.35;
+      smooth.x += (state.selfPos.x - smooth.x) * 0.55;
+      smooth.y += (state.selfPos.y - smooth.y) * 0.55;
       const [sx, sy] = toPx(smooth.x, smooth.y);
       const turn = (Date.now() % 1600) / 1600; // weiche Puls-Welle
       ctx.fillStyle = `rgba(74,222,128,${0.5 + 0.3 * Math.sin(turn * Math.PI)})`;
@@ -1874,9 +1955,10 @@ const App = (() => {
         ctx.lineTo(dx, dy);
         ctx.stroke();
       }
-      // Genauigkeits-Kreis: zeigt ehrlich, wie scharf das GPS gerade ist.
+      // Genauigkeits-Kreis: nur zeigen, wenn GPS ehrlich ungenau ist
+      // (>8m)... mit Label, damit man weiß was der Kreis bedeutet.
       const accM = state.gpsAccM;
-      if (accM && accM > 2) {
+      if (accM && accM > 8) {
         const rPx = accM * scale;
         if (rPx > 6 && rPx < 200) {
           ctx.fillStyle = 'rgba(157, 243, 255, 0.10)';
@@ -1888,6 +1970,11 @@ const App = (() => {
           ctx.fill();
           ctx.stroke();
           ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(157, 243, 255, 0.9)';
+          ctx.font = '600 10px system-ui';
+          ctx.textAlign = 'center';
+          ctx.fillText(`\u00b1${Math.round(accM)}m`, sx, sy - rPx - 4);
+          ctx.textAlign = 'left';
         }
       }
       ctx.fillStyle = '#4ade80';
@@ -2303,6 +2390,11 @@ const App = (() => {
       : `Jemand hat gemeldet \u2014 ${deadlineText(discussionDeadline)}`;
     $('meeting-hint').textContent = `${reportText} \u2014 ${t('game.alive')} ${stillAlive0}`;
     const players = state.room?.players ?? [];
+    // Diskussion: Warten, NICHT voten (sonst VOTING_NOT_OPEN-Log-Flood).
+    if (phase === 'DISCUSSION') {
+      openVoteList(players.filter((p) => p.isAlive), null, 'Diskussion \u2014 Voting startet gleich\u2026');
+      return;
+    }
     openVoteList(
       players.filter((p) => p.isAlive),
       (targetId) => {
@@ -2323,17 +2415,20 @@ const App = (() => {
       const isMate = (state.teammates ?? []).some((m) => m.id === player.id);
       const li = document.createElement('li');
       li.innerHTML = `<span${isMate ? ' class="imp-name"' : ''}>${escapeHtml(player.name)}</span>`;
-      const button = document.createElement('button');
-      button.textContent = 'W\u00e4hlen';
-      button.className = 'secondary small';
-      button.addEventListener('click', () => {
-        list.innerHTML = '';
-        $('meeting-hint').textContent = 'Stimme abgegeben \u2014 warte auf die anderen\u2026';
-        onPick(player.id);
-      });
-      li.appendChild(button);
+      if (onPick) {
+        const button = document.createElement('button');
+        button.textContent = 'W\u00e4hlen';
+        button.className = 'secondary small';
+        button.addEventListener('click', () => {
+          list.innerHTML = '';
+          $('meeting-hint').textContent = 'Stimme abgegeben \u2014 warte auf die anderen\u2026';
+          onPick(player.id);
+        });
+        li.appendChild(button);
+      }
       list.appendChild(li);
     }
+    if (!onPick) return; // Diskussion: kein Skip-Vote vor der Abstimmung.
     const skip = document.createElement('button');
     skip.textContent = '\u00dcberspringen';
     skip.style.width = '100%';

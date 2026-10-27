@@ -93,27 +93,31 @@ test('corpse on another street is invisible and report is rejected', async () =>
 });
 
 test('boundary: far-off positions produce warnings and admin escalation', async () => {
+  // Escalation windows shortened so the test doesn't wait 3 minutes.
+  process.env.RLAUS_ESCALATION_FIRST_MS = '200';
+  process.env.RLAUS_ESCALATION_SECOND_MS = '600';
   const store = await setup();
-  // 30 m away from both corridors
-  await store.updatePosition('TESTAB', 'host-1', { x: 25, y: 30, confidence: 1 });
-  let boundary = null;
-  let sawAdminAlert = false;
-  for (let i = 0; i < 3; i++) {
-    await sleep(1400);
-    boundary = store.updatePosition('TESTAB', 'host-1', {
-      x: 25,
-      y: 30 + (i + 1) * 0.5,
-      confidence: 1,
-    }).boundary;
-    if (boundary.adminAlert) sawAdminAlert = true;
-  }
-  assert.equal(boundary.outOfBounds, true);
-  assert.ok(boundary.strikes >= 3, `strikes accumulate (${boundary.strikes})`);
-  assert.equal(sawAdminAlert, true, 'admin escalation after 3 strikes (once)');
+  // 30 m away from both corridors -> Level 1 warning immediately.
+  let boundary = store.updatePosition('TESTAB', 'host-1', { x: 25, y: 30, confidence: 1 }).boundary;
+  assert.equal(boundary.outOfBounds, true, 'far off is out of bounds');
+  assert.equal(boundary.escalationLevel, 1, 'starts at escalation level 1');
 
-  // Back inside: counters cleared (walk takes a few seconds)
-  await sleep(5000);
+  // Level 2 after 60s (env-shortened to 200ms), Level 3 (host alarm)
+  // after +120s (env-shortened to 600ms total).
+  await sleep(300);
+  boundary = store.updatePosition('TESTAB', 'host-1', { x: 25, y: 30.4, confidence: 1 }).boundary;
+  assert.equal(boundary.escalationLevel, 2, 'level 2 after first window');
+  assert.ok(boundary.escalationLevel < 3, 'host not alarmed yet');
+  await sleep(500);
+  boundary = store.updatePosition('TESTAB', 'host-1', { x: 25, y: 30.8, confidence: 1 }).boundary;
+  assert.equal(boundary.escalationLevel, 3, 'level 3 raises');
+  assert.equal(boundary.adminAlert, true, 'host alarm while outside');
+
+  // Back inside: counters cleared + back-notification.
   const back = store.updatePosition('TESTAB', 'host-1', { x: 25, y: 0, confidence: 1 });
   assert.equal(back.boundary.outOfBounds, false);
-  assert.equal(back.boundary.strikes, 0);
+  assert.equal(back.boundary.backFromEscalation, true, 'escalated player returning signals back');
+  assert.equal(back.boundary.escalationLevel, 0);
+  const later = store.updatePosition('TESTAB', 'host-1', { x: 25, y: 0.2, confidence: 1 });
+  assert.equal(later.boundary.backFromEscalation, false, 'back signal only fires once');
 });

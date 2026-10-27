@@ -52,7 +52,7 @@ const ROLE_CREWMATE = PlayerRole.enum[0];
 const ROLE_IMPOSTOR = PlayerRole.enum[1];
 
 /** How close a player must stand to a task spot to complete it. */
-const DEFAULT_TASK_RADIUS_M = 4;
+const DEFAULT_TASK_RADIUS_M = 8;
 
 const MAX_PLAYERS = 10;
 
@@ -76,9 +76,15 @@ class RoomStore {
   /** Boundary strike counters: `${code}|${playerId}` -> {strikes, alerted}. */
   #boundaryStrikes = new Map();
 
+  /** Grenz-Eskalation: code|playerId -> {outSince, alarmed}. */
+  #boundaryEscalation = new Map();
+
   #clearBoundaryStrikes(code) {
     for (const key of [...this.#boundaryStrikes.keys()]) {
       if (key.startsWith(`${code}|`)) this.#boundaryStrikes.delete(key);
+    }
+    for (const key of [...this.#boundaryEscalation.keys()]) {
+      if (key.startsWith(`${code}|`)) this.#boundaryEscalation.delete(key);
     }
   }
 
@@ -570,7 +576,7 @@ class RoomStore {
         spot != null && (
           (spot.roomId != null && own?.roomId === spot.roomId) ||
           (spot.x != null && own != null &&
-            Math.hypot(own.x - spot.x, own.y - spot.y) <= DEFAULT_TASK_RADIUS_M)
+            Math.hypot(own.x - spot.x, own.y - spot.y) <= (room.config?.taskRadiusM ?? DEFAULT_TASK_RADIUS_M))
         );
       const own = this.getPlayerPosition(code, playerId);
       if (!stageAt(stage)) {
@@ -1414,6 +1420,31 @@ class RoomStore {
         : 0;
     const boundaryKey = `${code}|${playerId}`;
     const strikes = this.#boundaryStrikes.get(boundaryKey) ?? { strikes: 0, alerted: false };
+    // Grenz-Eskalation (Draußen-Regel von Divo): 60s Frist, dann 120s
+    // Frist, danach Dauer-Alarm an den Host — bis der Spieler drin ist.
+    // Draußen-Fristen (Divo-Regel): 60s dann 120s dann Host-Alarm.
+    // Env-Override hilft Tests, nicht 3 Minuten zu warten.
+    const ESCALATION = {
+      FIRST: Number(process.env.RLAUS_ESCALATION_FIRST_MS ?? 60_000),
+      SECOND: Number(process.env.RLAUS_ESCALATION_SECOND_MS ?? 180_000),
+    };
+    let escalation = this.#boundaryEscalation.get(boundaryKey)
+      ?? { outSince: null, maxLevel: 0 };
+    const isOut = room.status === STATUS_IN_GAME && distanceOutM > room.config.boundaryWarnM;
+    if (isOut) {
+      escalation.outSince ??= Date.now();
+    }
+    const outMs = isOut ? Date.now() - (escalation.outSince ?? Date.now()) : 0;
+    const level = isOut
+      ? (outMs >= ESCALATION.SECOND ? 3 : (outMs >= ESCALATION.FIRST ? 2 : 1))
+      : 0;
+    if (level > (escalation.maxLevel ?? 0)) escalation.maxLevel = level;
+    // Zurück-Hinweis: nur relevant, wenn er schon Stufe 2+ erreicht hat.
+    const backFromEscalation = !isOut && (escalation.maxLevel ?? 0) >= 2;
+    if (!isOut) escalation = { outSince: null, maxLevel: 0 };
+    this.#boundaryEscalation.set(boundaryKey, escalation);
+    // Host-Alert während Stufe 3 jeden Tick senden (Client hält Banner).
+    const adminAlert = level >= 3;
     if (
       room.status === STATUS_IN_GAME &&
       distanceOutM > room.config.boundaryWarnM
@@ -1423,10 +1454,6 @@ class RoomStore {
       strikes.strikes = 0;
       strikes.alerted = false;
     }
-    const adminAlert =
-      room.status === STATUS_IN_GAME &&
-      strikes.strikes >= 3 &&
-      !strikes.alerted;
     if (adminAlert) strikes.alerted = true;
     this.#boundaryStrikes.set(boundaryKey, strikes);
 
@@ -1443,10 +1470,12 @@ class RoomStore {
       onCorridor: positionState.onCorridor,
       bodies,
       boundary: {
-        outOfBounds: room.status === STATUS_IN_GAME && distanceOutM > room.config.boundaryWarnM,
+        outOfBounds: isOut,
         distanceM: Math.round(distanceOutM * 10) / 10,
         limitM: room.config.boundaryWarnM,
         strikes: strikes.strikes,
+        escalationLevel: level,
+        backFromEscalation,
         adminAlert,
       },
     };

@@ -99,6 +99,9 @@
                 <label>Tasks pro Crewmate
                   <select id="cfg-tasks"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select>
                 </label>
+                <label>Task-Wirkweite (m)
+                  <select id="cfg-taskradius"><option>5</option><option>8</option><option>12</option><option>15</option><option>20</option></select>
+                </label>
                 <label class="settings-toggle-inline">
                   <span>Task-Balken immer sichtbar</span>
                   <input type="checkbox" id="cfg-taskbar" checked>
@@ -181,6 +184,7 @@
       <span class="hint" id="game-phase-hint"></span>
       <button id="btn-settings" class="gear-btn" aria-label="Einstellungen">&#9881;&#xFE0E;</button>
     </div>
+    <div id="task-progress-strip-label" aria-hidden="true">TASKS&nbsp;COMPLETED</div>
     <div id="task-progress-strip" aria-hidden="true">
       <div id="task-progress-fill"></div>
     </div>
@@ -293,9 +297,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.8.1"></script>
-  <script src="/js/mapEditor.js?v=19.8.1"></script>
-  <script src="/js/tasks.js?v=19.8.1"></script>
-  <script src="/js/app.js?v=19.8.1"></script>
+  <script src="/js/osm.js?v=19.9.0"></script>
+  <script src="/js/mapEditor.js?v=19.9.0"></script>
+  <script src="/js/tasks.js?v=19.9.0"></script>
+  <script src="/js/app.js?v=19.9.0"></script>
 </body>
 </html>

@@ -530,6 +530,13 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
             strikes: result.boundary.strikes,
           });
         }
+        // Gestufter Spieler ist zurück — Host-Banner wieder freimachen.
+        if (result.boundary?.backFromEscalation) {
+          socket.to(code).emit('game:boundary_back', {
+            code,
+            playerId: socket.data.playerId,
+          });
+        }
 
         // Kill targets in range: the red button lights up only with real
         // targets (impostor sees names of the closest candidates).
