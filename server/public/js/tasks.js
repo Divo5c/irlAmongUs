@@ -113,6 +113,10 @@
     { id: 'magenta', hex: '#e879f9', glyph: '\u2605' },
   ];
 
+  /** Kurzer Alias fuer den App-Sound-Player (falls geladen). */
+  const S = (name, volume = 1) => window.RlausSfx?.(name, volume);
+  const WIRE_LINK_SOUNDS = ['wire1', 'wire2', 'wire3'];
+
   function mountWiring(shell, finish) {
     const { body } = shell;
     const leftOrder = shuffle(WIRE_COLORS);
@@ -197,6 +201,7 @@
           socketNode.style.background = leftEnds.get(node.dataset.wire).style.background;
           leftEnds.get(node.dataset.wire).classList.add('used');
           connected += 1;
+          S(WIRE_LINK_SOUNDS[Math.floor(Math.random() * WIRE_LINK_SOUNDS.length)], 0.8);
           if (connected === 4) {
             board.classList.add('task-done-flash');
             setTimeout(finish, 320);
@@ -231,6 +236,7 @@
     card.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       card.setPointerCapture(event.pointerId);
+      S('card_move', 0.7);
       startX = event.clientX;
       currentX = 0;
       startTime = Date.now();
@@ -248,10 +254,13 @@
       const dt = Date.now() - startTime;
       if (currentX >= 250) {
         if (dt < 350) {
+          S('card_deny', 0.9);
           setHint?.('Zu schnell! Karte zur\u00fcck.');
         } else if (dt > 2200) {
+          S('card_deny', 0.9);
           setHint?.('Zu langsam! Karte zur\u00fcck.');
         } else {
+          S('card_accept');
           card.classList.add('accepted');
           setTimeout(finish, 320);
           return;
@@ -269,7 +278,7 @@
   // ------------------------------------------------------------ upload data //
 
   function mountHoldToFill(shell, finish, setHint, {
-    seconds = 6, label = 'HALTEN', color = '#4ade80', cancelable = true,
+    seconds = 6, label = 'HALTEN', color = '#4ade80', cancelable = true, sound = null,
   } = {}) {
     const { body } = shell;
     const button = el('button', 'task-hold-btn', label);
@@ -293,6 +302,7 @@
       event.preventDefault();
       button.setPointerCapture(event.pointerId);
       if (timer) return;
+      if (sound) S(sound, 0.7);
       button.classList.add('holding');
       timer = setInterval(() => {
         fraction += 60 / (seconds * 1000);
@@ -529,6 +539,7 @@
       switches.push(node);
       node.addEventListener('click', () => {
         const number = switches.indexOf(node) + 1;
+        S('breaker', 0.7);
         if (number !== expected) {
           expected = 1;
           for (const sw of switches) sw.classList.remove('ok');
@@ -635,6 +646,7 @@
       leaf.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         leaf.setPointerCapture(event.pointerId);
+        S('o2_grab', 0.6);
         dragging = true;
       });
       leaf.addEventListener('pointermove', (event) => {
@@ -648,6 +660,7 @@
         dragging = false;
         const holeRect = hole.getBoundingClientRect();
         if (event.clientY >= holeRect.top - 20) {
+          S('o2_drop', 0.8);
           leaf.style.display = 'none';
           hole.classList.add('flash');
           setTimeout(() => hole.classList.remove('flash'), 240);
@@ -713,6 +726,7 @@
       label.classList.toggle('ok', rooms[index] === target);
     }
     slider.addEventListener('input', refresh);
+    slider.addEventListener('change', () => S('power_switch', 0.8));
     refresh();
     const acceptBtn = el('button', 'task-tap-btn', '\u26A1 POWER ANNEHMEN');
     body.appendChild(acceptBtn);
@@ -952,7 +966,7 @@
       shell, finish, setHint, { seconds: 6, label: '\u2B06 HALTEN \u2014 UPLOAD', color: '#4ade80' },
     ),
     fuel_engines: (shell, finish, setHint) => mountHoldToFill(
-      shell, finish, setHint, { seconds: 5, label: '\u26FD HALTEN \u2014 TANKEN', color: '#facc15' },
+      shell, finish, setHint, { seconds: 5, label: '\u26FD HALTEN \u2014 TANKEN', color: '#facc15', sound: 'fuel' },
     ),
     calibrate_distributor: mountCalibrateDistributor,
     start_reactor: mountStartReactor,

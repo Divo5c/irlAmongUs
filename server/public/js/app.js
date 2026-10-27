@@ -585,6 +585,12 @@ const App = (() => {
     socket.on('game:voting_started', ({ votingDeadline }) => {
       $('meeting-title').textContent = t('meeting.voteTitle');
       $('meeting-hint').textContent = deadlineText(votingDeadline);
+      // 10s-Bedenkklackern wie im Original (arbeitsspeicherfreundlich: 1 Timer).
+      window.clearTimeout(state.votingWarnTimer);
+      const warnIn = (votingDeadline ?? 0) - 10000 - Date.now();
+      if (state.room?.meeting?.phase === 'VOTING' && warnIn > 0 && state.voted !== true) {
+        state.votingWarnTimer = window.setTimeout(() => sfx('vote_timer'), warnIn);
+      }
     });
     socket.on('game:vote_progress', ({ votedCount, totalVoters }) => {
       // Eigene Stimme hat schon vote_locked -> nur für fremde klingeln.
@@ -1503,6 +1509,11 @@ const App = (() => {
       state.gpsFix = pos.coords;
       state.gpsFixAt = Date.now();
       state.gpsError = null;
+      // Für Genauigkeits-Kreis + Richtungs-Pfeil auf der Karte.
+      state.gpsAccM = pos.coords.accuracy ?? null;
+      state.gpsHeading = (pos.coords.speed ?? 0) > 0.5
+        && typeof pos.coords.heading === 'number' && !Number.isNaN(pos.coords.heading)
+        ? pos.coords.heading : null;
     }, (err) => {
       // Kein stillschweigendes Schlucken mehr: der Spieler sieht WARUM
       // sein Marker fehlt (Berechtigung verweigert / kein Fix / Timeout).
@@ -1559,9 +1570,23 @@ const App = (() => {
     if (Date.now() - state.gpsFixAt > 10000) return;
     const proj = projectorFor();
     if (!proj) return;
-    const [x, y] = proj.project(state.gpsFix.latitude, state.gpsFix.longitude);
-    const confidence = Math.min(1, Math.max(0, (60 - (state.gpsFix.accuracy ?? 60)) / 60));
-    emitPosition({ x, y, confidence });
+    // Glättung: rohe GPS-Fixes usability-springen 3-10m. Exponentielles
+    // Mittel in Weltmetern — schlecht empfangene Fixe (accuracy) folgen
+    // träger, große Sprünge (Rundenstart/Ankerwechsel) werden sofort
+    // übernommen. Resultat: Marker und Bot-Blicke bleiben ruhig.
+    const raw = proj.project(state.gpsFix.latitude, state.gpsFix.longitude);
+    const smooth = state.posSmooth ?? { x: raw[0], y: raw[1] };
+    const jump = Math.hypot(raw[0] - smooth.x, raw[1] - smooth.y);
+    const accuracy = state.gpsFix.accuracy ?? 30;
+    let alpha = 0.55;
+    if (accuracy > 25) alpha = 0.3;
+    if (accuracy > 45) alpha = 0.2;
+    if (jump > 15) alpha = 1;
+    smooth.x += (raw[0] - smooth.x) * alpha;
+    smooth.y += (raw[1] - smooth.y) * alpha;
+    state.posSmooth = smooth;
+    const confidence = Math.min(1, Math.max(0, (60 - accuracy) / 60));
+    emitPosition({ x: smooth.x, y: smooth.y, confidence });
   }, 2000);
 
   function emitPosition({ x, y, confidence }) {
@@ -1836,17 +1861,34 @@ const App = (() => {
       ctx.beginPath();
       ctx.arc(sx, sy, 16 + 6 * turn, 0, Math.PI * 2);
       ctx.fill();
-      const heading = state.selfPos.heading;
+      const heading = state.gpsHeading;
       if (typeof heading === 'number' && !Number.isNaN(heading)) {
-        const rad = ((heading - 90) * Math.PI) / 180;
-        const dx = sx + Math.cos(rad) * 24;
-        const dy = sy + Math.sin(rad) * 24;
+        // Geo-Grade: 0 = Norden (oben auf der Karte), 90 = Osten (rechts).
+        const rad = (heading * Math.PI) / 180;
+        const dx = sx + Math.sin(rad) * 24;
+        const dy = sy - Math.cos(rad) * 24;
         ctx.strokeStyle = '#86efac';
         ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(sx, sy);
         ctx.lineTo(dx, dy);
         ctx.stroke();
+      }
+      // Genauigkeits-Kreis: zeigt ehrlich, wie scharf das GPS gerade ist.
+      const accM = state.gpsAccM;
+      if (accM && accM > 2) {
+        const rPx = accM * scale;
+        if (rPx > 6 && rPx < 200) {
+          ctx.fillStyle = 'rgba(157, 243, 255, 0.10)';
+          ctx.strokeStyle = 'rgba(157, 243, 255, 0.45)';
+          ctx.setLineDash([5, 4]);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(sx, sy, rPx, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
       }
       ctx.fillStyle = '#4ade80';
       ctx.strokeStyle = '#ffffff';
@@ -2087,6 +2129,8 @@ const App = (() => {
       code: state.code,
       anchor: applyAnchorFrom(gpsFix, cxy),
     });
+    // Neuer Ursprung -> alte Welt-Koordinaten sind serializer Unfug.
+    state.posSmooth = null;
     $('calib-overlay').classList.add('hidden');
     clearInterval(drawCalibMap._iv);
     showToast('\ud83d\udcdb Setz-Punkt gespeichert \u2014 dein Marker erscheint mit dem n\u00e4chsten GPS-Fix.');
@@ -2208,6 +2252,7 @@ const App = (() => {
       state.socket = null;
       state.room = null;
       state.selfPos = null;
+      state.posSmooth = null;
       state.botPositions = null;
       localStorage.removeItem('rlaus_session');
       show('home');
