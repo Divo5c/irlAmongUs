@@ -204,21 +204,41 @@
       <div id="boundary-banner" class="hidden">Geh zur&uuml;ck ins Spielfeld!</div>
     </div>
     <div class="game-actions">
-      <button id="btn-report" class="round-btn report" disabled data-i18n="btn.report">Report</button>
-      <button id="btn-use" class="round-btn use hidden" disabled data-i18n="btn.use">Use</button>
-      <button id="btn-sabotage" class="round-btn sabotage hidden" disabled data-i18n="btn.sabotage">Sabotage</button>
-      <button id="btn-kill" class="round-btn kill hidden" data-i18n="btn.kill">Kill</button>
+      <button id="btn-report" class="round-btn icon-btn" disabled>
+        <img src="/img/ui/btn-report.png" alt=""><span class="icon-label" data-i18n="btn.report">Report</span></button>
+      <button id="btn-use" class="round-btn icon-btn hidden" disabled>
+        <img src="/img/ui/btn-use.png" alt=""><span class="icon-label" data-i18n="btn.use">Use</span></button>
+      <button id="btn-sabotage" class="round-btn icon-btn hidden" disabled>
+        <img src="/img/ui/btn-sabotage.png" alt=""><span class="icon-label" data-i18n="btn.sabotage">Sabotage</span></button>
+      <button id="btn-kill" class="round-btn icon-btn hidden">
+        <img src="/img/ui/btn-kill.png" alt=""><span class="icon-label" data-i18n="btn.kill">Kill</span></button>
+    </div>
+    <div id="emergency-big" class="hidden">
+      <button id="btn-emergency" aria-label="Notfall-Meeting">
+        <span class="emergency-cap"></span>
+        <span class="emergency-face" data-i18n="btn.emergency">NOTFALL</span>
+      </button>
     </div>
     <details id="taskbox">
       <summary>Deine Tasks (<span id="task-count">0</span>)</summary>
       <ul id="task-list" class="task-list"></ul>
     </details>
     <div id="meeting-overlay" class="overlay hidden">
-      <div class="card">
-        <h3 id="meeting-title">Meeting</h3>
+      <div class="vote-tablet">
+        <div class="vote-tablet-head">
+          <h3 id="meeting-title" class="pixel-title">Who Is The Impostor?</h3>
+          <div id="vote-countdown" class="vote-countdown"></div>
+          <img id="btn-skipvote" class="skip-vote-img hidden" src="/img/ui/btn-skipvote.png" alt="Skip Vote" title="Skip Vote">
+        </div>
         <p id="meeting-hint" class="hint"></p>
-        <ul id="vote-list" class="player-list"></ul>
+        <ul id="vote-list" class="vote-grid"></ul>
+        <div id="vote-reveal-bar" class="vote-reveal-bar hidden"></div>
       </div>
+    </div>
+    <div id="eject-overlay" class="eject-overlay hidden">
+      <div class="eject-stars"></div>
+      <div id="eject-bean" class="eject-bean"></div>
+      <div id="eject-text" class="eject-text pixel-title"></div>
     </div>
     <div id="gameover-overlay" class="overlay hidden">
       <div class="card">
@@ -297,9 +317,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.9.0"></script>
-  <script src="/js/mapEditor.js?v=19.9.0"></script>
-  <script src="/js/tasks.js?v=19.9.0"></script>
-  <script src="/js/app.js?v=19.9.0"></script>
+  <script src="/js/osm.js?v=19.10.0"></script>
+  <script src="/js/mapEditor.js?v=19.10.0"></script>
+  <script src="/js/tasks.js?v=19.10.0"></script>
+  <script src="/js/app.js?v=19.10.0"></script>
 </body>
 </html>

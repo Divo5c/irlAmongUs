@@ -24,6 +24,7 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon',
   '.wav': 'audio/wav',
   '.mp3': 'audio/mpeg',
+  '.png': 'image/png',
 };
 
 function serveStaticFile(response, relativePath) {
@@ -76,7 +77,7 @@ function createHttpServer(roomStore) {
         }
         const asset = path.normalize(url.pathname).replace(/^([/\\])+/, '');
         if (asset.startsWith('css/') || asset.startsWith('js/') || asset.startsWith('icons/')
-          || asset.startsWith('sfx/')) {
+          || asset.startsWith('sfx/') || asset.startsWith('img/')) {
           serveStaticFile(response, asset);
           return;
         }

@@ -768,3 +768,109 @@ button.round {
   text-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
   margin-bottom: 2px;
 }
+
+/* Notfallknopf 3D mit Glas-Kappe (nur sichtbar am Meeting-Point) */
+#emergency-big { position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: 128px; z-index: 40; filter: drop-shadow(0 10px 16px rgba(0,0,0,0.5)); }
+#btn-emergency { position: relative; width: 104px; height: 96px; border: none;
+  border-radius: 52px/48px; cursor: pointer; padding: 0;
+  background: radial-gradient(ellipse at 50% 18%, #e04545, #a21212 62%, #7c0d0d);
+  box-shadow: 0 8px 0 #5b0909, 0 12px 20px rgba(0,0,0,0.55),
+    inset 0 2px 6px rgba(255,255,255,0.25);
+  transition: transform 0.12s ease, box-shadow 0.12s ease; }
+#btn-emergency:active { transform: translateY(6px);
+  box-shadow: 0 2px 0 #5b0909, 0 4px 8px rgba(0,0,0,0.5); }
+#btn-emergency.blocked { filter: grayscale(0.85) brightness(0.6); cursor: not-allowed; }
+.emergency-cap { position: absolute; left: -6%; right: -6%; top: -34%;
+  height: 54%; border-radius: 50% 50% 46% 46% / 90% 90% 40% 40%;
+  background: linear-gradient(160deg, rgba(255,255,255,0.42),
+    rgba(200,225,255,0.14) 55%, rgba(160,190,230,0.34));
+  border: 1px solid rgba(255,255,255,0.5); pointer-events: none;
+  backdrop-filter: blur(1.5px); }
+#btn-emergency.open .emergency-cap { transform: translateY(-16%) rotate(-8deg);
+  opacity: 0.8; }
+.emergency-face { position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center; color: #ffe9e9;
+  font-weight: 800; font-size: 13px; letter-spacing: 1px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6); pointer-events: none; }
+#btn-emergency.pressed .emergency-cap { transform: translateY(38%) scale(1.05);
+  opacity: 0.95; }
+
+/* Among-Us-Button-Art (PNG aus Button_Pic): Bild + Label darunter */
+.round-btn.icon-btn { background: none; box-shadow: none; padding: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.icon-btn img { width: 62px; height: 62px; object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.55)); }
+.icon-btn:disabled img { filter: grayscale(0.85) brightness(0.55)
+  drop-shadow(0 4px 8px rgba(0,0,0,0.55)); }
+.icon-btn.loaded img { filter: none; }
+.icon-btn:not(:disabled) img { animation: btn-float 2.4s ease-in-out infinite; }
+.icon-btn:active:not(:disabled) img { animation: none;
+  transform: translateY(2px) scale(0.96); }
+.icon-label { font-size: 11px; font-weight: 700; color: #e5e7eb;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+@keyframes btn-float { 50% { transform: translateY(-2px); } }
+
+/* --- Voting-Tablet (v19.10) --- */
+.vote-tablet { background: #0b1024; border: 3px solid #26304f; border-radius: 18px;
+  padding: 14px 14px 18px; max-width: 420px; width: min(92vw, 420px);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.7), inset 0 0 0 2px #050815; }
+.vote-tablet-head { display: flex; align-items: center; gap: 10px;
+  border-bottom: 2px solid #26304f; padding-bottom: 8px; margin-bottom: 8px; }
+.vote-tablet-head .pixel-title { font-size: 13px; color: #ffd600; flex: 1; }
+.vote-countdown { font-family: 'Press Start 2P', monospace; font-size: 10px;
+  color: #ff5533; white-space: nowrap; }
+.skip-vote-img { width: 74px; cursor: pointer; }
+.skip-vote-img:active { transform: translateY(2px) scale(0.97); }
+.vote-grid { list-style: none; margin: 0; padding: 0; display: grid;
+  grid-template-columns: 1fr 1fr; gap: 8px; }
+.vote-card { display: flex; align-items: center; gap: 8px; background: #121a3a;
+  border: 2px solid #2c3a6b; border-radius: 10px; padding: 8px 10px; min-height: 46px; }
+.vote-card.pickable { cursor: pointer; }
+.vote-card.pickable:active { transform: scale(0.98); border-color: #ffd600; }
+.vote-chip { width: 22px; height: 30px; border-radius: 11px 11px 6px 6px; flex: none;
+  background: #8397A7; box-shadow: inset -4px 0 6px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.5); }
+.vote-chip::after { content: ''; display: block; width: 7px; height: 5px;
+  border-radius: 2px; background: rgba(180,220,255,0.85);
+  margin: 4px 0 0 11px; }
+.vote-name { color: #e5e7eb; font-size: 13px; font-weight: 700; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.vote-card.dead { opacity: 0.45; filter: grayscale(0.8); }
+.vote-card.dead::after { content: '\2716\fe0f'; margin-left: auto; font-size: 12px; }
+.vote-reveal-bar { margin-top: 10px; border-top: 2px solid #26304f; padding-top: 8px;
+  display: grid; gap: 4px; }
+.vote-reveal-line { font-size: 11px; color: #94a3b8; display: flex; gap: 6px;
+  align-items: center; }
+.vote-reveal-line .mini-chip { width: 10px; height: 14px; border-radius: 5px 5px 3px 3px;
+  display: inline-block; }
+
+/* --- Eject-Sequenz (v19.10) --- */
+.eject-overlay { position: fixed; inset: 0; z-index: 220; background: #04060f;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  overflow: hidden; }
+.eject-stars { position: absolute; inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, #fff 50%, transparent 55%),
+    radial-gradient(1px 1px at 70% 20%, #cfe6ff 50%, transparent 55%),
+    radial-gradient(2px 2px at 40% 70%, #fff 50%, transparent 55%),
+    radial-gradient(1px 1px at 85% 60%, #cfe6ff 50%, transparent 55%),
+    radial-gradient(1px 1px at 10% 80%, #fff 50%, transparent 55%),
+    radial-gradient(2px 2px at 60% 45%, #fff 50%, transparent 55%);
+  animation: stars-drift 6s linear infinite; opacity: 0.9; }
+@keyframes stars-drift { from { transform: translateX(0); }
+  to { transform: translateX(-6%); } }
+.eject-bean { width: 46px; height: 62px; border-radius: 23px 23px 10px 10px;
+  background: var(--bean-color, #C51111); position: relative;
+  box-shadow: inset -10px 0 14px rgba(0,0,0,0.35);
+  animation: eject-drift 3.6s ease-in-out forwards; }
+.eject-bean::before { content: ''; position: absolute; top: 14px; left: 22px;
+  width: 16px; height: 10px; border-radius: 5px; background: #bcd6f8;
+  box-shadow: 2.5px 0 0 2.5px #7d92a8; }
+.eject-bean::after { content: ''; position: absolute; bottom: -10px; right: 6px;
+  width: 24px; height: 6px; border-radius: 3px;
+  background: var(--bean-color, #C51111); transform: rotate(-24deg); }
+@keyframes eject-drift { 0% { transform: translateX(-130vw) rotate(0deg); }
+  100% { transform: translateX(130vw) rotate(-12deg); } }
+.eject-text { position: absolute; bottom: 22%; left: 0; right: 0; text-align: center;
+  font-size: 14px; color: #fff; text-shadow: 0 0 8px rgba(160,200,255,0.9);
+  padding: 0 16px; line-height: 1.9; }

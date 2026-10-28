@@ -71,6 +71,10 @@ const App = (() => {
       'toast.noMoveYet': 'Beweg dich erst, dann kannst du reporten.',
       'game.out': 'Du bist raus',
       'game.ejected': 'wurde rausgewählt.',
+      'eject.was': '{name} wurde rausgeworfen.',
+      'eject.wasImp': '{name} war ein Impostor.',
+      'eject.wasNotImp': '{name} war kein Impostor.',
+      'eject.remain': '{n} Impostor(s) übrig.',
       'game.ejectedSkip': 'Niemand wurde rausgewählt (Skip).',
       'map.back': 'Geh zurück aufs Spielfeld!',
       'map.warning': 'Warnung',
@@ -137,6 +141,10 @@ const App = (() => {
       'toast.noMoveYet': 'Move first before you can report.',
       'game.out': 'You are out',
       'game.ejected': 'was voted out.',
+      'eject.was': '{name} was ejected.',
+      'eject.wasImp': '{name} was An Impostor.',
+      'eject.wasNotImp': '{name} was not An Impostor.',
+      'eject.remain': '{n} Impostor{s} remain.',
       'game.ejectedSkip': 'Nobody was voted out (skipped).',
       'map.back': 'Back to the play area!',
       'map.warning': 'Warning',
@@ -195,6 +203,18 @@ const App = (() => {
     killReadyAt: 0,
     voted: false,
   };
+
+  // Among-Us-Farbpalette (Spiegel von server PLAYER_COLORS).
+  const PLAYER_COLOR_HEX = {
+    red: '#C51111', blue: '#132ED1', green: '#117F2D', pink: '#ED54BA',
+    orange: '#EF7D0D', yellow: '#F5F557', black: '#3F474E', white: '#D6E0F0',
+    purple: '#6B2FBB', brown: '#71491E', cyan: '#38FEDC', lime: '#50EF39',
+    maroon: '#6B2B3C', rose: '#ECC0D3', banana: '#F0F0A8', gray: '#8397A7',
+    tan: '#91897F', coral: '#EC7578',
+  };
+  function colorChipHex(colorId) {
+    return PLAYER_COLOR_HEX[colorId ?? 'gray'] ?? '#8397A7';
+  }
 
   const editor = new MapEditor($('map-canvas'), {
     onSelectionChanged: (count) => {
@@ -604,8 +624,11 @@ const App = (() => {
     });
     socket.on('game:meeting_started', (payload) => renderMeeting(payload));
     socket.on('game:voting_started', ({ votingDeadline }) => {
+      state.votingDeadline = votingDeadline ?? 0;
+      startVoteCountdown(state.votingDeadline);
       $('meeting-title').textContent = t('meeting.voteTitle');
-      $('meeting-hint').textContent = deadlineText(votingDeadline);
+      $('meeting-title').classList.add('pixel-title');
+      if (!state.voted) $('meeting-hint').textContent = deadlineText(votingDeadline);
       // 10s-Bedenkklackern wie im Original (arbeitsspeicherfreundlich: 1 Timer).
       window.clearTimeout(state.votingWarnTimer);
       const warnIn = (votingDeadline ?? 0) - 10000 - Date.now();
@@ -613,14 +636,34 @@ const App = (() => {
         state.votingWarnTimer = window.setTimeout(() => sfx('vote_timer'), warnIn);
       }
     });
+    socket.on('game:vote_reveal', ({ votes }) => {
+      sfx('panel_close');
+      const bar = $('vote-reveal-bar');
+      bar.classList.remove('hidden');
+      bar.innerHTML = '';
+      if (!votes?.length) {
+        bar.innerHTML = '<div class="vote-reveal-line">Stimmen bleiben geheim.</div>';
+        return;
+      }
+      const nameOf = new Map((state.room?.players ?? []).map((p) => [p.id, p]));
+      for (const v of votes) {
+        const line = document.createElement('div');
+        line.className = 'vote-reveal-line';
+        const voterChip = `<span class="mini-chip" style="background:${colorChipHex(v.voterColorId)}"></span>`;
+        const target = v.targetId == null || v.targetId === 'skip'
+          ? 'Skip'
+          : String(nameOf.get(v.targetId)?.name ?? '?');
+        line.innerHTML = `${voterChip} <strong>${escapeHtml(String(v.voterName ?? '?'))}</strong> \u2192 ${escapeHtml(target)}`;
+        bar.appendChild(line);
+      }
+    });
     socket.on('game:vote_progress', ({ votedCount, totalVoters }) => {
       // Eigene Stimme hat schon vote_locked -> nur für fremde klingeln.
       if (Date.now() - (state.myVoteAt ?? 0) > 1500) sfx('vote_cast', 0.6);
       $('meeting-hint').textContent = `${t('meeting.count')} ${votedCount}/${totalVoters}`;
     });
-    socket.on('game:meeting_result', ({ ejectedPlayerId, ejectedPlayerName, status }) => {
-      $('meeting-overlay').classList.add('hidden');
-      state.voted = false;
+    /** Nach der Eject-Show: Hinweise + GPS je nach Rundenstatus. */
+    function applyEjectAftermath(ejectedPlayerId, ejectedPlayerName, status) {
       if (ejectedPlayerId === state.playerId) {
         $('role-banner').textContent = t('game.out');
         vibrate([120, 60, 120]);
@@ -629,9 +672,55 @@ const App = (() => {
       } else {
         $('game-phase-hint').textContent = t('game.ejectedSkip');
       }
-      if (ejectedPlayerId != null) sfx('eject_text');
       if (status === 'GAME_OVER') stopGpsLoop();
       else if (status === 'IN_GAME') ensureGpsLoop();
+    }
+
+  socket.on('game:meeting_result',
+      ({ ejectedPlayerId, ejectedPlayerName, ejectedRole, impostorsRemaining, status }) => {
+      state.voted = false;
+      const confirmEjects = state.room?.config?.confirmEjects !== false;
+      // Eject-Sequenz: Weltraum + Bean im Spielerfarbton + Result-Text.
+      const overlay = $('eject-overlay');
+      const bean = $('eject-bean');
+      const text = $('eject-text');
+      const players = state.room?.players ?? [];
+      const ejectedColor = colorChipHex(
+        players.find((p) => p.id === ejectedPlayerId)?.colorId,
+      );
+      bean.style.setProperty('--bean-color', ejectedColor);
+      // Animation neu starten (remove -> void offsetWidth -> add).
+      bean.style.animation = 'none';
+      void bean.offsetWidth;
+      bean.style.animation = '';
+      let ejectLine;
+      if (ejectedPlayerId == null) {
+        ejectLine = 'Niemand wurde rausgeworfen (Skipped).';
+      } else if (!confirmEjects) {
+        const en = String(ejectedPlayerName ?? '?');
+        ejectLine = t('eject.was').replace('{name}', en);
+      } else {
+        const en = String(ejectedPlayerName ?? '?');
+        const line = ejectedRole === 'IMPOSTOR'
+          ? t('eject.wasImp').replace('{name}', en)
+          : t('eject.wasNotImp').replace('{name}', en);
+        const remain = Number.isInteger(impostorsRemaining)
+          ? t('eject.remain')
+            .replace('{n}', String(impostorsRemaining))
+            .replace('{s}', langActive() === 'en' && impostorsRemaining !== 1 ? 's' : '')
+          : '';
+        ejectLine = remain ? `${line}<br>${remain}` : line;
+      }
+      text.innerHTML = ejectLine;
+      $('meeting-overlay').classList.add('hidden');
+      overlay.classList.remove('hidden');
+      sfx('eject_text');
+      window.setTimeout(() => sfx('eject_splash'), 2400);
+      const showOverMs = 4200;
+      window.setTimeout(() => {
+        overlay.classList.add('hidden');
+        applyEjectAftermath(ejectedPlayerId, ejectedPlayerName, status);
+      }, showOverMs);
     });
     socket.on('game:over', ({ winner, players, reason }) => {
       stopGpsLoop();
@@ -1255,19 +1344,21 @@ const App = (() => {
     reportBtn.classList.toggle('ready', bodies.length > 0 && imAlive !== false);
     const killBtn = $('btn-kill');
     if (!killBtn.classList.contains('hidden')) {
+      const killLabel = killBtn.querySelector('.icon-label');
       const targets = state.killTargets ?? [];
       const cooldownLeft = Math.max(0, state.killReadyAt - Date.now());
       if (cooldownLeft > 0) {
         // Cooldown IMMER auf dem Knopf sichtbar (auch ohne Ziel in	range).
         killBtn.disabled = true;
-        killBtn.textContent = `${Math.ceil(cooldownLeft / 1000)}s`;
+        if (killLabel) killLabel.textContent = `${Math.ceil(cooldownLeft / 1000)}s`;
       } else {
         killBtn.disabled = !targets.length;
-        killBtn.textContent = 'Kill';
+        if (killLabel) killLabel.textContent = 'Kill';
       }
       killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
     }
     updateUseButton();
+    updateEmergencyBig();
     updateSabotageButton();
   }
 
@@ -1376,6 +1467,52 @@ const App = (() => {
     return state.role && !(state._usedEmergency) ? 1 : 0;
   }
 
+  /**
+   * Divo-Design: Großer roter 3D-Notfallknopf mit Glas-Kappe, NUR wenn
+   * du am Meeting-Point (CAFETERIA) stehst. Kappe zu = blockiert
+   * (kritische Sabotage / keine Meetings mehr / Tote drücken nicht).
+   */
+  function updateEmergencyBig() {
+    const wrap = $('emergency-big');
+    const btn = $('btn-emergency');
+    if (!wrap || !btn) return;
+    const room = state.room;
+    const inGame = room?.status === 'IN_GAME'
+      && room.players?.find((p) => p.id === state.playerId)?.isAlive !== false;
+    const atMeetingTable = roomIdContains('CAFETERIA');
+    const sab = room?.sabotage;
+    const critical = sab && ['REACTOR', 'O2'].includes(sab.type);
+    const canPress = inGame && atMeetingTable && emergencyLeft() > 0 && !critical;
+    wrap.classList.toggle('hidden', !(inGame && atMeetingTable));
+    if (!(inGame && atMeetingTable)) return;
+    btn.classList.toggle('blocked', !canPress);
+    btn.classList.toggle('open', canPress);
+    btn.disabled = !canPress;
+    btn.querySelector('.emergency-face').textContent = critical
+      ? 'BLOCKIERT'
+      : 'NOTFALL';
+  }
+
+  $('btn-emergency')?.addEventListener('click', () => {
+    const btn = $('btn-emergency');
+    if (btn.disabled) {
+      sfx('ui_select', 0.4);
+      showToast('Knopf geht nicht \u2014 Sabotage l\u00e4uft oder keine Meetings mehr.');
+      return;
+    }
+    if (!(roomIdContains('CAFETERIA') && emergencyLeft() > 0)) return;
+    sfx('ui_select', 0.8);
+    vibrate([60, 40, 60]);
+    // Kappe-fallende Zeremonie (~1s), DANN startet das Meeting.
+    btn.classList.add('pressed');
+    btn.disabled = true;
+    state._usedEmergency = true;
+    setTimeout(() => {
+      btn.classList.remove('pressed');
+      ensureSocket().emit('game:emergency', { code: state.code });
+    }, 900);
+  });
+
   function updateUseButton() {
     const useBtn = $('btn-use');
     const action = useAction();
@@ -1397,13 +1534,17 @@ const App = (() => {
       state.room?.players?.find((p) => p.id === state.playerId)?.isAlive === false);
     if (!impostor) return;
     const sab = state.room?.sabotage;
+    const sabLabel = sabBtn.querySelector('.icon-label');
+    const setSabLabel = (text) => {
+      if (sabLabel) sabLabel.textContent = text;
+    };
     if (sab) {
       // Aktive Sabotage: Restzeit mit auf den Knopf statt vages "Laeuft".
       if (sab.deadline) {
         const left = Math.max(0, Math.ceil((Date.parse(sab.deadline) - Date.now()) / 1000));
-        sabBtn.textContent = `${sab.type} ${left}s`;
+        setSabLabel(`${sab.type} ${left}s`);
       } else {
-        sabBtn.textContent = 'L\u00e4uft';
+        setSabLabel('L\u00e4uft');
       }
       sabBtn.disabled = true;
       return;
@@ -1412,11 +1553,11 @@ const App = (() => {
     const cd = state.room?.sabotageCooldownUntil ?? 0;
     const left = Math.max(0, Math.ceil((cd - Date.now()) / 1000));
     if (left > 0) {
-      sabBtn.textContent = `${left}s`;
+      setSabLabel(`${left}s`);
       sabBtn.disabled = true;
       return;
     }
-    sabBtn.textContent = 'Sabotage';
+    setSabLabel('Sabotage');
     sabBtn.disabled = false;
   }
 
@@ -2381,7 +2522,11 @@ const App = (() => {
     if (reporterId != null) sfx('report_body');
     else sfx('emergency_alarm');
     $('gameover-overlay').classList.add('hidden');
+    $('eject-overlay').classList.add('hidden');
     $('meeting-overlay').classList.remove('hidden');
+    state.voted = false;
+    $('vote-reveal-bar').classList.add('hidden');
+    $('vote-countdown').textContent = '';
     $('meeting-title').textContent = phase === 'DISCUSSION' ? t('meeting.title') : t('meeting.voteTitle');
     const players0 = state.room?.players ?? [];
     const stillAlive0 = players0.filter((p) => p.isAlive).length;
@@ -2392,56 +2537,82 @@ const App = (() => {
     const players = state.room?.players ?? [];
     // Diskussion: Warten, NICHT voten (sonst VOTING_NOT_OPEN-Log-Flood).
     if (phase === 'DISCUSSION') {
-      openVoteList(players.filter((p) => p.isAlive), null, 'Diskussion \u2014 Voting startet gleich\u2026');
+      openVoteList(players, null, 'Diskussion \u2014 Voting startet gleich\u2026');
       return;
     }
     openVoteList(
-      players.filter((p) => p.isAlive),
+      players,
       (targetId) => {
         ensureSocket().emit('game:vote_cast', { code: state.code, targetId });
         state.voted = true;
         state.myVoteAt = Date.now();
         sfx('vote_locked');
+        setVotedHint();
       },
+      'Auf wen abstimmst du?',
     );
-    if (state.voted) $('meeting-hint').textContent = 'Deine Stimme ist drin.';
   }
 
+  function setVotedHint() {
+    $('meeting-hint').textContent = 'Stimme abgegeben \u2014 warte auf die anderen\u2026';
+  }
+
+  let voteCountdownTimer = null;
+  function startVoteCountdown(deadline) {
+    window.clearInterval(voteCountdownTimer);
+    const el = $('vote-countdown');
+    if (!deadline) { el.textContent = ''; return; }
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      el.textContent = `Ends in: ${left}s`;
+      if (left <= 0) window.clearInterval(voteCountdownTimer);
+    };
+    tick();
+    voteCountdownTimer = window.setInterval(tick, 500);
+  }
+
+  /** Tablet-Karten (Farbchips) + optionaler Skip über das Bild im Header. */
   function openVoteList(candidates, onPick, title = 'Auf wen abstimmst du?') {
     const list = $('vote-list');
     list.innerHTML = '';
     $('meeting-hint').textContent = title;
+    $('btn-skipvote').classList.toggle('hidden', !onPick || state.voted);
     for (const player of candidates) {
       const isMate = (state.teammates ?? []).some((m) => m.id === player.id);
+      const isSelf = player.id === state.playerId;
       const li = document.createElement('li');
-      li.innerHTML = `<span${isMate ? ' class="imp-name"' : ''}>${escapeHtml(player.name)}</span>`;
-      if (onPick) {
-        const button = document.createElement('button');
-        button.textContent = 'W\u00e4hlen';
-        button.className = 'secondary small';
-        button.addEventListener('click', () => {
-          list.innerHTML = '';
-          $('meeting-hint').textContent = 'Stimme abgegeben \u2014 warte auf die anderen\u2026';
+      li.className = 'vote-card';
+      const dead = player.isAlive === false;
+      if (dead) li.classList.add('dead');
+      const chip = document.createElement('span');
+      chip.className = 'vote-chip';
+      chip.style.background = colorChipHex(player.colorId);
+      li.appendChild(chip);
+      const nameSpan = document.createElement('span');
+      nameSpan.className = `vote-name${isMate ? ' imp-name' : ''}`;
+      nameSpan.textContent = `${player.name}${isSelf ? ' (you)' : ''}`;
+      li.appendChild(nameSpan);
+      if (onPick && !dead && !state.voted) {
+        li.classList.add('pickable');
+        li.addEventListener('click', () => {
           onPick(player.id);
+          list.querySelectorAll('.vote-card').forEach((c) => c.classList.remove('pickable'));
         });
-        li.appendChild(button);
       }
       list.appendChild(li);
     }
     if (!onPick) return; // Diskussion: kein Skip-Vote vor der Abstimmung.
-    const skip = document.createElement('button');
-    skip.textContent = '\u00dcberspringen';
-    skip.style.width = '100%';
-    skip.addEventListener('click', () => {
-      ensureSocket().emit('game:vote_cast', { code: state.code, skip: true });
-      state.voted = true;
-      state.myVoteAt = Date.now();
-      sfx('vote_locked');
-      list.innerHTML = '';
-      $('meeting-hint').textContent = 'Stimme abgegeben \u2014 warte auf die anderen\u2026';
-    });
-    list.appendChild(skip);
   }
+
+  $('btn-skipvote').addEventListener('click', () => {
+    if (state.voted) return;
+    ensureSocket().emit('game:vote_cast', { code: state.code, skip: true });
+    state.voted = true;
+    state.myVoteAt = Date.now();
+    sfx('vote_locked');
+    $('btn-skipvote').classList.add('hidden');
+    setVotedHint();
+  });
 
   // ------------------------------------------------------------ bootstrap //
 

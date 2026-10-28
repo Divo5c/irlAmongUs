@@ -22,6 +22,37 @@ const { canKill } = require('../game/proximity');
 const roomCodePattern = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
 const { PlayerRole, RoomStatus } = enumsSchema.$defs;
 
+/**
+ * Among-Us-Spielerfarben (18er-Palette): jeder Spieler bekommt die
+ * erste FREIE Farbe beim Join; Leave gibt sie wieder frei. Die Farbe
+ * schmückt Vote-Karten, Reveal-Chips und die Eject-Animation.
+ */
+const PLAYER_COLORS = Object.freeze([
+  { id: 'red', hex: '#C51111' },
+  { id: 'blue', hex: '#132ED1' },
+  { id: 'green', hex: '#117F2D' },
+  { id: 'pink', hex: '#ED54BA' },
+  { id: 'orange', hex: '#EF7D0D' },
+  { id: 'yellow', hex: '#F5F557' },
+  { id: 'black', hex: '#3F474E' },
+  { id: 'white', hex: '#D6E0F0' },
+  { id: 'purple', hex: '#6B2FBB' },
+  { id: 'brown', hex: '#71491E' },
+  { id: 'cyan', hex: '#38FEDC' },
+  { id: 'lime', hex: '#50EF39' },
+  { id: 'maroon', hex: '#6B2B3C' },
+  { id: 'rose', hex: '#ECC0D3' },
+  { id: 'banana', hex: '#F0F0A8' },
+  { id: 'gray', hex: '#8397A7' },
+  { id: 'tan', hex: '#91897F' },
+  { id: 'coral', hex: '#EC7578' },
+]);
+
+function pickFreeColor(existingPlayers) {
+  const taken = new Set(existingPlayers.map((p) => p.colorId));
+  return PLAYER_COLORS.find((c) => !taken.has(c.id))?.id ?? null;
+}
+
 /** Hashes a PIN with SHA-256 for secure storage. */
 function hashPin(pin) {
   return createHash('sha256').update(pin).digest('hex');
@@ -179,13 +210,14 @@ class RoomStore {
     return {
       code: room.code,
       hostId: room.hostId,
-      players: room.players.map(({ id, name, isAlive, isHost, joinedAt, isBot }) => ({
+      players: room.players.map(({ id, name, isAlive, isHost, joinedAt, isBot, colorId }) => ({
         id,
         name,
         isAlive,
         isHost,
         joinedAt,
         isBot: !!isBot,
+        colorId: colorId ?? 'gray',
       })),
       status: room.status,
       config: { ...room.config },
@@ -314,6 +346,7 @@ class RoomStore {
       ...playerWithDefaults,
       isAlive: true,
       isHost: false,
+      colorId: pickFreeColor(room.players) ?? 'gray',
       joinedAt: new Date().toISOString(),
     });
     room.updatedAt = new Date().toISOString();
@@ -1049,25 +1082,52 @@ class RoomStore {
     }
 
     let ejectedPlayerName = null;
+    let ejectedRole = null;
     if (ejectedPlayerId) {
       const ejected = getPlayer(room, ejectedPlayerId);
       if (ejected && ejected.isAlive) {
         ejected.isAlive = false;
         room.ejectedPlayerIds = [...(room.ejectedPlayerIds ?? []), ejected.id];
         ejectedPlayerName = ejected.name;
+        ejectedRole = ejected.role;
       } else {
         ejectedPlayerId = null;
       }
     }
+
+    // Vote-Reveal (Divo): wer hat wen gewählt — nur bei nicht-anonymem
+    // Voting. Anonym lädt der Client graue Platzhalter statt Namen.
+    // BEFORE delete: die Votes leben nur in room.meeting.
+    const meetingVotes = { ...(room.meeting?.votes ?? {}) };
+    const revealVotes = room.config.anonymousVoting
+      ? null
+      : Object.entries(meetingVotes).map(([voterId, choice]) => {
+        const voter = getPlayer(room, voterId);
+        const targetPlayer = choice !== 'skip' ? getPlayer(room, choice) : null;
+        return {
+          voterId,
+          voterName: voter?.name ?? voterId,
+          voterColorId: voter?.colorId ?? 'gray',
+          targetId: choice,
+          targetName: targetPlayer?.name ?? 'Skip',
+        };
+      });
 
     const winner = evaluateVictory(room);
     delete room.meeting;
     room.status = getEnumValue(RoomStatus, 'IN_GAME');
     room.updatedAt = new Date().toISOString();
 
+    const impostorsRemaining = room.players.filter(
+      (p) => p.role === ROLE_IMPOSTOR && p.isAlive,
+    ).length;
+
     const payload = {
       room: this.toPublicRoom(room),
       ejectedPlayerId,
+      ejectedRole,
+      impostorsRemaining,
+      revealVotes,
       winner,
     };
 

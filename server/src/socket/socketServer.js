@@ -851,10 +851,21 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
   function broadcastMeetingResult(ioInstance, code, result) {
     const gameOver = result.winner ? roomStore.endGame(code, result.winner) : null;
 
+    const anonymous = roomStore.getRoom(code)?.config?.anonymousVoting ?? false;
+    // Vote-Reveal VOR dem Ergebnis-Overlay: Client kriegt die Liste
+    // (nicht-anonym) oder null (anonym -> graue Würde-Karten).
+    ioInstance.to(code).emit('game:vote_reveal', {
+      code,
+      votes: result.revealVotes ?? null,
+      anonymous,
+    });
+
     ioInstance.to(code).emit('game:meeting_result', {
       code,
       ejectedPlayerId: result.ejectedPlayerId,
       ejectedPlayerName: result.ejectedPlayerName ?? null,
+      ejectedRole: result.ejectedRole ?? null,
+      impostorsRemaining: result.impostorsRemaining,
       // The store already omits the tally for anonymous voting.
       ...(result.tally ? { tally: result.tally } : {}),
       status: gameOver ? 'GAME_OVER' : 'IN_GAME',
