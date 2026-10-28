@@ -545,6 +545,8 @@ const App = (() => {
     });
     socket.on('position:confirmed', (pos) => {
       state.selfPos = pos;
+      state._posRejectCount = 0;
+      state._posHoldUntil = 0;
       state.anchorOk = !!pos.onCorridor || !!pos.onRoom;
       // Zurück im Spielfeld -> Warnbanner ausblenden.
       if (state.selfPos.onCorridor || state.selfPos.onRoom) {
@@ -565,6 +567,17 @@ const App = (() => {
     });
     socket.on('position:error', ({ code, message }) => {
       if (code === 'POSITION_NOT_ALLOWED') return; // Meeting etc. – ruhig ignorieren
+      // Jitter-Sturm (Fehler-Tagebuch 28.10): Nach einer Ablehnung senden
+      // wir erst nach 3s wieder — gleiches Rezept für alle POSITION_*.
+      state._posHoldUntil = Date.now() + 3000;
+      state._posRejectStreak = (state._posRejectStreak ?? 0) + 1;
+      if (state._posRejectStreak >= 3) {
+        // 3x in Folge abgelehnt -> der vergangene Anker ist Soup-Kurs,
+        // Neuanker: nächster Fix klatt ohne Vergleich.
+        state.posSmooth = null;
+        state.lastSentPos = null;
+        state._posRejectStreak = 0;
+      }
       logAppError('position', `${code}: ${message ?? ''}`);
       $('game-phase-hint').textContent = `Position abgelehnt: ${code}`;
     });
@@ -1792,12 +1805,19 @@ const App = (() => {
     if (accuracy > 25) alpha = 0.3;
     if (accuracy > 45) alpha = 0.2;
     if (jump > 15) alpha = 1;
+    // Ruhesensorik (Handy liegt auf dem Tisch und wandert): Leichte
+    // Fixe hintereinander -> Marker fast einfrieren; richtig gehen ->
+    // (Sprint/Sprung ruhig sofort). Schütteln des Telefons bewegt daher
+    // nur noch Millimeter, nicht Meter.
+    state._quietCount = jump < 3 ? (state._quietCount ?? 0) + 1 : 0;
+    if (state._quietCount >= 4) alpha = Math.min(alpha, 0.12);
     smooth.x += (raw[0] - smooth.x) * alpha;
     smooth.y += (raw[1] - smooth.y) * alpha;
     // Straßen-Fixierung außerhalb von Räumen: Der Pin "liegt" auf der
     // Straße. In Räumen bleibt exakte GPS-Wahrheit (Task/Kill-Nähe).
-    state.snapped = !state.selfPos?.roomId && snapToStreets(smooth.x, smooth.y);
-    const [tx, ty] = state.snapped ?? [smooth.x, smooth.y];
+    const snap = !state.selfPos?.roomId ? snapToStreets(smooth.x, smooth.y) : null;
+    state.snapped = snap ?? false;
+    const [tx, ty] = snap ?? [smooth.x, smooth.y];
     state.posSmooth = smooth;
     state.displayPos = { x: state.snapped ? tx : smooth.x, y: state.snapped ? ty : smooth.y };
     const confidence = Math.min(1, Math.max(0, (60 - accuracy) / 60));
@@ -1805,6 +1825,15 @@ const App = (() => {
       ? Math.hypot(state.displayPos.x - state.lastSentPos.x, state.displayPos.y - state.lastSentPos.y)
       : Infinity;
     const sinceSend = Date.now() - (state.lastSent?.at ?? 0);
+    // Nach POSITION_UNREALISTIC erst beruhigen (3s) statt Sturm spammen.
+    if (Date.now() < (state._posHoldUntil ?? 0)) return;
+    // Bestätigte Position nochmal senden, bis der Server sie annimmt —
+    // der vergleicht gegen sie, dann läuft der Anker wieder sauber an.
+    if ((state._posRejectStreak ?? 0) > 0 && state.selfPos?.x != null) {
+      emitPosition({ x: state.selfPos.x, y: state.selfPos.y,
+        confidence: state.selfPos.confidence ?? 0.5 });
+      return;
+    }
     // Bewegen sich wir >1,5m -> so schnell wie sinnvoll (>=600ms);
     // stehen wir -> nur alle 2s (Batterie + Serverlast).
     if (moved > 1.5 && sinceSend < 600) return;
@@ -2227,23 +2256,9 @@ const App = (() => {
     vibrate(60);
   });
 
-  // Task-Marker direkt antippen \u2192 Minigame (wie In-Game-Konsole).
-  $('game-map').addEventListener('click', (event) => {
-    if (state.room?.status !== 'IN_GAME') return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const tapX = event.clientX - rect.left;
-    const tapY = event.clientY - rect.top;
-    let best = null;
-    let bestDist = 30;
-    for (const hit of state._taskHits ?? []) {
-      const d = Math.hypot(hit.x - tapX, hit.y - tapY);
-      if (d < bestDist) {
-        best = hit.task;
-        bestDist = d;
-      }
-    }
-    if (best) openTask(best);
-  });
+  // Task-Marker antippen startet KEIN Minigame mehr (Divo-Regel:
+  // Tasks nur physisch vor Ort über Use-Knopf / Taskliste ausführen).
+  $('game-map').addEventListener('click', () => {});
 
   // ------------------------------------------------------ Setz-Punkt ---- //
 
@@ -2461,7 +2476,7 @@ const App = (() => {
   document.addEventListener('click', (event) => {
     const target = event.target.closest('#btn-settings, #btn-settings-close, #btn-leave-from-menu');
     if (!target) return;
-    if (target.id === 'btn-settings') {
+    if (target.id === 'btn-settings' || target.id === 'btn-lobby-settings') {
       $('opt-sound').checked = optEnabled('rlaus_sound', true);
       $('opt-vibration').checked = optEnabled('rlaus_vibration', true);
       $('opt-show-bots').checked = optEnabled('rlaus_showBots', true);
@@ -2469,6 +2484,13 @@ const App = (() => {
       $('opt-lang').value = langActive();
       refreshAnchorUi();
       showErrorLogUi();
+      // Divo-Regel: Das Regeln-Panel im ⚙ existiert NUR für den Host —
+      // andere Spieler sehen es gar nicht. Immer-Zugriff: Lobby + Spiel.
+      $('host-settings').classList.add('hidden');
+      if (state.isHost && state.room) {
+        $('host-settings').classList.remove('hidden');
+        applyLobbyConfig(state.room);
+      }
       $('settings-menu').classList.remove('hidden');
     } else if (target.id === 'btn-settings-close') {
       $('settings-menu').classList.add('hidden');

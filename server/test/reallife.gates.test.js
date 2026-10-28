@@ -113,11 +113,15 @@ test('boundary: far-off positions produce warnings and admin escalation', async 
   assert.equal(boundary.escalationLevel, 3, 'level 3 raises');
   assert.equal(boundary.adminAlert, true, 'host alarm while outside');
 
-  // Back inside: counters cleared + back-notification.
-  const back = store.updatePosition('TESTAB', 'host-1', { x: 25, y: 0, confidence: 1 });
+  // Back inside: counters cleared + back-notification. (31m instant jump
+  // needs the documented plausibility bypass — the walk-rate gate is
+  // tested elsewhere; here we only verify escalation bookkeeping.)
+  const back = store.updatePosition('TESTAB', 'host-1', { x: 25, y: 0, confidence: 1 },
+    { skipPlausibilityCheck: true });
   assert.equal(back.boundary.outOfBounds, false);
   assert.equal(back.boundary.backFromEscalation, true, 'escalated player returning signals back');
   assert.equal(back.boundary.escalationLevel, 0);
+  await sleep(300); // real dt for the plausibility gate (no 0.2m-in-ms race)
   const later = store.updatePosition('TESTAB', 'host-1', { x: 25, y: 0.2, confidence: 1 });
   assert.equal(later.boundary.backFromEscalation, false, 'back signal only fires once');
 });

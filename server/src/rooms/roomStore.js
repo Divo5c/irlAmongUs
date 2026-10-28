@@ -110,12 +110,18 @@ class RoomStore {
   /** Grenz-Eskalation: code|playerId -> {outSince, alarmed}. */
   #boundaryEscalation = new Map();
 
+  /** GPS-Jitter-Sturm: code|playerId -> consecutive POSITION_* rejections. */
+  #posRejects = new Map();
+
   #clearBoundaryStrikes(code) {
     for (const key of [...this.#boundaryStrikes.keys()]) {
       if (key.startsWith(`${code}|`)) this.#boundaryStrikes.delete(key);
     }
     for (const key of [...this.#boundaryEscalation.keys()]) {
       if (key.startsWith(`${code}|`)) this.#boundaryEscalation.delete(key);
+    }
+    for (const key of [...this.#posRejects.keys()]) {
+      if (key.startsWith(`${code}|`)) this.#posRejects.delete(key);
     }
   }
 
