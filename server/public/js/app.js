@@ -1109,8 +1109,10 @@ const App = (() => {
   // ------------------------------------------------------------- rooms //
 
   // Divo-Regel: Räume heißen IMMER genau wie ihr Typ — kein Umbenennen.
+  // Typ wird VOR dem Zeichnen gewählt (Typ-Grid); schließt man das
+  // Polygon, wird der Raum SOFORT angelegt — nichts eskaliert zu Cafeteria.
   const ROOM_NAME_BY_TYPE = {
-    NORMAL: 'Raum',
+    NORMAL: 'Fort',
     CAFETERIA: 'Cafeteria',
     MEDBAY: 'Medbay',
     SECURITY: 'Security',
@@ -1121,7 +1123,13 @@ const App = (() => {
     O2: 'O2',
     WEAPONS: 'Weapons',
   };
-  const roomTypeName = () => ROOM_NAME_BY_TYPE[$('room-type-select').value] ?? 'Raum';
+  state.editorRoomType ??= 'CAFETERIA';
+
+  function highlightRoomType() {
+    document.querySelectorAll('#room-type-grid button').forEach((btn) => {
+      btn.classList.toggle('primary', btn.dataset.roomType === state.editorRoomType);
+    });
+  }
 
   editor.onRoomDraft = (polygonPts) => {
     if (polygonPts.length < 3) {
@@ -1129,55 +1137,43 @@ const App = (() => {
       showToast('Raum braucht mindestens 3 Punkte.');
       return;
     }
-    $('room-type-select').value = 'CAFETERIA';
-    $('room-name-preview').textContent = 'Name: Cafeteria — Typ oben \u00e4ndern!';
-    $('room-form').classList.remove('hidden');
+    const type = state.editorRoomType ?? 'CAFETERIA';
+    const room = editor.commitRoom(ROOM_NAME_BY_TYPE[type] ?? type, type);
+    if (!room) return;
+    ensureSocket().emit('map:update', {
+      code: state.code,
+      map: { ...editor.working, rooms: editor.rooms, connections: [] },
+    });
+    showToast(`Raum "${room.name}" angelegt (${editor.rooms.length} total).`);
+    beep(880);
+    $('room-type-picker').classList.add('hidden');
+    $('btn-room-mode').classList.remove('primary');
+    $('btn-room-mode').textContent = 'Raum zeichnen';
   };
 
-  $('room-type-select').addEventListener('change', () => {
-    if ($('room-form').classList.contains('hidden')) return;
-    $('room-name-preview').textContent = `Name: ${roomTypeName()}`;
+  $('room-type-grid').addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-room-type]');
+    if (!btn) return;
+    state.editorRoomType = btn.dataset.roomType;
+    highlightRoomType();
+    showToast(`Raum-Typ: ${ROOM_NAME_BY_TYPE[state.editorRoomType]} — jetzt zeichnen.`);
+    beep(660);
   });
 
   $('btn-room-mode').addEventListener('click', () => {
     editor.setRoomMode(!editor.roomMode);
-    $('room-form').classList.add('hidden');
+    $('room-type-picker').classList.toggle('hidden', !editor.roomMode);
+    if (editor.roomMode) highlightRoomType();
     $('btn-room-mode').classList.toggle('primary', editor.roomMode);
     $('btn-room-mode').textContent = editor.roomMode
       ? 'Raummodus beenden'
       : 'Raum zeichnen';
     $('map-hint').textContent = editor.roomMode
-      ? 'Tippe Punkte f\u00fcr den Raum. Tippe den ersten Punkt erneut, um zu schlie\u00dfen. Bestehende Raum LONG-TIPPEN (0,5s halten) = l\u00f6schen.'
-      : 'Tippe eine Stra\u00dfe an, um sie auszuw\u00e4hlen.';;
+      ? 'Typ oben antippen, dann Punkte zeichnen. Ersten Punkt ANtippen schliesst. Bestehenden Raum LONG-TIPPEN (0,5s) = l\u00f6schen.'
+      : 'Tippe eine Stra\u00dfe an, um sie auszuw\u00e4hlen.';
   });
 
   $('btn-room-undo').addEventListener('click', () => editor.undoRoomPoint());
-  $('btn-room-discard').addEventListener('click', () => {
-    editor.discardRoom();
-    $('room-form').classList.add('hidden');
-  });
-  $('btn-room-confirm').addEventListener('click', () => {
-    const name = roomTypeName();
-    const type = $('room-type-select').value || 'NORMAL';
-    const room = editor.commitRoom(name, type);
-    if (!room) {
-      showToast('Raum braucht mindestens 3 Punkte.');
-      return;
-    }
-    $('room-form').classList.add('hidden');
-    $('btn-room-mode').classList.remove('primary');
-    $('btn-room-mode').textContent = 'Raum zeichnen';
-    $('map-hint').textContent = `Raum "${room.name}" angelegt (${editor.rooms.length} total).`;
-    ensureSocket().emit('map:update', {
-      code: state.code,
-      map: {
-        ...editor.working,
-        rooms: editor.rooms,
-        connections: [],
-      },
-    });
-    beep(880);
-  });
 
   $('btn-map-save').addEventListener('click', () => {
     const working = editor.working;
@@ -2523,7 +2519,9 @@ const App = (() => {
   // Einstellungs-Men\u00fc: DELEGATION auf Dokumentebene, damit der Zahnrad-
   // Button in keinem Fall verdeckt/blockiert sein kann (IRL-Bugfix).
   document.addEventListener('click', (event) => {
-    const target = event.target.closest('#btn-settings, #btn-settings-close, #btn-leave-from-menu');
+    const target = event.target.closest(
+      '#btn-settings, #btn-lobby-settings, #btn-map-settings, #btn-settings-close, #btn-leave-from-menu',
+    );
     if (!target) return;
     if (target.id === 'btn-settings'
       || target.id === 'btn-lobby-settings'

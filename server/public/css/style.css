@@ -874,3 +874,9 @@ button.round {
 .eject-text { position: absolute; bottom: 22%; left: 0; right: 0; text-align: center;
   font-size: 14px; color: #fff; text-shadow: 0 0 8px rgba(160,200,255,0.9);
   padding: 0 16px; line-height: 1.9; }
+
+/* Raum-Typ-Grid (v19.10.5): ein Tap setzt den Typ, Raum wird geschlossen
+   -> sofort angelegt. Aktiver Typ markiert. */
+#room-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#room-type-grid button { padding: 12px 8px; border-radius: 12px; font-size: 13px;
+  font-weight: 700; }
