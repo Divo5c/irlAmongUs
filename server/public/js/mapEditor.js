@@ -165,10 +165,13 @@ class MapEditor {
     if (this._pointers.size === 2) this._pinchStart = this._pinchDistance();
   }
 
-  /** Point-in-polygon hit test over committed room polygons. */
+  /** Point-in-polygon hit test over committed room polygons (mit 6m
+   * Kanten-Nähe, damit winzige Räume tappbar bleiben). */
   _roomAtWorld(wx, wy) {
+    const edgeTolerance = 6;
     for (let i = this.rooms.length - 1; i >= 0; i--) {
       const poly = this.rooms[i].polygon ?? [];
+      if (poly.length < 3) continue;
       let inside = false;
       for (let a = 0, b = poly.length - 1; a < poly.length; b = a++) {
         const ax = poly[a].x; const ay = poly[a].y;
@@ -177,6 +180,16 @@ class MapEditor {
           && (wx < ((bx - ax) * (wy - ay)) / (by - ay) + ax)) inside = true;
       }
       if (inside) return i;
+      // Kleine Polygone: auch NEHE der Kante zählt (Tap-Toleranz).
+      for (let a = 0, b = poly.length - 1; a < poly.length; b = a++) {
+        const ax = poly[a].x; const ay = poly[a].y;
+        const bx = poly[b].x; const by = poly[b].y;
+        const dx = bx - ax; const dy = by - ay;
+        const lenSq = dx * dx + dy * dy;
+        const t = lenSq ? Math.max(0, Math.min(1, (((wx - ax) * dx) + ((wy - ay) * dy)) / lenSq)) : 0;
+        const dist = Math.hypot(wx - (ax + t * dx), wy - (ay + t * dy));
+        if (dist <= edgeTolerance) return i;
+      }
     }
     return -1;
   }
@@ -225,15 +238,16 @@ class MapEditor {
     this._pointers.delete(event.pointerId);
     this._downAt = null;
     if (this._pointers.size < 2) this._pinchStart = null;
-    if (!isTap || !pos) return;
+    if (!pos) return;
     const rect = this.canvas.getBoundingClientRect();
     const px = event.clientX - rect.left;
     const py = event.clientY - rect.top;
-    // Raum löschen: LANGES Halten (~0,55s) auf einen bestehenden Raum im
-    // Raummodus (ohne laufende Zeichnung) — mit sofortiger Rückmeldung
-    // über den onRoomsChanged-Callback (Divo: 'Ich kann keine Räume löschen').
-    const held = Date.now() - (this._downAtMs ?? Date.now()) >= 550;
-    if (this.roomMode && this.draftPts.length === 0 && held) {
+    // Raum löschen: LANGES Halten (~0,5s) auf einen bestehenden Raum —
+    // mit 24px Drift-Toleranz und OHNE Raummodus-Zwang (Divo-Feedback:
+    // "Das geht nicht" — die alte Variante verlangte exakte Bedingungen).
+    const held = Date.now() - (this._downAtMs ?? Date.now()) >= 500;
+    const drift = start ? Math.hypot(pos.x - start.x, pos.y - start.y) : Infinity;
+    if (held && drift < 24 && this.draftPts.length === 0) {
       const [wx, wy] = this._worldFromScreen(px, py);
       const index = this._roomAtWorld(wx, wy);
       if (index >= 0) {
@@ -243,6 +257,7 @@ class MapEditor {
         return;
       }
     }
+    if (!isTap) return;
     this._handleTap(px, py);
   }
 
