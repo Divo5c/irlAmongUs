@@ -883,16 +883,18 @@ describe('map setup lifecycle', () => {
     assert.equal(saved.map.nodes.length, updated.map.nodes.length);
   });
 
-  test('map:update / save are locked outside MAP_SETUP', () => {
+  test('map:update / save are locked outside MAP_SETUP (MAP_READY stays editable, in-game locked)', () => {
     const store = new RoomStore();
     createRoomWithPlayers(store, 3);
     makeMapReady(store);
 
-    assertGameError(() => store.updateMap('ABC234', SAMPLE_MAP), 'MAP_LOCKED');
-    assertGameError(() => store.saveMap('ABC234'), 'MAP_LOCKED');
+    // Divo: editing AFTER a save must keep working (room tweaks, dedupe).
+    store.updateMap('ABC234', SAMPLE_MAP);
+    store.saveMap('ABC234', SAMPLE_MAP);
 
     beginGame(store);
     assertGameError(() => store.updateMap('ABC234', SAMPLE_MAP), 'MAP_LOCKED');
+    assertGameError(() => store.saveMap('ABC234', SAMPLE_MAP), 'MAP_LOCKED');
   });
 
   test('invalid maps never enter the room state', () => {

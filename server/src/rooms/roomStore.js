@@ -1343,14 +1343,25 @@ class RoomStore {
   updateMap(code, rawMap) {
     const room = this.getRequiredRoom(code);
 
-    if (room.status !== STATUS_MAP_SETUP) {
+    if (room.status !== STATUS_MAP_SETUP && room.status !== STATUS_MAP_READY) {
       throw new GameError(
         'MAP_LOCKED',
-        'The map can only be edited during map setup.',
+        'The map can only be edited during map setup or when the map is ready.',
       );
     }
 
     const sanitized = sanitizeGameMap(rawMap ?? {});
+    // Divo-Regel: pro Raum-Typ existiert GENAU EIN Raum (NORMAL/Fort
+    // beliebig oft). Deletes stay first — duplicates are dropped so the
+    // rule self-heals his existing map instead of locking it.
+    const seenTypes = new Set();
+    const deduped = sanitized.rooms.filter((room) => {
+      if (room.type === 'NORMAL') return true;
+      if (seenTypes.has(room.type)) return false;
+      seenTypes.add(room.type);
+      return true;
+    });
+    sanitized.rooms = deduped;
     sanitized.version = room.map?.version ?? 1;
     room.map = sanitized;
     room.updatedAt = new Date().toISOString();
@@ -1364,10 +1375,10 @@ class RoomStore {
   saveMap(code, rawMap) {
     const room = this.getRequiredRoom(code);
 
-    if (room.status !== STATUS_MAP_SETUP) {
+    if (room.status !== STATUS_MAP_SETUP && room.status !== STATUS_MAP_READY) {
       throw new GameError(
         'MAP_LOCKED',
-        'The map can only be saved during map setup.',
+        'The map can only be saved during map setup or when the map is ready.',
       );
     }
 

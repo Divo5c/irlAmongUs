@@ -522,11 +522,22 @@ const App = (() => {
       renderLobby(room);
       show('lobby');
     });
-    socket.on('room:error', ({ code: errorCode, message }) => {
+    socket.on('room:error', ({ code: errorCode, message, details }) => {
       // Server meldet teils englische Fachtexte — unten deutsche Klartexte.
       logAppError('server', `${errorCode}: ${message ?? ''}`);
+      if (errorCode === 'NOT_IN_ROOM') {
+        // Verlorene Session (AUTH/Reconnect): raus aus dem Spiel, GPS-Stop.
+        stopGpsLoop();
+        state.room = null;
+        state.selfPos = null;
+      }
+      if (errorCode === 'MAP_CRITICAL_ROOMS_MISSING') {
+        const missing = Array.isArray(details?.missing) ? details.missing : [];
+        showToast(`Der Karte fehlen noch R\u00e4ume: ${missing.length ? missing.join(', ') : 'kritische R\u00e4ume'} \u2014 bitte noch zeichnen.`);
+        return;
+      }
       const friendly = {
-        MAP_LOCKED: 'Karte ist gerade gesperrt \u2014 das geht nur nach dem Speichern oder im Spiel (Setz-Punkt).',
+        MAP_LOCKED: 'Karte kann nicht ge\u00e4ndert werden \u2014 falls die Runde l\u00e4uft gilt der alte Stand.',
         MAP_MISSING: 'Keine Karte im Spiel \u2014 Host muss erst eine speichern.',
         MAP_ANCHOR_INVALID: 'Der Setz-Punkt war ung\u00fcltig \u2014 nochmal mit GPS-Signal versuchen.',
         CONFIG_INVALID: 'Eine Regel hatte einen unm\u00f6glichen Wert \u2014 bitte neu einstellen.',
@@ -950,6 +961,11 @@ const App = (() => {
   }
 
   $('btn-edit-map').addEventListener('click', () => {
+    if (!state.room) return;
+    if (state.room.status !== 'LOBBY') {
+      showToast('Karte bearbeiten geht nur in der Lobby (Runde verlassen oder neu laden).');
+      return;
+    }
     ensureSocket().emit('map:start', { code: state.code });
     show('map');
     refreshCachedMapButton();
@@ -1143,7 +1159,6 @@ const App = (() => {
   // Typ wird VOR dem Zeichnen gewählt (Typ-Grid); schließt man das
   // Polygon, wird der Raum SOFORT angelegt — nichts eskaliert zu Cafeteria.
   const ROOM_NAME_BY_TYPE = {
-    NORMAL: 'Fort',
     CAFETERIA: 'Cafeteria',
     MEDBAY: 'Medbay',
     SECURITY: 'Security',
@@ -1158,7 +1173,8 @@ const App = (() => {
 
   function highlightRoomType() {
     document.querySelectorAll('#room-type-grid button').forEach((btn) => {
-      btn.classList.toggle('primary', btn.dataset.roomType === state.editorRoomType);
+      btn.classList.toggle('primary',
+        !btn.disabled && btn.dataset.roomType === state.editorRoomType);
     });
   }
 
@@ -1166,17 +1182,35 @@ const App = (() => {
     const serverRooms = room.map?.rooms ?? [];
     const sKey = JSON.stringify(serverRooms.map((r) => [r.id, r.name]));
     const eKey = JSON.stringify(editor.rooms.map((r) => [r.id, r.name]));
-    if (sKey !== eKey) editor.setRooms(serverRooms);
+    if (sKey === eKey) {
+      syncRoomTypeAvailability(serverRooms);
+      return;
+    }
+    if (!serverRooms.length && editor.rooms.length) {
+      // FALSCHE Leer-Sync-Verdacht: Der Server kennt die Räume nicht mehr,
+      // aber der Editor HAT sie -> nicht löschen, sondern hochreparieren.
+      ensureSocket().emit('map:update', {
+        code: state.code,
+        map: { ...editor.working, rooms: editor.rooms, connections: [] },
+      });
+      syncRoomTypeAvailability(serverRooms);
+      return;
+    }
+    editor.setRooms(serverRooms);
+    syncRoomTypeAvailability(serverRooms);
+  }
+
+  function syncRoomTypeAvailability(serverRooms) {
     // Genau ein Raum pro Sorte: belegte Typen disablen, Typ-Grid updaten.
     const used = new Set(serverRooms
-      .filter((r) => r.type !== 'NORMAL' && r.type !== 'FORT')
+      .filter((r) => r.type !== 'NORMAL')
       .map((r) => r.type));
     document.querySelectorAll('#room-type-grid button').forEach((btn) => {
       const type = btn.dataset.roomType;
       const taken = used.has(type);
       btn.disabled = taken;
       if (taken && state.editorRoomType === type) {
-        state.editorRoomType = 'NORMAL';
+        state.editorRoomType = 'CAFETERIA';
       }
     });
     highlightRoomType();
@@ -1889,6 +1923,7 @@ const App = (() => {
     // aus dem Fehler-Tagebuch: Nach Rundenende flippte die Schleife).
     if (!room || room.status !== 'IN_GAME' || !state.gpsFixAt) return;
     if (Date.now() - state.gpsFixAt > 10000) return;
+    if (!state.socket?.connected) return;
     const proj = projectorFor();
     if (!proj) return;
     // Glättung: rohe GPS-Fixes usability-springen 3-10m. Exponentielles
