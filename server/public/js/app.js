@@ -494,13 +494,20 @@ const App = (() => {
           showToast('Keine gespeicherte Karte auf dem Ger\u00e4t \u2014 Stra\u00dfen laden.');
         }
       } else if (room.status === 'MAP_SETUP' && state.autoCachedMap) {
-        // Default-Map rein ins Editor-UI (Divo):ahnend ganz ohne Save —
-        // er kann darüber neue Räume zeichnen und selbst speichern.
+        // Cache-only-Fall (kein Server-Map): NACH dem MAP_SETUP-ACK laden,
+        // damit das map:update erlaubt ist. Später NIE mehr zurückspulen —
+        // das verursachte das Millisekunden-Flash beim Zeichnen.
         applyCachedMap();
         state.autoCachedMap = false;
       }
       if (room.status === 'MAP_READY' && active === 'screen-map') {
         show('lobby');
+      }
+      // Server = Quelle der Wahrheit fürs Editor-Typraster (ein Raum pro
+      // Sorte, Duplikate entfallen serverseitig). Überschreibt NICHTs
+      // während des Zeichnens: nur bei echtem Unterschied ersetzen.
+      if (room.status === 'MAP_SETUP' && active === 'screen-map') {
+        syncRoomEditorFromServer(room);
       }
     });
     socket.on('session:created', ({ code, playerId, token }) => {
@@ -945,14 +952,22 @@ const App = (() => {
   $('btn-edit-map').addEventListener('click', () => {
     ensureSocket().emit('map:start', { code: state.code });
     show('map');
-    $('map-status').textContent = 'Position suchen\u2026';
     refreshCachedMapButton();
-    // Rooms aus dem letzten Stand \u00fcbernehmen, wenn schon welche existieren.
-    editor.setRooms(state.room?.map?.rooms ?? []);
-    // Divo-Regel: Die Default-Map kommt IMMER sofort rein (nix Zeichnen
-    // bei null). Anmeldung passiert, sobald MAP_SETUP bestätigt ist.
-    state.autoCachedMap = !!readSavedLocalMap()?.nodes?.length;
-    if (state.autoCachedMap) refreshCachedMapButton();
+    // Default-Map/Orriginal SOFORT ins Editor-UI (Divo: schneller Start):
+    // vom aktuellen Room-Snapshot, sonst aus dem Gerät-Cache.
+    const roomMap = state.room?.map;
+    if (roomMap?.nodes?.length) {
+      editor.setWorking({ version: roomMap.version ?? 1, nodes: roomMap.nodes, corridors: roomMap.corridors });
+      editor.setRooms(roomMap.rooms ?? []);
+      if (Number.isFinite(roomMap.anchor?.lat)) editor.setAnchor(roomMap.anchor.lat, roomMap.anchor.lon);
+      state.autoCachedMap = false;
+      $('map-status').textContent = `Karte geladen (${roomMap.nodes.length} Knoten) \u2014 erweitern oder speichern`;
+    } else {
+      editor.setRooms(state.room?.map?.rooms ?? []);
+      // Cache-only: nach MAP_SETUP-ACK reinladen (map:update braucht den Status).
+      state.autoCachedMap = !!readSavedLocalMap()?.nodes?.length;
+      $('map-status').textContent = state.autoCachedMap ? 'Lade gespeicherte Karte\u2026' : 'Position suchen\u2026';
+    }
   });
   $('btn-map-back').addEventListener('click', () => show(state.room.status === 'MAP_READY' || state.room.status === 'MAP_SETUP' ? 'lobby' : 'home'));
   $('btn-start-game').addEventListener('click', () => {
@@ -1131,6 +1146,26 @@ const App = (() => {
     });
   }
 
+  function syncRoomEditorFromServer(room) {
+    const serverRooms = room.map?.rooms ?? [];
+    const sKey = JSON.stringify(serverRooms.map((r) => [r.id, r.name]));
+    const eKey = JSON.stringify(editor.rooms.map((r) => [r.id, r.name]));
+    if (sKey !== eKey) editor.setRooms(serverRooms);
+    // Genau ein Raum pro Sorte: belegte Typen disablen, Typ-Grid updaten.
+    const used = new Set(serverRooms
+      .filter((r) => r.type !== 'NORMAL' && r.type !== 'FORT')
+      .map((r) => r.type));
+    document.querySelectorAll('#room-type-grid button').forEach((btn) => {
+      const type = btn.dataset.roomType;
+      const taken = used.has(type);
+      btn.disabled = taken;
+      if (taken && state.editorRoomType === type) {
+        state.editorRoomType = 'NORMAL';
+      }
+    });
+    highlightRoomType();
+  }
+
   editor.onRoomDraft = (polygonPts) => {
     if (polygonPts.length < 3) {
       editor.discardRoom();
@@ -1163,7 +1198,10 @@ const App = (() => {
   $('btn-room-mode').addEventListener('click', () => {
     editor.setRoomMode(!editor.roomMode);
     $('room-type-picker').classList.toggle('hidden', !editor.roomMode);
-    if (editor.roomMode) highlightRoomType();
+    if (editor.roomMode) {
+      highlightRoomType();
+      syncRoomEditorFromServer(state.room ?? {}); // Grid-Sperrung nach Stand
+    }
     $('btn-room-mode').classList.toggle('primary', editor.roomMode);
     $('btn-room-mode').textContent = editor.roomMode
       ? 'Raummodus beenden'
