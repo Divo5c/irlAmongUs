@@ -1817,10 +1817,60 @@ const App = (() => {
     return state.proj;
   }
 
+  // ---- Motion-Fusion: Beschleunigung + Kompass ----
+  // Ziel: wissen, ob sich das Handy WIRKLICH bewegt, bevor GPS das beweist
+  // (GPS braucht ~1-4s bis ein Lauf sichtbar wird). Fuer iOS muss die
+  // Sensor-Freigabe in einer User-Geste passieren -> erster Tap registriert.
+  function onMotionUpdate(event) {
+    const acc = event.accelerationIncludingGravity ?? event.acceleration;
+    if (!acc || (acc.x == null && acc.y == null)) return;
+    const mag = Math.hypot(acc.x ?? 0, acc.y ?? 0, acc.z ?? 0);
+    // Langsame Baseline (Schwerkraft ~9.8): Abweichung von ihr = Bewegungs-
+    // energie. EMA ~1s Halbwertszeit -> Gehen/Schwelen schaufelt hoch,
+    // ruhige Tasche bleibt unten.
+    const base = state._accBase ?? (state._accBase = { v: mag });
+    base.v += (mag - base.v) * 0.06;
+    const dev = Math.abs(mag - base.v);
+    state.motionEnergy = (state.motionEnergy ?? 0) * 0.88 + dev * 0.12;
+    state.sensorMoving = state.motionEnergy > 0.35;
+  }
+
+  function onOrientationUpdate(event) {
+    const heading = event.webkitCompassHeading
+      ?? (event.alpha != null ? (360 - event.alpha) % 360 : null);
+    if (heading != null && Number.isFinite(heading)) {
+      state.sensorHeading = heading;
+    }
+  }
+
+  function attachMotionSensors() {
+    if (state._motionAttached) return;
+    const geoDmo = window.DeviceMotionEvent;
+    const geoDoe = window.DeviceOrientationEvent;
+    if (!geoDmo) return; // Desktop: kein Fusion-Vorteil, GPS reicht
+    // iOS 13+: Berechtigungsdialog NUR in User-Geste erlaubt.
+    if (typeof geoDoe?.requestPermission === 'function' && !state._motionAsked) {
+      state._motionAsked = true;
+      geoDoe.requestPermission().then((resp) => {
+        if (resp === 'granted') {
+          state._motionAttached = true;
+          window.addEventListener('deviceorientation', onOrientationUpdate);
+        }
+      }).catch(() => {}); // verweigert: GPS-only weiterlaufen lassen
+      return;
+    }
+    state._motionAttached = true;
+    window.addEventListener('devicemotion', onMotionUpdate, { passive: true });
+    window.addEventListener('deviceorientation', onOrientationUpdate);
+  }
+
+  document.addEventListener('pointerdown', () => attachMotionSensors(), { once: true });
+
   ensureGpsLoop.started = false;
   function ensureGpsLoop() {
     if (!('geolocation' in navigator) || ensureGpsLoop.started) return;
     ensureGpsLoop.started = true;
+    attachMotionSensors();
     navigator.geolocation.watchPosition((pos) => {
       state.gpsFix = pos.coords;
       state.gpsFixAt = Date.now();
@@ -1835,7 +1885,7 @@ const App = (() => {
       // sein Marker fehlt (Berechtigung verweigert / kein Fix / Timeout).
       state.gpsError = err?.code === 1 ? 'denied'
         : err?.code === 2 ? 'unavailable' : 'waiting';
-    }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 });
+    }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 });
     // Grobe Rucksack-Quelle: falls High-Accuracy h\u00e4ngt, liefert der
     // Coarse-Watcher sp\u00e4testens f\u00fcr die Marker-Position etwas.
     navigator.geolocation.watchPosition((pos) => {
@@ -1926,26 +1976,78 @@ const App = (() => {
     if (!state.socket?.connected) return;
     const proj = projectorFor();
     if (!proj) return;
-    // Glättung: rohe GPS-Fixes usability-springen 3-10m. Exponentielles
-    // Mittel in Weltmetern — schlecht empfangene Fixe (accuracy) folgen
-    // träger, große Sprünge (Rundenstart/Ankerwechsel) werden sofort
-    // übernommen. Resultat: Marker und Bot-Blicke bleiben ruhig.
+    // GPS-LIVE-TRACKING v2 (Divo: 'gelaufen, gerannt, Marker steckte'):
+    // 6s-Fenster entscheidet STILL vs. BEWEGT, Beschleunigungssensor
+    // zeigt noch VOR dem GPS, dass Bewegung anläuft. Kein starrer
+    // Quiet-Brake mehr — der hat ECHTES Gehen zäh gebremst. Bei Stillstand
+    // wandert der Marker aufs Fenster-Zentrum (keine Tisch-Reise), bei
+    // Bewegung folgt er schnell (alpha nach Genauigkeit) + Dead-Reckoning-
+    // Gleit zwischen den GPS-Fixes, damit das Ganze fließt statt ruckt.
+    const nowMs = Date.now();
     const raw = proj.project(state.gpsFix.latitude, state.gpsFix.longitude);
+    const accuracy = state.gpsFix.accuracy ?? 30;
     const smooth = state.posSmooth ?? { x: raw[0], y: raw[1] };
     const jump = Math.hypot(raw[0] - smooth.x, raw[1] - smooth.y);
-    const accuracy = state.gpsFix.accuracy ?? 30;
-    let alpha = 0.55;
-    if (accuracy > 25) alpha = 0.3;
-    if (accuracy > 45) alpha = 0.2;
-    if (jump > 15) alpha = 1;
-    // Ruhesensorik (Handy liegt auf dem Tisch und wandert): Leichte
-    // Fixe hintereinander -> Marker fast einfrieren; richtig gehen ->
-    // (Sprint/Sprung ruhig sofort). Schütteln des Telefons bewegt daher
-    // nur noch Millimeter, nicht Meter.
-    state._quietCount = jump < 3 ? (state._quietCount ?? 0) + 1 : 0;
-    if (state._quietCount >= 4) alpha = Math.min(alpha, 0.12);
-    smooth.x += (raw[0] - smooth.x) * alpha;
-    smooth.y += (raw[1] - smooth.y) * alpha;
+    // Fixe nur einmal ins Fenster (GPS tickt pro Sekunde, Loop 300ms).
+    const trail = state.gpsTrail ?? (state.gpsTrail = []);
+    const lastPt = trail[trail.length - 1];
+    if (!lastPt || Math.hypot(raw[0] - lastPt.x, raw[1] - lastPt.y) > 0.15
+      || nowMs - lastPt.t > 1200) {
+      trail.push({ x: raw[0], y: raw[1], t: nowMs });
+    }
+    while (trail.length > 2 && nowMs - trail[0].t > 6000) trail.shift();
+    const first = trail[0];
+    const travel = Math.hypot(raw[0] - first.x, raw[1] - first.y);
+    const sensorMoving = !!state.sensorMoving;
+    const isStill = travel < 1.8 && !sensorMoving && jump < 8;
+    let alpha;
+    if (isStill) {
+      // Still: Ziel ist der Festnkel-Mittel aus dem Fenster (Jitter-Tisch).
+      if (jump > 15) {
+        alpha = 0.05; // GPS-Glitch statt echte Bewegung -> an Ort halten
+      } else {
+        let cx = 0; let cy = 0;
+        for (const p of trail) { cx += p.x; cy += p.y; }
+        cx /= trail.length; cy /= trail.length;
+        smooth.x += (cx - smooth.x) * 0.5;
+        smooth.y += (cy - smooth.y) * 0.5;
+        alpha = null;
+      }
+    } else {
+      // Bewegung: zügig folgen, schwach empfangene Fixe etwas zäher.
+      alpha = accuracy <= 10 ? 0.65 : accuracy <= 25 ? 0.5 : 0.35;
+      if (jump > 15 || nowMs - (state.gpsFixAt ?? 0) > 4000) alpha = 1;
+    }
+    if (alpha != null) {
+      smooth.x += (raw[0] - smooth.x) * alpha;
+      smooth.y += (raw[1] - smooth.y) * alpha;
+    }
+    // Dead-Reckoning-Glide: Zwischen GPS-Fixes (~1s Lücke) geht marker
+    // mit geschätzter Tempo-Richtung weiter — Bewegungen wirken fluide.
+    if (!isStill) {
+      const prev = state.gpsPrevFix;
+      if (prev) {
+        const dt = Math.max(0.25, Math.min(4, (nowMs - prev.t) / 1000));
+        const dx = (raw[0] - prev.x) / dt;
+        const dy = (raw[1] - prev.y) / dt;
+        const sp = Math.hypot(dx, dy);
+        if (sp > 0.2 && sp < 8) { // realistisch: 0.2..8 m/s
+          state.velEst ??= { vx: 0, vy: 0 };
+          state.velEst.vx += (dx - state.velEst.vx) * 0.4;
+          state.velEst.vy += (dy - state.velEst.vy) * 0.4;
+        }
+      }
+      state.gpsPrevFix = { x: raw[0], y: raw[1], t: nowMs };
+    } else {
+      state.velEst = null;
+      state.gpsPrevFix = null;
+    }
+    const sinceFix = nowMs - (state.gpsFixAt ?? nowMs);
+    if (!isStill && state.velEst && sinceFix > 1100) {
+      smooth.x += state.velEst.vx * 0.28;
+      smooth.y += state.velEst.vy * 0.28;
+      if (jump > 30) { smooth.x = raw[0]; smooth.y = raw[1]; }
+    }
     // Straßen-Fixierung außerhalb von Räumen: Der Pin "liegt" auf der
     // Straße. In Räumen bleibt exakte GPS-Wahrheit (Task/Kill-Nähe).
     const snap = !state.selfPos?.roomId ? snapToStreets(smooth.x, smooth.y) : null;
@@ -2245,7 +2347,10 @@ const App = (() => {
       ctx.beginPath();
       ctx.arc(sx, sy, 16 + 6 * turn, 0, Math.PI * 2);
       ctx.fill();
-      const heading = state.gpsHeading;
+      // Kompass-Fallback: wenn GPS selbst beim Gehen keine Richtung
+      // liefert, zeigt der Pfeil die Handy-Ausrichtung vom Sensor.
+      const heading = state.gpsHeading ?? (state.sensorMoving
+        ? state.sensorHeading : null);
       if (typeof heading === 'number' && !Number.isNaN(heading)) {
         // Geo-Grade: 0 = Norden (oben auf der Karte), 90 = Osten (rechts).
         const rad = (heading * Math.PI) / 180;
