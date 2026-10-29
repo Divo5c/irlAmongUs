@@ -267,6 +267,8 @@ const App = (() => {
   const ERROR_LOG_MAX = 50;
 
   function logAppError(kind, message, stack = '') {
+    // ResizeObserver-Loop = Browser-Randnotiz (Layout ok, kein Bug).
+    if (/ResizeObserver loop/i.test(String(message))) return;
     try {
       const log = JSON.parse(localStorage.getItem(ERROR_LOG_KEY) ?? '[]');
       log.push({
@@ -462,18 +464,31 @@ const App = (() => {
         // Stored map available -> straight into load + save (skip Overpass).
         const cached = readSavedLocalMap();
         if (cached) {
-    ensureSocket().emit('map:update', {
-      code: state.code,
-      map: { version: cached.version + 1, nodes: cached.nodes, corridors: cached.corridors, rooms: cached.rooms ?? [], connections: [] },
-    });
-    ensureSocket().emit('map:save', {
-      code: state.code,
-      map: { version: cached.version + 2, nodes: cached.nodes, corridors: cached.corridors, rooms: cached.rooms ?? [], connections: [] },
-    });
+          ensureSocket().emit('map:update', {
+            code: state.code,
+            map: {
+              version: cached.version + 1, nodes: cached.nodes,
+              corridors: cached.corridors, rooms: cached.rooms ?? [],
+              connections: [],
+            },
+          });
+          ensureSocket().emit('map:save', {
+            code: state.code,
+            map: {
+              version: cached.version + 2, nodes: cached.nodes,
+              corridors: cached.corridors, rooms: cached.rooms ?? [],
+              connections: [],
+            },
+          });
           showToast('Gespeicherte Karte \u00fcbernommen.');
         } else {
           showToast('Keine gespeicherte Karte auf dem Ger\u00e4t \u2014 Stra\u00dfen laden.');
         }
+      } else if (room.status === 'MAP_SETUP' && state.autoCachedMap) {
+        // Default-Map rein ins Editor-UI (Divo):ahnend ganz ohne Save —
+        // er kann darüber neue Räume zeichnen und selbst speichern.
+        applyCachedMap();
+        state.autoCachedMap = false;
       }
       if (room.status === 'MAP_READY' && active === 'screen-map') {
         show('lobby');
@@ -925,6 +940,10 @@ const App = (() => {
     refreshCachedMapButton();
     // Rooms aus dem letzten Stand \u00fcbernehmen, wenn schon welche existieren.
     editor.setRooms(state.room?.map?.rooms ?? []);
+    // Divo-Regel: Die Default-Map kommt IMMER sofort rein (nix Zeichnen
+    // bei null). Anmeldung passiert, sobald MAP_SETUP bestätigt ist.
+    state.autoCachedMap = !!readSavedLocalMap()?.nodes?.length;
+    if (state.autoCachedMap) refreshCachedMapButton();
   });
   $('btn-map-back').addEventListener('click', () => show(state.room.status === 'MAP_READY' || state.room.status === 'MAP_SETUP' ? 'lobby' : 'home'));
   $('btn-start-game').addEventListener('click', () => {
@@ -1080,17 +1099,36 @@ const App = (() => {
 
   // ------------------------------------------------------------- rooms //
 
+  // Divo-Regel: Räume heißen IMMER genau wie ihr Typ — kein Umbenennen.
+  const ROOM_NAME_BY_TYPE = {
+    NORMAL: 'Raum',
+    CAFETERIA: 'Cafeteria',
+    MEDBAY: 'Medbay',
+    SECURITY: 'Security',
+    REACTOR: 'Reactor',
+    ELECTRICAL: 'Electrical',
+    STORAGE: 'Storage',
+    ADMIN: 'Admin',
+    O2: 'O2',
+    WEAPONS: 'Weapons',
+  };
+  const roomTypeName = () => ROOM_NAME_BY_TYPE[$('room-type-select').value] ?? 'Raum';
+
   editor.onRoomDraft = (polygonPts) => {
     if (polygonPts.length < 3) {
       editor.discardRoom();
       showToast('Raum braucht mindestens 3 Punkte.');
       return;
     }
-    $('room-name-input').value = '';
-    $('room-type-select').value = 'NORMAL';
+    $('room-type-select').value = 'CAFETERIA';
+    $('room-name-preview').textContent = 'Name: Cafeteria (Raum-Typ w\u00e4hlen)';
     $('room-form').classList.remove('hidden');
-    $('room-name-input').focus();
   };
+
+  $('room-type-select').addEventListener('change', () => {
+    if ($('room-form').classList.contains('hidden')) return;
+    $('room-name-preview').textContent = `Name: ${roomTypeName()}`;
+  });
 
   $('btn-room-mode').addEventListener('click', () => {
     editor.setRoomMode(!editor.roomMode);
@@ -1110,7 +1148,7 @@ const App = (() => {
     $('room-form').classList.add('hidden');
   });
   $('btn-room-confirm').addEventListener('click', () => {
-    const name = $('room-name-input').value.trim() || 'Raum';
+    const name = roomTypeName();
     const type = $('room-type-select').value || 'NORMAL';
     const room = editor.commitRoom(name, type);
     if (!room) {
@@ -1528,8 +1566,9 @@ const App = (() => {
 
   function updateUseButton() {
     const useBtn = $('btn-use');
+    const useLabel = useBtn.querySelector('.icon-label');
     const action = useAction();
-    useBtn.textContent = action ? action.label : 'Use';
+    if (useLabel) useLabel.textContent = action ? action.label : 'Use';
     const inMeeting = state.room?.status !== 'IN_GAME';
     const dead = state.room?.players?.find((p) => p.id === state.playerId) ?.
       isAlive === false;
@@ -2226,7 +2265,8 @@ const App = (() => {
     sfx('kill_knife');
     ensureSocket().emit('game:kill', { code: state.code, targetPlayerId: targets[0].playerId });
     $('btn-kill').disabled = true;
-    $('btn-kill').textContent = 'Kill';
+    const killLabel2 = $('btn-kill').querySelector('.icon-label');
+    if (killLabel2) killLabel2.textContent = 'Kill';
   });
 
   $('btn-use').addEventListener('click', () => {
@@ -2484,11 +2524,22 @@ const App = (() => {
       $('opt-lang').value = langActive();
       refreshAnchorUi();
       showErrorLogUi();
-      // Divo-Regel: Das Regeln-Panel im ⚙ existiert NUR für den Host —
-      // andere Spieler sehen es gar nicht. Immer-Zugriff: Lobby + Spiel.
+      // Divo-Regeln: Das Regeln-Panel im ⚙ existiert NUR für den Host —
+      // andere Spieler sehen es gar nicht. Mid-game sichtbar, aber
+      // eingefroren (Server wirft eh CONFIG_LOCKED).
       $('host-settings').classList.add('hidden');
+      const cfgEditable = state.isHost && state.room
+        && (state.room.status === 'LOBBY' || state.room.status === 'MAP_READY');
       if (state.isHost && state.room) {
         $('host-settings').classList.remove('hidden');
+        $('host-settings').querySelector('summary').textContent = cfgEditable
+          ? '\u2699\uFE0E Regeln einstellen (nur Host)'
+          : '\u2699\uFE0E Regeln — in der Runde gesperrt';
+        document.querySelectorAll('#host-settings select, #host-settings input')
+          .forEach((el) => { el.disabled = !cfgEditable; });
+        const applyBtn = $('cfg-apply');
+        applyBtn.disabled = !cfgEditable;
+        applyBtn.textContent = cfgEditable ? 'Speichern' : 'Gilt ab der n\u00e4chsten Runde';
         applyLobbyConfig(state.room);
       }
       $('settings-menu').classList.remove('hidden');
