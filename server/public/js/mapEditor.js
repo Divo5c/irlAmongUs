@@ -8,10 +8,11 @@
 'use strict';
 
 class MapEditor {
-  constructor(canvas, { onSelectionChanged } = {}) {
+  constructor(canvas, { onSelectionChanged, onRoomsChanged } = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.onSelectionChanged = onSelectionChanged ?? null;
+    this.onRoomsChanged = onRoomsChanged ?? null;
 
     this.anchor = null; // {lat, lon}
     this.candidates = [];
@@ -159,8 +160,25 @@ class MapEditor {
     this.canvas.setPointerCapture(event.pointerId);
     this._pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     this._downAt = { x: event.clientX, y: event.clientY };
+    this._downAtMs = Date.now();
     this._moved = false;
     if (this._pointers.size === 2) this._pinchStart = this._pinchDistance();
+  }
+
+  /** Point-in-polygon hit test over committed room polygons. */
+  _roomAtWorld(wx, wy) {
+    for (let i = this.rooms.length - 1; i >= 0; i--) {
+      const poly = this.rooms[i].polygon ?? [];
+      let inside = false;
+      for (let a = 0, b = poly.length - 1; a < poly.length; b = a++) {
+        const ax = poly[a].x; const ay = poly[a].y;
+        const bx = poly[b].x; const by = poly[b].y;
+        if (((ay > wy) !== (by > wy))
+          && (wx < ((bx - ax) * (wy - ay)) / (by - ay) + ax)) inside = true;
+      }
+      if (inside) return i;
+    }
+    return -1;
   }
 
   _pinchDistance() {
@@ -209,7 +227,23 @@ class MapEditor {
     if (this._pointers.size < 2) this._pinchStart = null;
     if (!isTap || !pos) return;
     const rect = this.canvas.getBoundingClientRect();
-    this._handleTap(event.clientX - rect.left, event.clientY - rect.top);
+    const px = event.clientX - rect.left;
+    const py = event.clientY - rect.top;
+    // Raum löschen: LANGES Halten (~0,55s) auf einen bestehenden Raum im
+    // Raummodus (ohne laufende Zeichnung) — mit sofortiger Rückmeldung
+    // über den onRoomsChanged-Callback (Divo: 'Ich kann keine Räume löschen').
+    const held = Date.now() - (this._downAtMs ?? Date.now()) >= 550;
+    if (this.roomMode && this.draftPts.length === 0 && held) {
+      const [wx, wy] = this._worldFromScreen(px, py);
+      const index = this._roomAtWorld(wx, wy);
+      if (index >= 0) {
+        const [removed] = this.rooms.splice(index, 1);
+        this.onRoomsChanged?.(removed ?? null, index);
+        this.render();
+        return;
+      }
+    }
+    this._handleTap(px, py);
   }
 
   _onWheel(event) {

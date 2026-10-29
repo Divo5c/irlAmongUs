@@ -72,22 +72,24 @@
       <button id="btn-room-mode" class="secondary">Raum zeichnen</button>
       <button id="btn-room-undo" class="ghost">&#8630; Punkt zur&uuml;ck</button>
       <div id="room-form" class="hidden">
-        <span id="room-name-preview" class="hint" style="font-size:11px;">Raum</span>
-        <select id="room-type-select">
-          <option value="NORMAL">Normal</option>
-          <option value="CAFETERIA">Kantine / Meeting</option>
+        <label for="room-type-select" style="font-size:11px; font-weight:700;">&#9881;&#xFE0E; Typ w&auml;hlen = Raumname</label>
+        <select id="room-type-select" style="min-height:44px;">
+          <option value="NORMAL">Normal (Fort)</option>
+          <option value="CAFETERIA">Cafeteria (Meeting)</option>
           <option value="MEDBAY">Medbay</option>
           <option value="SECURITY">Security</option>
           <option value="REACTOR">Reactor</option>
           <option value="ELECTRICAL">Electrical</option>
-          <option value="STORAGE">Lager</option>
+          <option value="STORAGE">Storage</option>
           <option value="ADMIN">Admin</option>
           <option value="O2">O2</option>
           <option value="WEAPONS">Weapons</option>
         </select>
+        <span id="room-name-preview" class="hint" style="font-size:11px;">Name: Cafeteria</span>
         <button id="btn-room-confirm" class="primary small">Raum anlegen</button>
         <button id="btn-room-discard" class="ghost small">Verwerfen</button>
       </div>
+      <button id="btn-map-settings" class="gear-btn" aria-label="Einstellungen">&#9881;&#xFE0E;</button>
     </div>
     <div class="map-frame">
       <canvas id="map-canvas"></canvas>
@@ -319,9 +321,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.10.2"></script>
-  <script src="/js/mapEditor.js?v=19.10.2"></script>
-  <script src="/js/tasks.js?v=19.10.2"></script>
-  <script src="/js/app.js?v=19.10.2"></script>
+  <script src="/js/osm.js?v=19.10.3"></script>
+  <script src="/js/mapEditor.js?v=19.10.3"></script>
+  <script src="/js/tasks.js?v=19.10.3"></script>
+  <script src="/js/app.js?v=19.10.3"></script>
 </body>
 </html>

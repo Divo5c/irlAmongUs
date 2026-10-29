@@ -221,6 +221,15 @@ const App = (() => {
       $('btn-build-streets').disabled = count === 0;
       $('map-status').textContent = `${count} Abschnitte ausgew\u00E4hlt`;
     },
+    onRoomsChanged: (removed) => {
+      // Rooms geaendert: direkt an den Server spiegeln (Lobby-Update folgt).
+      ensureSocket().emit('map:update', {
+        code: state.code,
+        map: { ...editor.working, rooms: editor.rooms, connections: [] },
+      });
+      showToast(`Raum "${removed?.name ?? '?'}" gel\u00f6scht (${editor.rooms.length} übrig).`);
+      beep(300);
+    },
   });
 
   // ------------------------------------------------------------- helpers //
@@ -1121,7 +1130,7 @@ const App = (() => {
       return;
     }
     $('room-type-select').value = 'CAFETERIA';
-    $('room-name-preview').textContent = 'Name: Cafeteria (Raum-Typ w\u00e4hlen)';
+    $('room-name-preview').textContent = 'Name: Cafeteria — Typ oben \u00e4ndern!';
     $('room-form').classList.remove('hidden');
   };
 
@@ -1138,8 +1147,8 @@ const App = (() => {
       ? 'Raummodus beenden'
       : 'Raum zeichnen';
     $('map-hint').textContent = editor.roomMode
-      ? 'Tippe Punkte f\u00fcr den Raum. Tippe den ersten Punkt erneut, um zu schlie\u00dfen.'
-      : 'Tippe eine Stra\u00dfe an, um sie auszuw\u00e4hlen.';
+      ? 'Tippe Punkte f\u00fcr den Raum. Tippe den ersten Punkt erneut, um zu schlie\u00dfen. Bestehende Raum LONG-TIPPEN (0,5s halten) = l\u00f6schen.'
+      : 'Tippe eine Stra\u00dfe an, um sie auszuw\u00e4hlen.';;
   });
 
   $('btn-room-undo').addEventListener('click', () => editor.undoRoomPoint());
@@ -2516,7 +2525,9 @@ const App = (() => {
   document.addEventListener('click', (event) => {
     const target = event.target.closest('#btn-settings, #btn-settings-close, #btn-leave-from-menu');
     if (!target) return;
-    if (target.id === 'btn-settings' || target.id === 'btn-lobby-settings') {
+    if (target.id === 'btn-settings'
+      || target.id === 'btn-lobby-settings'
+      || target.id === 'btn-map-settings') {
       $('opt-sound').checked = optEnabled('rlaus_sound', true);
       $('opt-vibration').checked = optEnabled('rlaus_vibration', true);
       $('opt-show-bots').checked = optEnabled('rlaus_showBots', true);
