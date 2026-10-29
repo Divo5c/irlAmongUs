@@ -1022,18 +1022,34 @@ const App = (() => {
     } else {
       showToast('Karte ohne GPS-Anker \u2014 im Spiel evtl. keine Positionsdaten.');
     }
+    // Einer pro Sorte (Divo): alte Duplikate aus dem Cache raus, sonst
+    // streicht sie der Server und der Broadcast w\u00e4scht die R\u00e4ume weg.
+    const keptTypes = new Set();
+    const cachedRooms = (cached.rooms ?? []).filter((room) => {
+      if (room.type === 'NORMAL') return true;
+      if (keptTypes.has(room.type)) return false;
+      keptTypes.add(room.type);
+      return true;
+    });
+    if (cachedRooms.length !== (cached.rooms ?? []).length) {
+      window.setTimeout(() => showToast(
+        `Duplikate bereinigt: ${cachedRooms.length} von ${(cached.rooms ?? []).length} R\u00e4umen \u00fcbrig (1 pro Sorte).`,
+      ), 100);
+    }
     const working = {
       version: cached.version + 1,
       nodes: cached.nodes,
       corridors: cached.corridors,
     };
     editor.setWorking(working);
-    editor.setRooms(cached.rooms ?? []);
+    editor.setRooms(cachedRooms);
     editor.selected.clear();
     $('btn-build-streets').disabled = true;
     ensureSocket().emit('map:update', {
       code: state.code,
-      map: { ...working, rooms: [], connections: [] },
+      // KRITISCH: rooms MITRAUMEN — fr\u00fcher stand hier rooms: [] und der
+      // Server l\u00f6schte alle R\u00e4ume (Millisekunden-Flash!).
+      map: { ...working, rooms: editor.rooms, connections: [] },
     });
     $('map-status').textContent = `Gespeicherte Karte geladen (${working.nodes.length} Knoten) \u2014 erweitern oder speichern`;
   }
