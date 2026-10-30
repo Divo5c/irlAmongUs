@@ -266,6 +266,16 @@ function distance(a, b) {
 function isPositionPlausible(current, previous) {
   if (!previous) return { valid: true };
 
+  // Stale-Baseline-Ausnahme (Divo-Falllog 06:42): Bei Pause/Rundenstart/
+  // Handy-Sleep ist die alte Server-Position Minuten alt, aber die Client-
+  // Timestamps vergleichen wie Sprint-Delta -> fälschlicher Teleport-
+  // Verdacht. Wenn der Server die alte Position seit > N ms NICHT mehr
+  // gesehen hat, zählt die reale Wegstrecke dazwischen: akzeptieren.
+  const staleMs = Number(process.env.RLAUS_STALE_BASELINE_MS ?? 4000);
+  if (previous.updatedAt && Date.now() - previous.updatedAt > staleMs) {
+    return { valid: true };
+  }
+
   const dtMs = current.timestamp - previous.timestamp;
   if (dtMs < 0) {
     return { valid: false, reason: 'POSITION_CLOCK_JUMP' };

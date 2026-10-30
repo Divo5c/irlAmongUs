@@ -125,3 +125,28 @@ test('boundary: far-off positions produce warnings and admin escalation', async 
   const later = store.updatePosition('TESTAB', 'host-1', { x: 25, y: 0.2, confidence: 1 });
   assert.equal(later.boundary.backFromEscalation, false, 'back signal only fires once');
 });
+
+test('stale baseline: position after a pause is never a teleport suspect', async () => {
+  const store = await setup();
+  process.env.RLAUS_STALE_BASELINE_MS = '50';
+
+  try {
+    await store.updatePosition('TESTAB', 'crew-1', { x: 5, y: 0, confidence: 1 });
+    await sleep(1400); // Pause (Handy-Sleep/Wartezeit): Server-Baseline veraltet
+    // 30m Sprung nach der Pause -> kein POSITION_UNREALISTIC mehr (was für
+    // Divos 06:42-Log gestern der Ein-Ablehner war).
+    const reentry = store.updatePosition('TESTAB', 'crew-1',
+      { x: 35, y: 0, confidence: 1, timestamp: Date.now() });
+    assert.equal(reentry.position.x, 35, 're-entry accepted despite 30m jump');
+  } finally {
+    delete process.env.RLAUS_STALE_BASELINE_MS;
+  }
+
+  // Und der normale Sprint-Schutz bleibt: kurzer dt + ferne Position.
+  await sleep(300);
+  assert.throws(
+    () => store.updatePosition('TESTAB', 'crew-1',
+      { x: 80, y: 0, confidence: 1, timestamp: Date.now() }),
+    (error) => error.code === 'POSITION_UNREALISTIC',
+  );
+});
