@@ -138,6 +138,9 @@ class RoomStore {
   /** Admin tracking auth: code -> Map<playerId, bool> (authenticated). */
   #adminAuth = new Map();
 
+  /** PIN-Brute-Force-Gate: code -> { hits: number[], lockedUntil: number }. */
+  #adminAuthAttempts = new Map();
+
   /**
    * Base config applied to every newly created room. Rooms may override
    * values at runtime via updateConfig() (host only, lobby only).
@@ -153,6 +156,7 @@ class RoomStore {
     // collision UX, and a spoofer cannot pick "his" future codes.
     let roomCode = code;
     if (roomCode === undefined || roomCode === null || roomCode === '') {
+      this.#pruneStaleRooms();
       do {
         roomCode = generateRoomCode();
       } while (this.#roomsByCode.has(roomCode));
@@ -223,6 +227,26 @@ class RoomStore {
       throw new GameError('ROOM_NOT_FOUND', 'Room not found.');
     }
     return room;
+  }
+
+  /**
+   * Memory GC: rooms live until the service restarts. Called from
+   * createRoom (cheap and frequent enough for a party service): any room
+   * not touched for over 24h (lobby abandoned mid-edit) is dropped.
+   */
+  #pruneStaleRooms() {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    for (const [code, room] of this.#roomsByCode) {
+      if (Date.parse(room.updatedAt ?? room.createdAt ?? 0) < cutoff) {
+        this.#roomsByCode.delete(code);
+        this.#positions.delete(code);
+        this.#boundaryStrikes.clear?.();
+        this.#authTokens.delete(code);
+        this.#adminAuth.delete(code);
+        this.#adminAuthAttempts.delete(code);
+        this.#posRejects.delete(code);
+      }
+    }
   }
 
   /**
@@ -1754,14 +1778,32 @@ class RoomStore {
       throw new GameError('NOT_ROOM_HOST', 'Only the host can become admin.');
     }
 
+    // Rate limit PIN guesses: max 5 attempts per minute per room.
+    const now = Date.now();
+    const gate = this.#adminAuthAttempts.get(code) ?? { hits: [], lockedUntil: 0 };
+    if (now < gate.lockedUntil) {
+      throw new GameError(
+        'ADMIN_AUTH_FAILED',
+        `Zu viele Versuche — warte ${Math.ceil((gate.lockedUntil - now) / 1000)}s.`,
+      );
+    }
+
     // Use custom PIN if set, otherwise fall back to room code
     const expectedHash = room.adminPinHash ?? hashPin(code);
     const providedHash = hashPin(pin);
 
     if (providedHash !== expectedHash) {
+      gate.hits = gate.hits.filter((at) => now - at < 60_000);
+      gate.hits.push(now);
+      if (gate.hits.length >= 5) {
+        gate.lockedUntil = now + 60_000;
+        gate.hits = [];
+      }
+      this.#adminAuthAttempts.set(code, gate);
       throw new GameError('ADMIN_AUTH_FAILED', 'Invalid admin PIN.');
     }
 
+    this.#adminAuthAttempts.delete(code);
     if (!this.#adminAuth.has(code)) {
       this.#adminAuth.set(code, new Set());
     }
