@@ -174,7 +174,7 @@ class RoomStore {
 
     const timestamp = new Date().toISOString();
     const room = {
-      code,
+      code: roomCode,
       hostId,
       players: [
         {

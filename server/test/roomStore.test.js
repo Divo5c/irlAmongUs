@@ -107,6 +107,17 @@ describe('RoomStore.createRoom', () => {
     );
   });
 
+  test('generates a valid server-side code when the client offers none', () => {
+    const store = new RoomStore();
+    const room = store.createRoom({ hostId: 'host-1', hostName: 'Divo' });
+
+    // The public projection must carry the code — clients need it to
+    // join/share (this bit a REAL deploy: v19.11.2 shipped undefined).
+    assert.match(room.code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
+    assert.match(store.toPublicRoom(room).code, /^[A-Z2-9]{6}$/);
+    assert.equal(store.getRoom(room.code), room);
+  });
+
   test('accepts a validated custom config on creation', () => {
     const store = new RoomStore();
     const room = store.createRoom({
