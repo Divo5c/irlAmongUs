@@ -20,6 +20,16 @@ const {
 const { canKill } = require('../game/proximity');
 
 const roomCodePattern = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
+
+/** Server-side code issuance: same alphabet as the client display allows. */
+function generateRoomCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i += 1) {
+    code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return code;
+}
 const { PlayerRole, RoomStatus } = enumsSchema.$defs;
 
 /**
@@ -139,11 +149,19 @@ class RoomStore {
   }
 
   createRoom({ code, hostId, hostName = 'Host', config } = {}) {
-    if (!roomCodePattern.test(code) || !isNonEmptyString(hostId)) {
+    // Room codes come from the SERVER when the client offers none: no
+    // collision UX, and a spoofer cannot pick "his" future codes.
+    let roomCode = code;
+    if (roomCode === undefined || roomCode === null || roomCode === '') {
+      do {
+        roomCode = generateRoomCode();
+      } while (this.#roomsByCode.has(roomCode));
+    }
+    if (!roomCodePattern.test(roomCode) || !isNonEmptyString(hostId)) {
       throw new GameError('INVALID_ROOM', 'A valid room code and host ID are required.');
     }
 
-    if (this.#roomsByCode.has(code)) {
+    if (this.#roomsByCode.has(roomCode)) {
       throw new GameError('ROOM_EXISTS', 'A room with this code already exists.');
     }
 
@@ -161,7 +179,7 @@ class RoomStore {
       players: [
         {
           id: hostId,
-          name: hostName,
+          name: sanitizeDisplayName(hostName),
           role: ROLE_CREWMATE,
           isAlive: true,
           isHost: true,
@@ -179,7 +197,7 @@ class RoomStore {
       updatedAt: timestamp,
     };
 
-    this.#roomsByCode.set(code, room);
+    this.#roomsByCode.set(roomCode, room);
     return room;
   }
 
@@ -350,6 +368,7 @@ class RoomStore {
 
     room.players.push({
       ...playerWithDefaults,
+      name: sanitizeDisplayName(playerWithDefaults.name),
       isAlive: true,
       isHost: false,
       colorId: pickFreeColor(room.players) ?? 'gray',
@@ -1846,6 +1865,21 @@ function assertKnownPlayer(room, playerId) {
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+const MAX_NAME_LEN = 16;
+
+/**
+ * Player names come from arbitrary clients and are rendered as text on
+ * other devices. NFKC-normalize, strip control characters and cap length
+ * so nobody ships control-char tricks or 5kB display bombs.
+ */
+function sanitizeDisplayName(raw) {
+  const value = typeof raw === 'string' ? raw : '';
+  const cleaned = value.normalize('NFKC')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, '')
+    .trim();
+  return cleaned.slice(0, MAX_NAME_LEN) || 'Spieler';
 }
 
 function isValidPlayer(player) {

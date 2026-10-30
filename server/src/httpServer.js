@@ -51,6 +51,10 @@ function serveStaticFile(response, relativePath) {
       'Content-Type': MIME_TYPES[ext] ?? 'application/octet-stream',
       'Cache-Control': cache,
       'Service-Worker-Allowed': '/',
+      // Basis-Abhärtung: keine Sniffer-Deutung, kein Iframe-Einschluss.
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
     });
     response.end(data);
   });

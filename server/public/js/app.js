@@ -422,13 +422,16 @@ const App = (() => {
     if (event.target?.closest?.('button')) sfx('ui_select', 0.5);
   }, true);
 
-  function randomCode() {
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  // Room-Code erzeugt der Server (Anti-Squatting) — kein lokaler Generator mehr.
+
+  // Boot in a game with ?code= parameter (deep share links)
+  const bootUrlCode = new URL(location.href).searchParams.get('code');
+  if (bootUrlCode && /^[A-Z2-9]{6}$/.test(bootUrlCode)) {
+    const codeInput = $('join-code');
+    if (codeInput) {
+      codeInput.value = bootUrlCode.toUpperCase();
+      setTimeout(() => codeInput.focus?.(), 400);
     }
-    return code;
   }
 
   function uuid() {
@@ -518,7 +521,12 @@ const App = (() => {
     // (no broadcast), so it routes hosts into the lobby directly.
     socket.on('room:created', (room) => {
       state.room = room;
+      state.code = room.code;
       state.isHost = room.hostId === state.playerId;
+      // Session (code/token) persists via session:created; code ins URL fürs Teilen.
+      const url = new URL(location.href);
+      url.searchParams.set('code', room.code);
+      history.replaceState(null, '', url.toString());
       renderLobby(room);
       show('lobby');
     });
@@ -760,10 +768,11 @@ const App = (() => {
       if (ejectedPlayerId == null) {
         ejectLine = 'Niemand wurde rausgeworfen (Skipped).';
       } else if (!confirmEjects) {
-        const en = String(ejectedPlayerName ?? '?');
+        // Player-Name kommt von fremden Clients — IMMER escapen vor innerHTML.
+        const en = escapeHtml(String(ejectedPlayerName ?? '?'));
         ejectLine = t('eject.was').replace('{name}', en);
       } else {
-        const en = String(ejectedPlayerName ?? '?');
+        const en = escapeHtml(String(ejectedPlayerName ?? '?'));
         const line = ejectedRole === 'IMPOSTOR'
           ? t('eject.wasImp').replace('{name}', en)
           : t('eject.wasNotImp').replace('{name}', en);
@@ -887,7 +896,7 @@ const App = (() => {
       const playerId = uuid();
       state.playerId = playerId;
       state.socket.emit('room:create', {
-        code: randomCode(),
+        // Der Server vergibt den Code (Kollision + Bunny-Squatting auss).
         hostId: playerId,
         hostName: name,
       });

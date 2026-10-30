@@ -15,6 +15,27 @@ const ENDPOINTS = [
 
 const QUERY_TIMEOUT_MS = 75_000;
 
+// Per-IP throttle: a hammered proxy gets OUR outbound IPs banned by the
+// Overpass mirrors. 2s per request is far above real editor usage.
+const OSM_MIN_INTERVAL_MS = 2000;
+const lastRequestAtByIp = new Map();
+
+function assertRateLimit(ip) {
+  const now = Date.now();
+  const last = lastRequestAtByIp.get(ip) ?? 0;
+  const waitMs = OSM_MIN_INTERVAL_MS - (now - last);
+  if (waitMs > 0) {
+    // Limp: keep stale entries from eating memory forever.
+    if (lastRequestAtByIp.size > 5000) {
+      for (const [key, at] of lastRequestAtByIp) {
+        if (now - at > 10 * OSM_MIN_INTERVAL_MS) lastRequestAtByIp.delete(key);
+      }
+    }
+    throw new HttpError(429, `Zu schnell — bitte ${Math.ceil(waitMs / 1000)}s warten.`);
+  }
+  lastRequestAtByIp.set(ip, now);
+}
+
 function parseStrictNumber(value, field, { min, max }) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -88,6 +109,9 @@ async function fetchOverpass(query) {
 
 async function getStreets(request, response) {
   const url = new URL(request.url, 'http://localhost');
+  assertRateLimit(
+    request.socket?.remoteAddress ?? 'unknown',
+  );
   const lat = parseStrictNumber(url.searchParams.get('lat'), 'lat', { min: -85, max: 85 });
   const lon = parseStrictNumber(url.searchParams.get('lon'), 'lon', { min: -180, max: 180 });
   const radius = parseStrictNumber(url.searchParams.get('radius') ?? 300, 'radius', {
