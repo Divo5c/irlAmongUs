@@ -945,6 +945,10 @@ const App = (() => {
   function renderLobby(room) {
     const isHost = room.hostId === state.playerId;
     state.isHost = isHost;
+    // GPS früh warm laufen lassen (Divo-Feldtest: beim Kalibrieren im
+    // Map-Setup war der erste Fix noch nicht da — der Loop lief erst
+    // mit der Rollen-Zuteilung im Spiel an).
+    ensureGpsLoop();
     $('host-controls').classList.toggle('hidden', !isHost);
     applyLobbyConfig(room);
     $('lobby-waiting').classList.toggle('hidden', isHost);
@@ -1432,33 +1436,40 @@ const App = (() => {
 
   function renderRole(payload) {
     const impostor = payload.role === 'IMPOSTOR';
-    $('btn-kill').classList.toggle('hidden', !impostor);
+    // Feldtest-Report (30.10): 'Cannot set properties of null' beim
+    // Runden-Neustart — Elemente defensiv behandeln, UI friert nie ein.
+    $('btn-kill')?.classList.toggle('hidden', !impostor);
     const teammates = $('teammates');
-    if (impostor && payload.teammates?.length) {
-      teammates.textContent = `Impostor-Partner: ${payload.teammates.map((t) => t.name).join(', ')}`;
-      teammates.classList.remove('hidden');
-    } else {
-      teammates.classList.add('hidden');
+    if (teammates) {
+      if (impostor && payload.teammates?.length) {
+        teammates.textContent = `Impostor-Partner: ${payload.teammates.map((t) => t.name).join(', ')}`;
+        teammates.classList.remove('hidden');
+      } else {
+        teammates.classList.add('hidden');
+      }
     }
 
     // Build task list (crewmates), impostors can still get fake tasks.
     // Tap a task to open its minigame (gated by proximity in openTask).
     const list = $('task-list');
-    list.innerHTML = '';
-    for (const task of payload.tasks ?? []) {
-      const li = document.createElement('li');
-      li.className = 'task-item';
-      li.dataset.taskId = task.id;
-      li.innerHTML = `<span>${TASK_ICONS[task.type] ?? '\u{1F4DD}'} ${escapeHtml(task.title)}</span>` +
-        (task.roomName ? `<small>${escapeHtml(task.roomName)}${task.stages?.length > 1 ? ` \u2022 ${t('tasks.stage')} ${(task.stageIndex ?? 0) + 1}` : ''}</small>` : '');
-      li.addEventListener('click', () => openTask(task));
-      list.appendChild(li);
+    if (list) {
+      list.innerHTML = '';
+      for (const task of payload.tasks ?? []) {
+        const li = document.createElement('li');
+        li.className = 'task-item';
+        li.dataset.taskId = task.id;
+        li.innerHTML = `<span>${TASK_ICONS[task.type] ?? '\u{1F4DD}'} ${escapeHtml(task.title)}</span>` +
+          (task.roomName ? `<small>${escapeHtml(task.roomName)}${task.stages?.length > 1 ? ` \u2022 ${t('tasks.stage')} ${(task.stageIndex ?? 0) + 1}` : ''}</small>` : '');
+        li.addEventListener('click', () => openTask(task));
+        list.appendChild(li);
+      }
+      if (!payload.tasks?.length) {
+        list.innerHTML = '<li><span>Keine Tasks \u2014 als Impostor sabotier, als Geist beobachte.</span></li>';
+      }
     }
     state.tasks = payload.tasks ?? [];
-    $('task-count').textContent = `${payload.tasks?.length ?? 0}`;
-    if (!payload.tasks?.length) {
-      list.innerHTML = '<li><span>Keine Tasks \u2014 als Impostor sabotier, als Geist beobachte.</span></li>';
-    }
+    const countEl = $('task-count');
+    if (countEl) countEl.textContent = `${payload.tasks?.length ?? 0}`;
     renderGameHud();
   }
 
@@ -2797,17 +2808,22 @@ const App = (() => {
       (info.clientWidth - w * scale) / 2 + (x - minX) * scale,
       (info.clientHeight - h * scale) / 2 + (y - minY) * scale,
     ];
-    // Straßen (Korridore) + Räume+Raum-Labels minimal zeichnen.
+    // Straßen (Korridore) + Räume + Raum-Labels zeichnen. Korridore sind
+    // Kanten {a, b} mit NODE-IDs — Feldtest 30.10: der Wizard zeigte sie
+    // nicht, weil er vergeblich poly.points suchte (weshalb Divo blind
+    // kalibrieren musste).
+    const nodesById = new Map((mapData.nodes ?? []).map((n) => [n.id, n]));
     ctx.strokeStyle = 'rgba(189, 207, 224, 0.5)';
-    ctx.lineWidth = Math.max(2, 5 * scale);
+    ctx.lineWidth = Math.max(2, 4 * scale);
     for (const corridor of mapData.corridors ?? []) {
-      const ptsC = corridor.points ?? [];
-      if (ptsC.length < 2) continue;
+      const a = nodesById.get(corridor.a);
+      const b = nodesById.get(corridor.b);
+      if (!a || !b) continue;
       ctx.beginPath();
-      ptsC.forEach((p, i) => {
-        const [px, py] = toPx(p.x, p.y);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      });
+      const [ax2, ay2] = toPx(a.x, a.y);
+      const [bx2, by2] = toPx(b.x, b.y);
+      ctx.moveTo(ax2, ay2);
+      ctx.lineTo(bx2, by2);
       ctx.stroke();
     }
     for (const r of mapData.rooms ?? []) {

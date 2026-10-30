@@ -1274,3 +1274,24 @@ test('setMapAnchor updates the origin during IN_GAME and rejects garbage', () =>
   assertGameError(() => store.setMapAnchor('ANC234', { lat: 999, lon: 'no' }), 'MAP_ANCHOR_INVALID');
   assertGameError(() => store.setMapAnchor('NOPE99', { lat: 1, lon: 1 }), 'ROOM_NOT_FOUND');
 });
+
+test('map:update / saveMap PRESERVE stored calibration (field bug: wizard request loop)', () => {
+  const store = new RoomStore();
+  createRoomWithPlayers(store, 3);
+  makeMapReady(store);
+
+  const cal = {
+    p1: { x: 0, y: 0, lat: 51.1, lon: 7.0 },
+    p2: { x: 60, y: -80, lat: 51.0988, lon: 7.0011 },
+  };
+  store.setMapCal('ABC234', cal);
+
+  // Editor payloads never carry cal — but the stored one must survive.
+  const updated = store.updateMap('ABC234', SAMPLE_MAP);
+  assert.deepEqual(updated.map.cal, cal);
+
+  // Begin edit -> save cycle (rematch path) keeps it too.
+  store.beginMapEdit('ABC234');
+  const saved = store.saveMap('ABC234', SAMPLE_MAP);
+  assert.deepEqual(saved.map.cal, cal);
+});

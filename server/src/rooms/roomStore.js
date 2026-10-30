@@ -1436,6 +1436,13 @@ class RoomStore {
     });
     sanitized.rooms = deduped;
     sanitized.version = room.map?.version ?? 1;
+    // Kalibrierungsschutz (Divo-Feldtest 30.10): der Editor snapshot
+    // transportiert cal nicht — ohne Übernahme würde jede map:update-/
+    // save-Zelle die gespeicherte 2-Punkt-Kalibrierung LÖSCHEN und die
+    // App würde nach jedem Speichern "bitte kalibrieren" brüllen.
+    if (!sanitized.cal && room.map?.cal) {
+      sanitized.cal = room.map.cal;
+    }
     room.map = sanitized;
     room.updatedAt = new Date().toISOString();
     return this.toPublicRoom(room);
@@ -1461,6 +1468,10 @@ class RoomStore {
 
     const previousVersion = room.map?.version ?? 0;
     sanitized.version = previousVersion + 1;
+    // Kalibrierungsschutz: siehe updateMap — Editor-Snapshots haben kein cal.
+    if (!sanitized.cal && room.map?.cal) {
+      sanitized.cal = room.map.cal;
+    }
     room.map = sanitized;
     room.status = STATUS_MAP_READY;
     room.updatedAt = new Date().toISOString();
