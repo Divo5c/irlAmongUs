@@ -203,6 +203,19 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
       }
     });
 
+    /** Host stores the permanent two-point calibration (all phases). */
+    socket.on('map:cal', (payload) => {
+      try {
+        const { code, cal } = payload ?? {};
+        assertSocketInRoom(socket, code);
+        assertHost(socket, code);
+        const publicRoom = roomStore.setMapCal(code, cal);
+        io.to(code).emit('room:updated', publicRoom);
+      } catch (error) {
+        emitRoomError(socket, error);
+      }
+    });
+
     /** Validates + persists the map and opens the game start. */
     socket.on('map:save', (payload) => {
       try {

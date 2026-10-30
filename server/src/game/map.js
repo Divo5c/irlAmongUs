@@ -217,9 +217,14 @@ function sanitizeGameMap(raw) {
       ? { lat: anchorLat, lon: anchorLon }
       : undefined;
 
+  // Two-point calibration (Divo): permanent world anchors. p1/p2 map the
+  // map's meter space to real GPS — stored once, reused every game.
+  const cal = sanitizeCal(raw.cal);
+
   return {
     version: 1, // the store assigns the authoritative version on save
     ...(anchor ? { anchor } : {}),
+    ...(cal ? { cal } : {}),
     ...(width !== undefined ? { width } : {}),
     ...(height !== undefined ? { height } : {}),
     nodes,
@@ -234,6 +239,38 @@ function sanitizeGameMap(raw) {
   function duplicateError(message) {
     return new GameError('MAP_INVALID', message, { field: 'duplicate' });
   }
+}
+
+/**
+ * Sanitizes a two-point calibration payload. Returns undefined when the
+ * data is missing/invalid (calibration is optional — never blocks a map).
+ * p1/p2 must be >= 5m apart (map AND world) so scale stays stable.
+ */
+function sanitizeCal(raw) {
+  const point = (p) => {
+    const x = Number(p?.x);
+    const y = Number(p?.y);
+    const lat = Number(p?.lat);
+    const lon = Number(p?.lon);
+    if (!Number.isFinite(x) || !Number.isFinite(y)
+      || !Number.isFinite(lat) || !Number.isFinite(lon)
+      || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      return null;
+    }
+    return { x, y, lat, lon };
+  };
+  const p1 = point(raw?.p1);
+  const p2 = point(raw?.p2);
+  if (!p1 || !p2) return undefined;
+  if (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 5) return undefined;
+  // World distance (equirectangular rough meters — only used as sanity).
+  const m = 111_320;
+  const world = Math.hypot(
+    (p2.lon - p1.lon) * m * Math.max(0.2, Math.cos((p1.lat * Math.PI) / 180)),
+    (p2.lat - p1.lat) * m,
+  );
+  if (world < 5) return undefined;
+  return { p1, p2 };
 }
 
 /**
@@ -270,5 +307,6 @@ module.exports = {
   ROOM_DISPLAY_NAMES,
   CRITICAL_ROOM_TYPES,
   sanitizeGameMap,
+  sanitizeCal,
   validateForSave,
 };

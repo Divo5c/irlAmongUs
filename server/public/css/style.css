@@ -670,6 +670,10 @@ button.round {
   background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255,255,255,0.12);
   touch-action: manipulation; }
 
+#cal2-map { width: 100%; height: 44dvh; border-radius: 12px;
+  background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255,255,255,0.12);
+  touch-action: manipulation; }
+
 /* Regel-Panels im Lobby-Stil (Among-Us-Tabs) */
 .rules-panels { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
 .rules-group { position: relative; padding: 14px 4px 6px; border-radius: 12px;

@@ -883,6 +883,29 @@ describe('map setup lifecycle', () => {
     assert.equal(saved.map.nodes.length, updated.map.nodes.length);
   });
 
+  test('setMapCal stores permanent 2-point calibration in every map phase', () => {
+    const store = new RoomStore();
+    createRoomWithPlayers(store, 3);
+    makeMapReady(store);
+
+    const cal = {
+      p1: { x: 0, y: 0, lat: 51.1, lon: 7.0 },
+      p2: { x: 60, y: -80, lat: 51.0988, lon: 7.0011 },
+    };
+    const room = store.setMapCal('ABC234', cal);
+    assert.deepEqual(room.map.cal.p2, cal.p2);
+
+    beginGame(store);
+    const inGame = store.setMapCal('ABC234', cal);
+    assert.deepEqual(inGame.map.cal.p1, cal.p1);
+
+    // Unbrauchbare Kalibrierung (Punkte zu nah beieinander) lehnt ab.
+    assert.throws(
+      () => store.setMapCal('ABC234', { ...cal, p2: { ...cal.p2, x: 0.5, y: 0.5 } }),
+      /auseinanderliegende/,
+    );
+  });
+
   test('map:update / save are locked outside MAP_SETUP (MAP_READY stays editable, in-game locked)', () => {
     const store = new RoomStore();
     createRoomWithPlayers(store, 3);

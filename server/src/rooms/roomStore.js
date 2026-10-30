@@ -8,7 +8,7 @@ const {
 } = require('../game/config');
 const { createTasks, groupTasksByPlayer } = require('../game/taskCatalog');
 const { evaluateVictory, evaluateVictoryDetailed } = require('../game/victory');
-const { sanitizeGameMap, validateForSave } = require('../game/map');
+const { sanitizeGameMap, sanitizeCal, validateForSave } = require('../game/map');
 const {
   sanitizePositionEstimate,
   resolveRoomMembership,
@@ -1332,6 +1332,36 @@ class RoomStore {
       );
     }
     room.map.anchor = { lat, lon };
+    room.updatedAt = new Date().toISOString();
+    return this.toPublicRoom(room);
+  }
+
+  /**
+   * Host stores the PERMANENT two-point calibration (Divo-Geburtstags-
+   * Wunsch: einmal kalibrieren, künftig Spiel starten ohne laufen).
+   * Allowed in every map phase incl. in-game (fine-tuning on the spot).
+   */
+  setMapCal(code, rawCal) {
+    const room = this.getRequiredRoom(code);
+
+    if (!room.map) {
+      throw new GameError('MAP_MISSING', 'The room has no map yet.');
+    }
+    if (room.status !== STATUS_MAP_SETUP && room.status !== STATUS_MAP_READY
+      && room.status !== STATUS_IN_GAME) {
+      throw new GameError(
+        'MAP_LOCKED',
+        'Kalibrieren ist nur bei Kartenbau, Start oder im Spiel m\u00f6glich.',
+      );
+    }
+    const cal = sanitizeCal(rawCal);
+    if (!cal) {
+      throw new GameError(
+        'MAP_ANCHOR_INVALID',
+        'Kalibrierung braucht zwei deutlich auseinanderliegende Punkte mit GPS-Koordinaten.',
+      );
+    }
+    room.map.cal = cal;
     room.updatedAt = new Date().toISOString();
     return this.toPublicRoom(room);
   }

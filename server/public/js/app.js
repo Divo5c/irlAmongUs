@@ -44,7 +44,7 @@ const App = (() => {
       'gps.waiting': 'Warte auf GPS-Signal …',
       'gps.lost': 'GPS-Signal verloren …',
       'gps.noapi': 'Dein Browser kennt keinen Standort (GPS) — du siehst deinen Marker nicht.',
-      'gps.noanchor': 'Karte ohne GPS-Ursprung: \u2699\ufe0e Zahnrad oben rechts — „Setz-Punkt setzen" drücken, wenn du an der CAFETERIA stehst.',
+      'gps.noanchor': 'Karte noch nicht kalibriert: \u2699\ufe0e Zahnrad \u2192 „Karte kalibrieren“ \u2014 2 Stra\u00dfenecken abgehen (einmalig, gilt f\u00fcr immer).',
       'map.waiting': 'Warte auf GPS …',
       'map.you': 'DU',
       'map.noTasks': 'Aktiv gerade keine Task',
@@ -118,7 +118,7 @@ const App = (() => {
       'gps.waiting': 'Waiting for GPS signal …',
       'gps.lost': 'GPS signal lost …',
       'gps.noapi': 'Your browser has no location support — you will not see your marker.',
-      'gps.noanchor': 'Map without GPS origin: \u2699\ufe0e gear icon top right — press "Set anchor" while standing where the CAFETERIA is on your map.',
+      'gps.noanchor': 'Map not calibrated yet: \u2699\ufe0e gear \u2192 "Calibrate map" \u2014 visit 2 clear points (one time, stored forever).',
       'map.waiting': 'Waiting for GPS …',
       'map.you': 'YOU',
       'map.noTasks': 'No active task right now',
@@ -525,6 +525,14 @@ const App = (() => {
     socket.on('room:error', ({ code: errorCode, message, details }) => {
       // Server meldet teils englische Fachtexte — unten deutsche Klartexte.
       logAppError('server', `${errorCode}: ${message ?? ''}`);
+      if (errorCode === 'AUTH_FAILED') {
+        // Session abgelaufen (z. B. Server-Restart): sauber raus statt
+        // Position-Spam; GPS aus, Lobby zeigen.
+        stopGpsLoop();
+        state.room = null;
+        state.selfPos = null;
+        showToast('Sitzung abgelaufen \u2014 bitte mit dem Code neu beitreten.');
+      }
       if (errorCode === 'NOT_IN_ROOM') {
         // Verlorene Session (AUTH/Reconnect): raus aus dem Spiel, GPS-Stop.
         stopGpsLoop();
@@ -1807,7 +1815,18 @@ const App = (() => {
   /** GPS->Meter Projektion auf Basis des gespeicherten Karten-Ankers. */
   function projectorFor(key = null) {
     if (key) return key === state.projKey ? state.proj : null;
-    const anchor = state.room?.map?.anchor;
+    // Bevorzugt: 2-Punkt-Kalibrierung (permanent, gedreht + skaliert).
+    const mapData = state.room?.map;
+    const cal = mapData?.cal;
+    if (cal?.p1 && cal?.p2 && Number.isFinite(cal.p1.lat)) {
+      const calKey = `cal:${mapData.version ?? 0}:${Math.round(cal.p1.x)}:${Math.round(cal.p1.y)}`;
+      if (state.projKey !== calKey) {
+        state.proj = twoPointProjector(cal);
+        state.projKey = state.proj ? calKey : null;
+      }
+      return state.proj;
+    }
+    const anchor = mapData?.anchor;
     if (!anchor || typeof anchor.lat !== 'number') return null;
     const cacheKey = `${anchor.lat}:${anchor.lon}`;
     if (state.projKey !== cacheKey) {
@@ -1815,6 +1834,52 @@ const App = (() => {
       state.proj = OSM.createProjector(anchor.lat, anchor.lon);
     }
     return state.proj;
+  }
+
+  /**
+   * 2-Punkt-Projektor: aus zwei Karte<->GPS-Paaren ergibt sich Versatz,
+   * Drehung und Maßstab (Abstand in Welt- vs. Kartemetern, Winkel der
+   * Richtungen). Die Karte darf also beliebig schief gezeichnet sein.
+   * Welt- und Kartenmeter nutzen dieselbe Achsenlage (x=ost, y=sued).
+   */
+  function twoPointProjector(cal) {
+    const m = 111_320;
+    const cos1 = Math.max(0.2, Math.cos((cal.p1.lat * Math.PI) / 180));
+    const wx = (cal.p2.lon - cal.p1.lon) * m * cos1;
+    const wy = -(cal.p2.lat - cal.p1.lat) * m;
+    const mx = cal.p2.x - cal.p1.x;
+    const my = cal.p2.y - cal.p1.y;
+    const mapLen = Math.hypot(mx, my);
+    const worldLen = Math.hypot(wx, wy);
+    if (!mapLen || !worldLen) return null;
+    // Die Karte ist handgezeichnet und NICHT maßstabsgetreu: der Skalier-
+    // faktor funkt die Welt in das gezeichnete Verhältnis hinein (p2
+    // muss landen EXAKT auf p2's Kartenpunkt).
+    const scale = mapLen / worldLen;
+    // Drehung, die den Weltvektor in den Kartenvektor schwenkt.
+    const theta = Math.atan2(my, mx) - Math.atan2(wy, wx);
+    const cosT = Math.cos(theta);
+    const sinT = Math.sin(theta);
+    return {
+      project(lat, lon) {
+        // Weltmeter relativ zu p1 (equirectangular=Grobfahrt).
+        const ax = (lon - cal.p1.lon) * m * cos1;
+        const ay = -(lat - cal.p1.lat) * m;
+        return [
+          (ax * cosT - ay * sinT) * scale + cal.p1.x,
+          (ax * sinT + ay * cosT) * scale + cal.p1.y,
+        ];
+      },
+      unproject(x, y) {
+        // Inverse von R(s·θ): Karte-Meter -> Weltmeter -> lat/lon.
+        const dx = (x - cal.p1.x) / scale;
+        const dy = (y - cal.p1.y) / scale;
+        const ax = dx * cosT + dy * sinT;
+        const ay = -dx * sinT + dy * cosT;
+        return [cal.p1.lat - ay / m, cal.p1.lon + ax / (m * cos1)];
+      },
+      anchor: { lat: cal.p1.lat, lon: cal.p1.lon },
+    };
   }
 
   // ---- Motion-Fusion: Beschleunigung + Kompass ----
@@ -2509,6 +2574,294 @@ const App = (() => {
     return { lat: state.gpsFix.latitude, lon: state.gpsFix.longitude };
   }
 
+  // ------------------------------------------------- 2-Punkt-Kalibrierung --- //
+  // Divo: Einmal 2 Straßenecken abgehen — danach startet jedes Spiel mit
+  // der Karte direkt am richtigen Ort. Pro Punkt: 5s GPS sampeln (Median
+  // = kurzzeitige Störer fliegen raus) + auf der Karte dort hin tippen.
+  const cal2 = { step: 'idle', p1: null, buffer: [], iv: null, fit: null };
+
+  function cal2MapSource() {
+    // Bevorzugt der Live-Stand vom Server (map:update hält room.map frisch),
+    // sonst der Editor-Zwischenstand (Map-Setup vor dem ersten Update).
+    const rm = state.room?.map;
+    if (rm?.rooms?.length || rm?.nodes?.length) return rm;
+    return { rooms: editor.rooms, nodes: editor.working?.nodes ?? [] };
+  }
+
+  function cal2Hide() {
+    $('cal2-overlay').classList.add('hidden');
+    clearInterval(cal2.iv);
+    cal2.iv = null;
+    cal2.step = 'idle';
+  }
+
+  function openCal2() {
+    const mapData = cal2MapSource();
+    if (!mapData?.rooms?.length && !mapData?.nodes?.length) {
+      showToast('Zeichne erst etwas auf die Karte, dann kalibrieren.');
+      return;
+    }
+    cal2.mapData = mapData;
+    cal2.p1 = mapData.cal?.p1 ?? null;
+    cal2.p2 = null;
+    cal2.step = 'idle';
+    cal2.buffer = [];
+    $('cal2-overlay').classList.remove('hidden');
+    cal2UpdateUi();
+    cal2Draw();
+    clearInterval(cal2.iv);
+    cal2.iv = setInterval(cal2Draw, 700);
+  }
+
+  function cal2UpdateUi() {
+    const gpsDa = !!currentGps();
+    const steps = $('cal2-steps');
+    const btn = $('btn-cal2-sample');
+    const status = $('cal2-status');
+    if (cal2.step === 'sampling') {
+      status.textContent = `GPS wird gesampelt \u2026 ${Math.ceil(cal2.msLeft / 1000)}s \u2014 ruhig stehen!`;
+      btn.disabled = true;
+      btn.textContent = 'Sampelt \u2026';
+      return;
+    }
+    if (!cal2.p1) {
+      steps.textContent = 'Punkt A: geh zur ersten Ecke (stra\u00dfenklare Position).';
+      status.textContent = gpsDa ? 'GPS da \u2714 \u2014 dr\u00fccke "Punkt A".'
+        : 'Warte auf GPS \u2014 rausgehen!';
+      btn.disabled = !gpsDa;
+      btn.textContent = 'Punkt A sampeln';
+      return;
+    }
+    if (cal2.step === 'pick') {
+      steps.textContent = 'Punkt A steht \u2705 \u2014 jetzt die zweite Ecke (weit weg!).';
+      status.textContent = 'Tippe auf der Karte DORT hin, wo du gerade stehst.';
+      btn.disabled = true;
+      btn.textContent = 'Karte tappen \u2026';
+      return;
+    }
+    if (cal2.step === 'p2pick') {
+      steps.textContent = 'Punkt B kommt: geh zur zweiten Ecke, dr\u00fccke den Knopf.';
+      status.textContent = gpsDa ? 'GPS da \u2714 \u2014 dr\u00fccke "Punkt B".'
+        : 'Warte auf GPS \u2014 rausgehen!';
+      btn.disabled = !gpsDa;
+      btn.textContent = 'Punkt B sampeln';
+      return;
+    }
+    if (cal2.step === 'p2-map') {
+      steps.textContent = 'Punkt A \u2705 \u2014 Punkt B: tippe auf der Karte, wo du stehst.';
+      status.textContent = 'Tippe auf die zweite Ecke.';
+      btn.disabled = true;
+      btn.textContent = 'Karte tappen \u2026';
+      return;
+    }
+    if (cal2.step === 'done') {
+      steps.textContent = 'Kalibriert \u2705 \u2014 ab jetzt startet die Karte automatisch richtig.';
+      status.textContent = 'Speichern \u2026';
+      btn.disabled = true;
+      btn.textContent = ' Gespeichert ';
+      return;
+    }
+    steps.textContent = 'Neukalibrieren \u00fcberschreibt die gespeicherten Punkte.';
+    status.textContent = gpsDa ? 'GPS da \u2714 \u2014 dr\u00fccke "Punkt A".'
+      : 'Warte auf GPS \u2014 rausgehen!';
+    btn.disabled = !gpsDa;
+    btn.textContent = 'Punkt A sampeln';
+  }
+
+  function cal2Sample() {
+    const gps = currentGps();
+    if (!gps) {
+      cal2UpdateUi();
+      showToast('Kein GPS \u2014 raus ins Freie, dann wieder dr\u00fccken.');
+      return;
+    }
+    cal2.step = 'sampling';
+    cal2.buffer = [{ ...gps, acc: state.gpsFix?.accuracy ?? 30 }];
+    cal2.msLeft = 5000;
+    cal2UpdateUi();
+    cal2Draw();
+    clearInterval(cal2.iv);
+    cal2.iv = setInterval(() => {
+      cal2.msLeft -= 400;
+      const nowGps = currentGps();
+      if (nowGps) cal2.buffer.push({ ...nowGps, acc: state.gpsFix?.accuracy ?? 30 });
+      if (cal2.msLeft <= 0) {
+        clearInterval(cal2.iv);
+        // Median-Lat/Lon: kurze Fehl-Fixe (Autobus-Ghost) fliegen raus.
+        const lats = cal2.buffer.map((p) => p.lat).sort((a, b) => a - b);
+        const lons = cal2.buffer.map((p) => p.lon).sort((a, b) => a - b);
+        const mid = Math.floor(lats.length / 2);
+        cal2.median = { lat: lats[mid], lon: lons[mid] ?? lons[lons.length - 1] };
+        cal2.step = cal2.p1 ? 'p2-map' : 'pick';
+        cal2UpdateUi();
+        cal2Draw();
+        beep(760);
+      } else {
+        cal2UpdateUi();
+      }
+    }, 400);
+  }
+
+  function cal2PickPoint(px, py) {
+    if (cal2.step !== 'pick' && cal2.step !== 'p2-map') return;
+    const fit = cal2.fit;
+    if (!fit) return;
+    const point = fit.pointFromPx(px, py);
+    point.lat = cal2.median.lat;
+    point.lon = cal2.median.lon;
+    if (cal2.step === 'pick') {
+      cal2.p1 = point;
+      cal2.step = 'p2pick';
+    } else {
+      const p1 = cal2.p1;
+      const p2 = point;
+      if (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 5
+        || Math.hypot(p2.lat - p1.lat, p2.lon - p1.lon) < 0.00005) {
+        showToast('Punkte sind zu dicht beieinander \u2014 nimm zwei weit entfernte Ecken.');
+        return;
+      }
+      ensureSocket().emit('map:cal', {
+        code: state.code,
+        cal: { p1, p2 },
+      });
+      cal2.p2 = p2;
+      cal2.step = 'done';
+      state.posSmooth = null;
+      state.gpsTrail = [];
+      state.velEst = null;
+      state.projKey = null;
+      state.proj = null;
+      showToast('\ud83d\udcdb Kalibrierung gespeichert \u2014 gilt f\u00fcr immer (auch am Geburtstag).');
+      setTimeout(() => cal2Hide(), 1200);
+    }
+    cal2UpdateUi();
+    cal2Draw();
+  }
+
+  function cal2Draw() {
+    if ($('cal2-overlay').classList.contains('hidden')) return;
+    const info = $('cal2-map');
+    const mapData = cal2.mapData ?? cal2MapSource();
+    cal2.mapData = mapData;
+    const pts = [
+      ...((mapData.rooms ?? []).flatMap((r) => (r.polygon ?? []))),
+      ...(mapData.nodes ?? []),
+    ];
+    if (cal2.step === 'idle' && currentGps()) cal2UpdateUi();
+    if (!pts.length || !info) return;
+    const minX = Math.min(...pts.map((p) => p.x));
+    const maxX = Math.max(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y));
+    const maxY = Math.max(...pts.map((p) => p.y));
+    const w = maxX - minX || 10;
+    const h = maxY - minY || 10;
+    const pad = 18;
+    const scale = Math.min(
+      (info.clientWidth - pad * 2) / w,
+      (info.clientHeight - pad * 2) / h,
+    );
+    const fit = {
+      pointFromPx(px, py) {
+        const dispW = info.clientWidth;
+        const dispH = info.clientHeight;
+        const ox = (dispW - (w * scale)) / 2;
+        const oy = (dispH - (h * scale)) / 2;
+        return {
+          x: minX + (px - ox) / scale,
+          y: minY + (py - oy) / scale,
+        };
+      },
+    };
+    cal2.fit = fit;
+    info.width = info.clientWidth * 2;
+    info.height = info.clientHeight * 2;
+    const ctx = info.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.clearRect(0, 0, info.clientWidth, info.clientHeight);
+    const toPx = (x, y) => [
+      (info.clientWidth - w * scale) / 2 + (x - minX) * scale,
+      (info.clientHeight - h * scale) / 2 + (y - minY) * scale,
+    ];
+    // Straßen (Korridore) + Räume+Raum-Labels minimal zeichnen.
+    ctx.strokeStyle = 'rgba(189, 207, 224, 0.5)';
+    ctx.lineWidth = Math.max(2, 5 * scale);
+    for (const corridor of mapData.corridors ?? []) {
+      const ptsC = corridor.points ?? [];
+      if (ptsC.length < 2) continue;
+      ctx.beginPath();
+      ptsC.forEach((p, i) => {
+        const [px, py] = toPx(p.x, p.y);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+    }
+    for (const r of mapData.rooms ?? []) {
+      const poly = r.polygon ?? [];
+      if (poly.length < 3) continue;
+      ctx.beginPath();
+      poly.forEach((p, i) => {
+        const [px, py] = toPx(p.x, p.y);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,209,102,0.14)';
+      ctx.strokeStyle = 'rgba(255,209,102,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fill();
+      if (r.name) {
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.font = '600 10px system-ui';
+        ctx.textAlign = 'center';
+        const [cx2, cy2] = toPx(
+          poly.reduce((s2, p) => s2 + p.x, 0) / poly.length,
+          poly.reduce((s2, p) => s2 + p.y, 0) / poly.length,
+        );
+        ctx.fillText(r.name, cx2, cy2);
+      }
+    }
+    // GPS-Puls: mit der bisherigen Kalibrierung kann GPS zurück auf die
+    // Karte gerechnet werden (lebendiger Positionsmarkierer).
+    const gpsUni = currentGps();
+    let pulseProjection = null;
+    if (gpsUni && cal2.p1) {
+      const p2 = mapData.cal?.p2 ?? cal2.p2 ?? null;
+      if (p2) {
+        pulseProjection = twoPointProjector({ p1: cal2.p1, p2 });
+      }
+    }
+    if (gpsUni && pulseProjection) {
+      const [px, py] = toPx(...pulseProjection.project(gpsUni.lat, gpsUni.lon));
+      const pulse = 5 + 3 * Math.sin(Date.now() / 300);
+      ctx.beginPath();
+      ctx.arc(px, py, pulse, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(96,165,250,0.85)';
+      ctx.fill();
+    }
+    // Kalibrier-Punkte A/B einzeichnen:
+    for (const [point, label] of [[cal2.p1, 'A'], [mapData.cal?.p2 ?? null, 'B']]) {
+      if (!point) continue;
+      const [pxDraw, pyDraw] = toPx(point.x, point.y);
+      ctx.beginPath();
+      ctx.arc(pxDraw, pyDraw, 7, 0, Math.PI * 2);
+      ctx.fillStyle = label === 'A' ? '#4ade80' : '#f87171';
+      ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '700 10px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, pxDraw, pyDraw);
+    }
+    // Aktueller Schritt: frisch gesampelter Punkt hervorheben.
+    if (cal2.step === 'pick' || cal2.step === 'p2-map') {
+      ctx.fillStyle = 'rgba(96,165,250,0.9)';
+      ctx.font = '600 11px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('Jetzt aufs Feld tippen!', info.clientWidth / 2, info.clientHeight - 6);
+    }
+  }
+
   function openCalibration() {
     const map = state.room?.map;
     if (!map?.rooms?.length) return;
@@ -2590,8 +2943,28 @@ const App = (() => {
   }
 
   document.addEventListener('click', (event) => {
+    if (event.target.closest('#btn-cal2-close')) {
+      cal2Hide();
+      return;
+    }
+    if (event.target.closest('#btn-cal2-sample')) {
+      cal2Sample();
+      return;
+    }
+    if (event.target.closest('#btn-map-calib')) {
+      openCal2();
+      return;
+    }
+  });
+  $('cal2-map').addEventListener('click', (event) => {
+    const rect = event.target.getBoundingClientRect();
+    cal2PickPoint(event.clientX - rect.left, event.clientY - rect.top);
+  });
+
+  // ---- Alter Einzel-Punkt-Flow (Fallback, verwaist) -------------------- //
+  document.addEventListener('click', (event) => {
     if (event.target.closest('#btn-set-anchor')) {
-      openCalibration();
+      openCal2();
       return;
     }
     if (!event.target.closest('#btn-calib-here')) return;
@@ -2670,6 +3043,8 @@ const App = (() => {
     // MAP_LOCKED -> wir wuerden das Fehler-Log fluten wie heute gesehen.
     if (!state.isHost) return;
     if (!['MAP_READY', 'IN_GAME'].includes(room?.status)) return;
+    // Kalibrierte Karte: 2-Punkt-Projektor reicht vollständig aus.
+    if (room.map?.cal?.p1 && room.map?.cal?.p2) return;
     if (state.anchorRestoreTried) return;
     if (!room?.map?.nodes?.length) return;
     if (Number.isFinite(room.map.anchor?.lat)) return;
@@ -2686,31 +3061,25 @@ const App = (() => {
     }
   }
 
-  /** Zahnrad-Hinweis: nur Host + Anker fehlt wirklich. */
+  /** Zahnrad: Kalibrieren-Button für den Host in jeder Map-Phase. */
   function refreshAnchorUi() {
     const room = state.room;
-    const showBtn = !!room?.map && !Number.isFinite(room.map.anchor?.lat) && state.isHost
-      && (room.status === 'IN_GAME' || room.status === 'MAP_READY');
+    const showBtn = !!room?.map && state.isHost
+      && ['MAP_SETUP', 'MAP_READY', 'IN_GAME'].includes(room.status);
     $('btn-set-anchor').classList.toggle('hidden', !showBtn);
-    $('anchor-hint').classList.toggle('hidden', !showBtn);
+    const hint = $('anchor-hint');
+    hint.classList.toggle('hidden', !showBtn);
+    hint.textContent = room?.map?.cal
+      ? '\u2705 Karte kalibriert — der Button dient nur noch als Feintuning.'
+      : 'Kalibriere ein Mal: 2 klare Punkte (z. B. Stra\u00dfenecken) abgehen, die App merkt sich das f\u00fcr immer.';
   }
 
   document.addEventListener('click', (event) => {
     if (!event.target.closest('#btn-set-anchor')) return;
-    if (!state.gpsFixAt) {
-      showToast('Kein GPS-Signal! Geh raus und warte, dann wieder dr\u00fccken.');
-      return;
-    }
-    const map = state.room?.map;
-    if (!map) return;
-    ensureSocket().emit('map:anchor', {
-      code: state.code,
-      anchor: { lat: state.gpsFix.latitude, lon: state.gpsFix.longitude },
-    });
-    showToast('\ud83d\udcdb Setz-Punkt gespeichert \u2014 dein Marker erscheint mit dem n\u00e4chsten GPS-Fix.');
+    openCal2();
   });
 
-  // Einstellungs-Men\u00fc: DELEGATION auf Dokumentebene, damit der Zahnrad-
+  // EinstellungsMenü: DELEGATION auf Dokumentebene, damit der Zahnrad-
   // Button in keinem Fall verdeckt/blockiert sein kann (IRL-Bugfix).
   document.addEventListener('click', (event) => {
     const target = event.target.closest(

@@ -78,6 +78,39 @@ describe('map sanitizing accepts valid maps', () => {
     assert.equal('hackerField' in map, false);
     assert.equal('evil' in map.nodes[0], false);
   });
+
+  test('valid 2-point calibration is stored, junk is dropped silently', () => {
+    const raw = {
+      ...structuredClone(VALID_MAP),
+      cal: {
+        p1: { x: 0, y: 0, lat: 51.1, lon: 7.0 },
+        p2: { x: 60, y: -80, lat: 51.0988, lon: 7.0011 },
+      },
+    };
+    const map = sanitizeGameMap(raw);
+    assert.equal(map.cal.p1.lat, 51.1);
+    assert.equal(map.cal.p2.x, 60);
+
+    // Vielfältiger Buxoks-Quark: Punkte zu nah / fehlend / ohne GPS.
+    assert.equal(sanitizeGameMap({ ...structuredClone(VALID_MAP), cal: undefined }).cal, undefined);
+    assert.equal(
+      sanitizeGameMap({
+        ...structuredClone(VALID_MAP),
+        cal: { p1: { x: 0, y: 0 }, p2: { x: 3, y: 3 } },
+      }).cal,
+      undefined,
+    );
+    assert.equal(
+      sanitizeGameMap({
+        ...structuredClone(VALID_MAP),
+        cal: {
+          p1: { x: 0, y: 0, lat: 51.1, lon: 7.0 },
+          p2: { x: 1, y: 1, lat: 51.1001, lon: 7.0001 },
+        },
+      }).cal,
+      undefined,
+    );
+  });
 });
 
 describe('map sanitizing rejects invalid payloads', () => {

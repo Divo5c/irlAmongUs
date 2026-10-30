@@ -98,6 +98,7 @@
     <p class="hint" id="map-hint">Tippe eine Stra&szlig;e an, um sie auszuw&auml;hlen. Mehrere Stra&szlig;en = gr&ouml;&szlig;eres Spielfeld.</p>
     <div class="editor-actions">
       <button id="btn-build-streets" class="secondary big">Ausgew&auml;hlte &uuml;bernehmen</button>
+      <button id="btn-map-calib" class="secondary big">&#128205; Kalibrieren</button>
       <button id="btn-map-save" class="primary big">Karte speichern</button>
     </div>
     <p class="legal" id="osm-attribution">Stra&szlig;endaten &copy; OpenStreetMap-Mitwirkende</p>
@@ -278,8 +279,8 @@
             </div>
             <button id="cfg-apply" class="primary big">Speichern</button>
           </details>
-          <button id="btn-set-anchor" class="primary big hidden">&#128205; Setz-Punkt setzen</button>
-          <p class="hint hidden" id="anchor-hint">Diese Karte hat keinen GPS-Ursprung! Geh genau dorthin, wo auf deiner Karte die CAFETERIA ist, dann tippe auf den Button. Danach funktioniert dein Standort-Marker.</p>
+          <button id="btn-set-anchor" class="primary big hidden">&#128205; Karte kalibrieren</button>
+          <p class="hint hidden" id="anchor-hint">Kalibriere ein Mal: 2 klare Punkte (z. B. Stra&#223;enecken) abgehen, die App merkt sich das f&#252;r immer.</p>
           <button id="btn-leave-from-menu" class="danger-big" data-i18n="btn.leave">Verlassen</button>
           <p class="hint" id="settings-note" data-i18n="settings.note">Verlassen beendet die Verbindung. Die Lobby läuft weiter.</p>
           <div id="dev-errorbox" class="hidden">
@@ -306,6 +307,18 @@
         <button id="btn-calib-here" class="primary big" disabled>Ich stehe hier</button>
       </div>
     </div>
+    <div id="cal2-overlay" class="task-overlay hidden">
+      <div class="task-card settings-card">
+        <div class="task-head">
+          <div class="task-title">&#128205; Karte kalibrieren</div>
+          <button id="btn-cal2-close" class="task-close">&#10005;</button>
+        </div>
+        <p class="hint" id="cal2-steps">Gehe zu 2 klaren Punkten (z. B. Stra&#223;enecken, weit auseinander). Einmal machen — f&#252;r immer gespeichert.</p>
+        <canvas id="cal2-map" class="cal2-canvas"></canvas>
+        <div id="cal2-status" class="hint">Punkt A: geh zur ersten Ecke.</div>
+        <button id="btn-cal2-sample" class="primary big" disabled>GPS sampeln</button>
+      </div>
+    </div>
     <div id="rejoin-overlay" class="task-overlay hidden">
       <div class="task-card settings-card">
         <div class="task-head">
@@ -317,9 +330,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.10.9"></script>
-  <script src="/js/mapEditor.js?v=19.10.9"></script>
-  <script src="/js/tasks.js?v=19.10.9"></script>
-  <script src="/js/app.js?v=19.10.9"></script>
+  <script src="/js/osm.js?v=19.11.0"></script>
+  <script src="/js/mapEditor.js?v=19.11.0"></script>
+  <script src="/js/tasks.js?v=19.11.0"></script>
+  <script src="/js/app.js?v=19.11.0"></script>
 </body>
 </html>
