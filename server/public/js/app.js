@@ -1132,6 +1132,12 @@ const App = (() => {
           streets = await OSM.fetchStreets(latitude, longitude, radius);
         } catch (error) {
           lastError = error;
+          // Server rate-limits den Proxy pro IP (2s): sofortiges
+          // Nochmal-Würfen würde alle Versuche in einer Millisekunde
+          // verbrennen. Kurz abwarten und dann sauber wiederholen.
+          if (/schnell/i.test(String(error?.message ?? error))) {
+            await new Promise((resolve) => setTimeout(resolve, 2300));
+          }
         }
       }
       if (!streets) throw lastError;
