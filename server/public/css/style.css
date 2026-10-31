@@ -774,7 +774,8 @@ button.round {
 /* Meeting-Tisch-Bottom-Sheet (v19.12): slidet von unten rein, wo die
    Map liegt — Divo: Use am Tisch öffnet das Meeting-Feld. */
 #emergency-panel { position: fixed; left: 10px; right: 10px;
-  bottom: 10px; z-index: 44; pointer-events: auto; }
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 44;
+  pointer-events: auto; }
 #emergency-panel.hidden { display: none; }
 .emergency-tablet { max-width: 460px; margin: 0 auto;
   background: linear-gradient(180deg, rgba(21, 28, 43, 0.98), rgba(9, 12, 20, 0.98));

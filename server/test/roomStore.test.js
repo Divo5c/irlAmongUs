@@ -1043,8 +1043,8 @@ describe('sabotage & emergency meeting', () => {
   }
 
   /** First position update per player is always accepted (fresh store). */
-  function placeAt(store, id, { x, y }) {
-    store.updatePosition('ABC234', id, { x, y, confidence: 1 });
+  function placeAt(store, id, { x, y }, skipCheck = false) {
+    store.updatePosition('ABC234', id, { x, y, confidence: 1 }, { skipPlausibilityCheck: skipCheck });
   }
 
   test('only a living impostor can sabotage; first cycle type is REACTOR', () => {
@@ -1155,6 +1155,23 @@ describe('sabotage & emergency meeting', () => {
     );
   });
 
+  test('emergency button is blocked while any sabotage runs (v19.12)', () => {
+    const { store, impostorId, crewIds } = sabotageGame();
+    store.startSabotage('ABC234', impostorId); // REACTOR meltdown
+    placeAt(store, crewIds[0], CAFE_C);
+    assertGameError(
+      () => store.emergencyMeeting('ABC234', crewIds[0]),
+      'SABOTAGE_ACTIVE',
+    );
+    // Nach dem Fix (zwei Crewmates am Reactor) ist der Knopf wieder da:
+    placeAt(store, crewIds[0], REACTOR_C, true);
+    placeAt(store, crewIds[1], REACTOR_C, true);
+    store.fixSabotagePanel('ABC234', crewIds[0], 'REACTOR');
+    placeAt(store, crewIds[0], CAFE_C, true);
+    const result = store.emergencyMeeting('ABC234', crewIds[0]);
+    assert.equal(result.phase, 'DISCUSSION');
+  });
+
   test('LIGHTS sabotage has no deadline and hides corpses until fixed', () => {
     const { store, impostorId, crewIds } = sabotageGame();
     const room = store.getRoom('ABC234');
@@ -1201,17 +1218,39 @@ describe('sabotage & emergency meeting', () => {
     assert.equal(store.getRoom('ABC234').sabotage, null);
   });
 
-  test('a meeting clears the running soft sabotage', () => {
+  test('emergency blocked during soft sabotage; report meeting clears it (v19.12)', () => {
     const { store, impostorId, crewIds } = sabotageGame();
     const room = store.getRoom('ABC234');
-    room.map.rooms.push({
-      id: 'room-e', name: 'Electrical', type: 'ELECTRICAL',
-      polygon: [{ x: 100, y: 100 }, { x: 120, y: 100 }, { x: 120, y: 120 }, { x: 100, y: 120 }],
-    });
-    store.startSabotage('ABC234', impostorId, 'LIGHTS');
+    room.map.rooms.push(
+      {
+        id: 'room-e', name: 'Electrical', type: 'ELECTRICAL',
+        polygon: [{ x: 100, y: 100 }, { x: 120, y: 100 }, { x: 120, y: 120 }, { x: 100, y: 120 }],
+      },
+      {
+        id: 'room-c', name: 'Communications', type: 'COMMUNICATIONS',
+        polygon: [{ x: 130, y: 100 }, { x: 150, y: 100 }, { x: 150, y: 120 }, { x: 130, y: 120 }],
+      },
+    );
+    store.startSabotage('ABC234', impostorId, 'COMMS');
     assert.ok(store.getRoom('ABC234').sabotage);
+    // Among-Us-Regel: der Notfallknopf ist blockiert, solange eine
+    // Sabotage laeuft — sonst waere der Meltdown per Meeting loeschbar.
     placeAt(store, crewIds[0], { x: 21, y: 80 });
-    store.emergencyMeeting('ABC234', crewIds[0]);
+    assertGameError(
+      () => store.emergencyMeeting('ABC234', crewIds[0]),
+      'SABOTAGE_ACTIVE',
+    );
+    assert.equal(store.getRoom('ABC234').status, 'IN_GAME');
+    // Ein gemeldeter Leichnam startet das Meeting — und raeumt die
+    // Soft-Sabotage dabei weg (Regel bleibt bestehen).
+    placeAt(store, crewIds[0], { x: 21, y: 80 }, true);
+    room.corpses = [{
+      playerId: crewIds[2] ?? 'player-2',
+      x: 21, y: 79, roomId: 'r-cafeteria', corridorId: null,
+      deadAt: new Date().toISOString(),
+    }];
+    store.reportBody('ABC234', crewIds[0]);
+    assert.equal(store.getRoom('ABC234').status, 'MEETING');
     assert.equal(store.getRoom('ABC234').sabotage, undefined);
   });
 

@@ -1682,9 +1682,7 @@ const App = (() => {
     const inGame = room?.status === 'IN_GAME'
       && room.players?.find((p) => p.id === state.playerId)?.isAlive !== false;
     if (!inGame) return 'game';
-    const sab = room?.sabotage;
-    const critical = sab && ['REACTOR', 'O2'].includes(sab.type);
-    if (critical) return 'sabotage';
+    if (room?.sabotage) return 'sabotage';
     if (emergencyLeft() <= 0) return 'exhausted';
     return null;
   }
@@ -1727,10 +1725,10 @@ const App = (() => {
     const status = $('emergency-status');
     if (status) {
       const me = state.room?.players?.find((p) => p.id === state.playerId);
-      const id = me?.id ?? '???';
+      const who = me?.name ?? me?.id ?? '???';
       const left = Math.max(0, emergencyLeft());
       status.textContent = reason === 'sabotage' ? 'EMERGENCY MEETING BLOCKED\nCRITICAL SABOTAGE'
-        : `CREWMEMBER ${id} HAS ${left} EMERGENCY\nMEETING${left === 1 ? '' : 'S'} LEFT`;
+        : `CREWMEMBER ${who} HAS ${left} EMERGENCY\nMEETING${left === 1 ? '' : 'S'} LEFT`;
     }
   }
 

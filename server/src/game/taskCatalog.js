@@ -1,4 +1,40 @@
 const { GameError } = require('./errors');
+const { cafeteriaTable, pointInPolygon } = require('./positioning');
+
+/**
+ * Extra clearance between a task spot and the meeting table edge, so the
+ * marker is reachable AND visible (not buried under the table symbol).
+ */
+const TABLE_SPOT_CLEARANCE = 2.0;
+
+/**
+ * v19.12 (Divo): table physics occupy the cafeteria centroid — indoor task
+ * spots can no longer sit there. Move the spot just outside the table
+ * circle, keeping it inside the room polygon. Deterministic per polygon.
+ */
+function adjustCafeteriaSpot(spot, room) {
+  const table = cafeteriaTable({ rooms: [room] });
+  if (!table) return spot;
+  const pts = room.polygon ?? [];
+  const minX = Math.min(...pts.map((p) => p.x));
+  const maxX = Math.max(...pts.map((p) => p.x));
+  const minY = Math.min(...pts.map((p) => p.y));
+  const maxY = Math.max(...pts.map((p) => p.y));
+  const extentX = maxX - minX;
+  const extentY = maxY - minY;
+  const candidates = extentX >= extentY
+    ? [[table.r + TABLE_SPOT_CLEARANCE, 0], [-(table.r + TABLE_SPOT_CLEARANCE), 0]]
+    : [[0, table.r + TABLE_SPOT_CLEARANCE], [0, -(table.r + TABLE_SPOT_CLEARANCE)]];
+  for (const [dx, dy] of candidates) {
+    const x = spot.x + dx;
+    const y = spot.y + dy;
+    // Bleibt der Punkt IN dem Raum UND außen am Tisch? -> nutzen.
+    if (pointInPolygon(x, y, pts) && Math.hypot(x - table.x, y - table.y) > table.r + 0.5) {
+      return { ...spot, x, y };
+    }
+  }
+  return spot;
+}
 
 /**
  * Two-stage task blueprints (Among Us style): stage 1 happens at the
@@ -182,13 +218,15 @@ function collectTaskSpots(map) {
   for (const room of rooms) {
     const pts = room.polygon ?? [];
     if (pts.length < 3) continue;
-    spots.push({
+    let spot = {
       roomId: room.id,
       roomName: room.name,
       roomType: room.type ?? 'NORMAL',
       x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length,
       y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length,
-    });
+    };
+    if ((room.type ?? '') === 'CAFETERIA') spot = adjustCafeteriaSpot(spot, room);
+    spots.push(spot);
   }
   const anchor = new Set();
   for (const room of rooms) {

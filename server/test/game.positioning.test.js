@@ -720,3 +720,33 @@ describe('cafeteriaTable + pushOutOfTable', () => {
     assert.equal(pushOutOfTable(0, 0, table), null);
   });
 });
+
+describe('cafeteria task spot keeps clear of the meeting table', () => {
+  const { createTasks } = require('../src/game/taskCatalog');
+
+  test('no task spot inside the table circle (Divo-Regel v19.12)', () => {
+    const map = {
+      nodes: [
+        { id: 'n1', x: 0, y: 0 },
+        { id: 'n2', x: 20, y: 0 },
+      ],
+      corridors: [{ id: 'c1', a: 'n1', b: 'n2' }],
+      rooms: require('./criticalRooms').criticalRooms(),
+      connections: [],
+    };
+    const tasks = createTasks(
+      ['crew-1', 'crew-2', 'crew-3', 'crew-4', 'impostor-1'],
+      2,
+      map,
+    );
+    const table = cafeteriaTable({ rooms: map.rooms });
+    for (const task of tasks) {
+      for (const point of [task, ...(task.stages ?? [])]) {
+        if (point?.x == null) continue;
+        const inside = Math.hypot(point.x - table.x, point.y - table.y) < table.r;
+        assert.equal(inside, false,
+          `task ${task.type} spot (${point.x}, ${point.y}) sits in the table circle`);
+      }
+    }
+  });
+});

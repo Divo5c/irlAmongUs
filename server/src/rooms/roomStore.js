@@ -944,6 +944,14 @@ class RoomStore {
         'Dein Notfall-Button ist f\u00fcr diese Runde aufgebraucht.',
       );
     }
+    // Among-Us-Regel (v19.12): der Knopf ist bei aktiver Sabotage kimmert
+    // blockiert — sonst w\u00e4re REACTOR/O2-Meltdown per Meeting l\u00f6schbar.
+    if (room.sabotage) {
+      throw new GameError(
+        'SABOTAGE_ACTIVE',
+        `Notfall-Knopf blockiert \u2014 ${room.sabotage.type}-Sabotage l\u00e4uft.`,
+      );
+    }
     if (!this.#playerRoomIdByType(code, playerId, 'CAFETERIA')) {
       throw new GameError(
         'NOT_IN_CAFETERIA',
