@@ -16,6 +16,8 @@ const {
   nearestCorridorDistanceM,
   snapToCorridor,
   pointInPolygon,
+  cafeteriaTable,
+  pushOutOfTable,
 } = require('../game/positioning');
 const { canKill } = require('../game/proximity');
 
@@ -1540,6 +1542,16 @@ class RoomStore {
     }
 
     // Map matching: resolve room membership and snap to corridors
+    // Divo-Regel: der Meeting-Tisch ist ein physisches Hindernis — wer
+    // hineinfährt (GPS-Jitter), wird auf den Tischrand geschoben, BEVOR
+    // Membership/Snap ausgerechnet werden (kein Spieler steht im Tisch).
+    const table = cafeteriaTable(room.map);
+    const pushed = pushOutOfTable(estimate.x, estimate.y, table);
+    if (pushed) {
+      estimate.x = pushed.x;
+      estimate.y = pushed.y;
+    }
+
     const matching = resolveRoomMembership(
       estimate.x, estimate.y,
       room.map,

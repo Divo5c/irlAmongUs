@@ -238,6 +238,8 @@ const App = (() => {
     for (const [key, el] of Object.entries(screens)) {
       el.classList.toggle('active', key === name);
     }
+    // Bottom-Sheets schließen bei jedem Screenwechsel mit zu.
+    if (name !== 'game') hideEmergencyPanel();
   }
 
   function errorHome(message) {
@@ -462,6 +464,7 @@ const App = (() => {
       tryRestoreAnchor(room);
       renderTeamProgress(room);
       drawGameMap();
+      updateEmergencyPanel();
       // MAP_READY: the host may go back to the lobby and start the game.
       const startGame = $('btn-start-game');
       const canStart = room.status === 'MAP_READY' && state.isHost;
@@ -1481,13 +1484,10 @@ const App = (() => {
     const strip = document.getElementById('task-progress-strip');
     if (!strip) return;
     // Host kann den Balken komplett verstecken (Info-Control-Knopf).
-    const label = document.getElementById('task-progress-strip-label');
     if (state.taskbarAlways === false) {
       strip.style.display = 'none';
-      if (label) label.style.display = 'none';
       return;
     }
-    if (label) label.style.display = '';
     strip.style.display = '';
     const before = document.getElementById('task-progress-fill').style.width;
     // COMMS gest\u00f6rt: Crew kann den Team-Fortschritt nicht sehen.
@@ -1500,6 +1500,10 @@ const App = (() => {
       strip.classList.add('flash');
     }
     strip.style.opacity = commsBlind ? '0.25' : '1';
+    const count = document.getElementById('task-label-count');
+    if (count) {
+      count.textContent = commsBlind ? '' : `${progress.completed}/${total}`;
+    }
   }
 
   /** Report/Kill-Buttons je nach Nähe (Kill nur mit echten Zielen). */
@@ -1536,7 +1540,7 @@ const App = (() => {
       killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
     }
     updateUseButton();
-    updateEmergencyBig();
+    updateEmergencyPanel();
     updateSabotageButton();
   }
 
@@ -1610,7 +1614,10 @@ const App = (() => {
     if (task) {
       return { label: task.title, kind: 'TASK', task };
     }
-    if (roomIdContains('CAFETERIA') && emergencyLeft() > 0) {
+    // Divo (v19.12): in der Cafeteria öffnet Use IMMER den Meeting-Tisch —
+    // der rote Knopf steckt im Feld, mit BLOCKIERT-Kappe wenn keine
+    // Meetings mehr / kritische Sabotage.
+    if (roomIdContains('CAFETERIA')) {
       return { label: 'Notfall', kind: 'EMERGENCY' };
     }
     return null;
@@ -1666,29 +1673,65 @@ const App = (() => {
   }
 
   /**
-   * Divo-Design: Großer roter 3D-Notfallknopf mit Glas-Kappe, NUR wenn
-   * du am Meeting-Point (CAFETERIA) stehst. Kappe zu = blockiert
-   * (kritische Sabotage / keine Meetings mehr / Tote drücken nicht).
+   * Divo-Design (v19.12): Meeting-Tisch-Bottom-Sheet. Kein Knopf im Hud —
+   * das symbol lebt auf dem Tisch (Map-Canvas); Use am Tisch slidet das
+   * Feld von unten rein (wo die Map ist). Kappe zu = blockiert.
    */
-  function updateEmergencyBig() {
-    const wrap = $('emergency-big');
-    const btn = $('btn-emergency');
-    if (!wrap || !btn) return;
+  function emergencyBlockedReason() {
     const room = state.room;
     const inGame = room?.status === 'IN_GAME'
       && room.players?.find((p) => p.id === state.playerId)?.isAlive !== false;
-    const atMeetingTable = roomIdContains('CAFETERIA');
+    if (!inGame) return 'game';
     const sab = room?.sabotage;
     const critical = sab && ['REACTOR', 'O2'].includes(sab.type);
-    const canPress = inGame && atMeetingTable && emergencyLeft() > 0 && !critical;
-    wrap.classList.toggle('hidden', !(inGame && atMeetingTable));
-    if (!(inGame && atMeetingTable)) return;
-    btn.classList.toggle('blocked', !canPress);
-    btn.classList.toggle('open', canPress);
-    btn.disabled = !canPress;
-    btn.querySelector('.emergency-face').textContent = critical
-      ? 'BLOCKIERT'
-      : 'NOTFALL';
+    if (critical) return 'sabotage';
+    if (emergencyLeft() <= 0) return 'exhausted';
+    return null;
+  }
+
+  function showEmergencyPanel() {
+    $('emergency-panel')?.classList.remove('hidden');
+    updateEmergencyPanel();
+  }
+
+  function hideEmergencyPanel() {
+    $('emergency-panel')?.classList.add('hidden');
+    const dome = $('btn-emergency');
+    dome?.classList.remove('pressed');
+    if (dome) dome.disabled = false;
+  }
+
+  function updateEmergencyPanel() {
+    const panel = $('emergency-panel');
+    if (!panel) return;
+    const visible = !panel.classList.contains('hidden');
+    // Statuswechsel (Meeting/GameOver/Tot) schließt das Sheet sofort.
+    if (state.room?.status !== 'IN_GAME') {
+      if (visible) hideEmergencyPanel();
+      return;
+    }
+    if (!visible) return;
+    const reason = emergencyBlockedReason();
+    // Tot: Topples sehen keinen Tisch-Dialog mehr (Among-Us-Regel).
+    if (reason === 'game') {
+      hideEmergencyPanel();
+      return;
+    }
+    const dome = $('btn-emergency');
+    const blocked = !!reason;
+    if (dome) {
+      dome.classList.toggle('blocked', blocked);
+      dome.classList.toggle('open', !blocked);
+      dome.disabled = blocked;
+    }
+    const status = $('emergency-status');
+    if (status) {
+      const me = state.room?.players?.find((p) => p.id === state.playerId);
+      const id = me?.id ?? '???';
+      const left = Math.max(0, emergencyLeft());
+      status.textContent = reason === 'sabotage' ? 'EMERGENCY MEETING BLOCKED\nCRITICAL SABOTAGE'
+        : `CREWMEMBER ${id} HAS ${left} EMERGENCY\nMEETING${left === 1 ? '' : 'S'} LEFT`;
+    }
   }
 
   $('btn-emergency')?.addEventListener('click', () => {
@@ -1707,8 +1750,14 @@ const App = (() => {
     state._usedEmergency = true;
     setTimeout(() => {
       btn.classList.remove('pressed');
+      hideEmergencyPanel();
       ensureSocket().emit('game:emergency', { code: state.code });
     }, 900);
+  });
+
+  $('btn-emergency-close')?.addEventListener('click', () => {
+    sfx('panel_close', 0.5);
+    hideEmergencyPanel();
   });
 
   function updateUseButton() {
@@ -2165,7 +2214,11 @@ const App = (() => {
     state.snapped = snap ?? false;
     const [tx, ty] = snap ?? [smooth.x, smooth.y];
     state.posSmooth = smooth;
-    state.displayPos = { x: state.snapped ? tx : smooth.x, y: state.snapped ? ty : smooth.y };
+    // Meeting-Tisch-Kollision (v19.12): clientseitig rausschieben, damit
+    // der Pin nicht "im Tisch" stehen bleibt, bis der Server korrigiert.
+    const tablePush = pushOutOfTable(smooth.x, smooth.y, cafeteriaTableOf(state.room?.map));
+    const [wx, wy] = tablePush ? [tablePush.x, tablePush.y] : [smooth.x, smooth.y];
+    state.displayPos = { x: state.snapped ? tx : wx, y: state.snapped ? ty : wy };
     const confidence = Math.min(1, Math.max(0, (60 - accuracy) / 60));
     const moved = state.lastSentPos
       ? Math.hypot(state.displayPos.x - state.lastSentPos.x, state.displayPos.y - state.lastSentPos.y)
@@ -2227,6 +2280,42 @@ const App = (() => {
   };
 
   // -------------------------------------------------------- live map draw //
+
+  // Spiegelbild zur Server-Physik (positioning.js): Cafeteria-Tischkreis
+  // mit Radius aus der RaumboundingBox. Client rechnet VOR dem Senden,
+  // der Server erzwingt es nochmal autoritativ.
+  const TABLE_RADIUS_MIN_M = 1.6;
+  const TABLE_RADIUS_MAX_M = 3.2;
+  const TABLE_RADIUS_ROOM_FRACTION = 0.24;
+
+  function cafeteriaTableOf(map) {
+    const cafe = (map?.rooms ?? []).find((room) => room.type === 'CAFETERIA');
+    if (!cafe?.polygon?.length || cafe.polygon.length < 3) return null;
+    if (cafe.polygon.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return null;
+    const x = cafe.polygon.reduce((sum, p) => sum + p.x, 0) / cafe.polygon.length;
+    const y = cafe.polygon.reduce((sum, p) => sum + p.y, 0) / cafe.polygon.length;
+    const minX = Math.min(...cafe.polygon.map((p) => p.x));
+    const maxX = Math.max(...cafe.polygon.map((p) => p.x));
+    const minY = Math.min(...cafe.polygon.map((p) => p.y));
+    const maxY = Math.max(...cafe.polygon.map((p) => p.y));
+    const minSide = Math.min(maxX - minX, maxY - minY);
+    return {
+      x,
+      y,
+      r: Math.max(TABLE_RADIUS_MIN_M, Math.min(TABLE_RADIUS_MAX_M,
+        minSide * TABLE_RADIUS_ROOM_FRACTION)),
+    };
+  }
+
+  function pushOutOfTable(px, py, table) {
+    if (!table) return null;
+    const dx = px - table.x;
+    const dy = py - table.y;
+    const dist = Math.hypot(dx, dy);
+    if (!Number.isFinite(dist) || dist >= table.r || dist === 0) return null;
+    const grow = (table.r - dist) / dist;
+    return { x: px + dx * grow, y: py + dy * grow };
+  }
 
   function drawGameMap() {
     const canvas = $('game-map');
@@ -2329,6 +2418,71 @@ const App = (() => {
         ctx.textAlign = 'center';
         ctx.fillText(r.name, ...toPx(cx, cy));
       }
+    }
+
+    // Meeting-Tisch (v19.12, Divo): in der Cafeteria steht das runde
+    // Meetings-Tischzeug mit rotem Knopf-Symbol — physisch gesperrt
+    // (Kollision via Server), Symbol pulsiert wenn ein Press möglich ist.
+    const table = cafeteriaTableOf(map);
+    if (table) {
+      const [cx, cy] = toPx(table.x, table.y);
+      const rp = table.r * scale; // Radius auf der Canvas in Pixel
+      const pressableAtTable = emergencyBlockedReason() === null;
+      // Fuß: dunkler Tisch-Teller
+      ctx.save();
+      if (!pressableAtTable) ctx.globalAlpha = 0.55;
+      if (pressableAtTable) {
+        const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 350);
+        ctx.shadowColor = `rgba(255, 60, 70, ${0.35 + 0.35 * pulse})`;
+        ctx.shadowBlur = 22;
+      }
+      ctx.fillStyle = '#4a5f7a';
+      ctx.beginPath();
+      ctx.arc(cx, cy, rp, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = '#2b3a4a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rp, 0, Math.PI * 2);
+      ctx.stroke();
+      // zweite Platte (kleiner): das typische Doppel-Tisch-Layout
+      ctx.fillStyle = '#39506b';
+      ctx.beginPath();
+      ctx.arc(cx, cy, rp * 0.72, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#243244';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Embleme: gelber Sicherheitsschild + roter Knopf
+      const er = rp * 0.34;
+      ctx.fillStyle = '#f5d020';
+      ctx.beginPath();
+      ctx.arc(cx, cy - rp * 0.35, er * 0.62, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#1c1c1c';
+      ctx.font = `bold ${Math.max(9, rp * 0.42)}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.fillText('\u26A0', cx, cy - rp * 0.35 + er * 0.22);
+      // roter Knopf mit Glaskappe
+      const bx = cx;
+      const by = cy + rp * 0.38;
+      ctx.fillStyle = '#a21212';
+      ctx.beginPath();
+      ctx.arc(bx, by, er, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#5b0909';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(bx, by - er * 0.35, er * 0.55, er * 0.32, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Label
+      ctx.fillStyle = pressableAtTable ? '#ffe9e9' : 'rgba(255,255,255,0.55)';
+      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.fillText('EMERGENCY', cx, cy + 2);
+      ctx.textAlign = 'left';
     }
 
     // Sabotage-Fixorte: rote pulsierende Badges zeigen, WO gefixt wird.
@@ -2589,8 +2743,7 @@ const App = (() => {
     } else if (action.kind === 'TASK') {
       openTask(action.task);
     } else if (action.kind === 'EMERGENCY') {
-      state._usedEmergency = true;
-      socket.emit('game:emergency', { code: state.code });
+      showEmergencyPanel();
       vibrate(60);
     }
   });

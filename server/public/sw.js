@@ -1,6 +1,6 @@
 /* App shell: install (add to home screen). Network-first so deploys land
    immediately; cache only as offline fallback. */
-const CACHE = 'rlaus-shell-v49';
+const CACHE = 'rlaus-shell-v50';
 const ASSETS = [
   '/',
   '/index.html',

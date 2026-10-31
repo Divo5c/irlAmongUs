@@ -112,9 +112,12 @@
       <span class="hint" id="game-phase-hint"></span>
       <button id="btn-settings" class="gear-btn" aria-label="Einstellungen">&#9881;&#xFE0E;</button>
     </div>
-    <div id="task-progress-strip-label" aria-hidden="true">TASKS&nbsp;COMPLETED</div>
     <div id="task-progress-strip" aria-hidden="true">
       <div id="task-progress-fill"></div>
+      <div id="task-progress-strip-label">
+        <span id="task-label-text">TOTAL TASKS COMPLETED</span>
+        <span id="task-label-count">0/0</span>
+      </div>
     </div>
     <div id="role-overlay" class="hidden">
       <div id="role-card" class="role-card crew">
@@ -141,11 +144,16 @@
       <button id="btn-kill" class="round-btn icon-btn hidden">
         <img src="/img/ui/btn-kill.png" alt=""><span class="icon-label" data-i18n="btn.kill">Kill</span></button>
     </div>
-    <div id="emergency-big" class="hidden">
-      <button id="btn-emergency" aria-label="Notfall-Meeting">
-        <span class="emergency-cap"></span>
-        <span class="emergency-face" data-i18n="btn.emergency">NOTFALL</span>
-      </button>
+    <div id="emergency-panel" class="hidden">
+      <div class="emergency-tablet">
+        <div class="emergency-stripes"></div>
+        <p id="emergency-status" class="emergency-status"></p>
+        <button id="btn-emergency" class="emergency-dome" aria-label="Notfall-Meeting">
+          <span class="emergency-cap"></span>
+          <span class="emergency-face" data-i18n="btn.emergency">NOTFALL</span>
+        </button>
+        <button id="btn-emergency-close" class="secondary">Schlie&szlig;en</button>
+      </div>
     </div>
     <details id="taskbox">
       <summary>Deine Tasks (<span id="task-count">0</span>)</summary>
@@ -330,9 +338,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.11.7"></script>
-  <script src="/js/mapEditor.js?v=19.11.7"></script>
-  <script src="/js/tasks.js?v=19.11.7"></script>
-  <script src="/js/app.js?v=19.11.7"></script>
+  <script src="/js/osm.js?v=19.12.0"></script>
+  <script src="/js/mapEditor.js?v=19.12.0"></script>
+  <script src="/js/tasks.js?v=19.12.0"></script>
+  <script src="/js/app.js?v=19.12.0"></script>
 </body>
 </html>

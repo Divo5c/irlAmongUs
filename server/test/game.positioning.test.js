@@ -10,6 +10,8 @@ const {
   sanitizePositionEstimate,
   distance,
   isPositionPlausible,
+  cafeteriaTable,
+  pushOutOfTable,
   MAX_SNAP_DISTANCE,
 } = require('../src/game/positioning');
 
@@ -493,6 +495,20 @@ describe('RoomStore.updatePosition', () => {
     assert.equal(result.onCorridor, true);
   });
 
+  test('position inside the meeting table is pushed out (Divo-Regel v19.12)',
+    () => {
+      const store = makeReadyStore();
+      const result = store.updatePosition('ABC234', 'host-1', {
+        x: 22, y: 80, confidence: 0.8, source: 'MANUAL_DEBUG',
+      });
+      // Cafeteria centroid (21, 80), radius 3.2 -> edge at (23.2, 80).
+      const pos = store.getPlayerPosition('ABC234', 'host-1');
+      assert.ok(Math.hypot(pos.x - 21, pos.y - 80) >= 3.19,
+        `expected on table edge, got dist ${Math.hypot(pos.x - 21, pos.y - 80)}`);
+      assert.equal(result.roomId, 'r-cafeteria');
+      assert.notEqual(pos.x, 22);
+    });
+
   test('position plausibility check rejects speed hack', () => {
     const store = makeReadyStore();
     // Two updates with same timestamp won't trigger speed check (dtMs=0).
@@ -666,5 +682,41 @@ describe('RoomStore admin PIN security', () => {
     store.setAdminPin('ABC234', 'host-1', 'MYSECRET');
     const after = store.toPublicRoom(store.getRoom('ABC234'));
     assert.equal(after.adminPinSet, true);
+  });
+});
+
+// ─────────────────────────────── Meeting-Tisch (Divo v19.12) ───────────────
+
+describe('cafeteriaTable + pushOutOfTable', () => {
+  const { criticalRooms } = require('./criticalRooms');
+
+  test('finds cafeteria centroid and clamps radius to bbox', () => {
+    const table = cafeteriaTable({ rooms: criticalRooms() });
+    assert.ok(table);
+    assert.equal(table.x, 21); // (12+30)/2
+    assert.equal(table.y, 80); // (72+88)/2
+    // bbox 18x16 -> minSide 16 -> 16*0.24 = 3.84 -> clamped 3.2
+    assert.equal(table.r, 3.2);
+  });
+
+  test('returns null without cafeteria', () => {
+    const rooms = criticalRooms().filter((r) => r.type !== 'CAFETERIA');
+    assert.equal(cafeteriaTable({ rooms }), null);
+  });
+
+  test('pushOutOfTable moves inside points to the edge', () => {
+    const table = { x: 0, y: 0, r: 3.2 };
+    const pushed = pushOutOfTable(1, 0, table);
+    assert.ok(Math.hypot(pushed.x - 0, pushed.y - 0) >= 3.19);
+    const diag = pushOutOfTable(-2, -1, table);
+    assert.ok(Math.hypot(diag.x, diag.y) >= 3.19);
+  });
+
+  test('pushOutOfTable leaves outside and center points untouched', () => {
+    const table = { x: 0, y: 0, r: 3.2 };
+    assert.equal(pushOutOfTable(3.3, 0, table), null);
+    assert.equal(pushOutOfTable(10, -10, table), null);
+    // exakt im Zentrum: unbestimmbare Richtung -> kein Schub
+    assert.equal(pushOutOfTable(0, 0, table), null);
   });
 });

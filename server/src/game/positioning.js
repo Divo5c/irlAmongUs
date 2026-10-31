@@ -21,6 +21,60 @@ const MAX_POSITION_AGE_MS = 5000;
 // A person walking ~5 m/s (sprinting) is the realistic upper bound.
 const MAX_SPEED_MPS = 8.0;
 
+// Cafeteria meeting table obstruction (Divo: der Tisch ist ein physisches
+// Objekt). Radius scales with the room's bounding box so it fits small maps.
+const TABLE_RADIUS_MIN_M = 1.6;
+const TABLE_RADIUS_MAX_M = 3.2;
+const TABLE_RADIUS_ROOM_FRACTION = 0.24;
+
+/**
+ * Locates the cafeteria meeting table: centroid of the CAFETERIA room
+ * polygon with a radius derived from the room's bounding box.
+ * Returns { x, y, r } or null when the map has no cafeteria room.
+ */
+function cafeteriaTable(map) {
+  const cafe = (map?.rooms ?? []).find((room) => room.type === 'CAFETERIA');
+  if (!cafe?.polygon?.length || cafe.polygon.length < 3) return null;
+  if (cafe.polygon.some((p) => !isFiniteNumber(p.x) || !isFiniteNumber(p.y))) return null;
+  const x = cafe.polygon.reduce((sum, p) => sum + p.x, 0) / cafe.polygon.length;
+  const y = cafe.polygon.reduce((sum, p) => sum + p.y, 0) / cafe.polygon.length;
+  const minX = Math.min(...cafe.polygon.map((p) => p.x));
+  const maxX = Math.max(...cafe.polygon.map((p) => p.x));
+  const minY = Math.min(...cafe.polygon.map((p) => p.y));
+  const maxY = Math.max(...cafe.polygon.map((p) => p.y));
+  const minSide = Math.min(maxX - minX, maxY - minY);
+  const r = clamp(
+    minSide * TABLE_RADIUS_ROOM_FRACTION,
+    TABLE_RADIUS_MIN_M,
+    TABLE_RADIUS_MAX_M,
+  );
+  return { x, y, r };
+}
+
+/**
+ * Collision resolve: a player inside the tabletop circle is pushed out to
+ * the circle edge ("executed warp to where they exit", Divo). Returns the
+ * corrected { x, y } or null when the point is not inside the circle.
+ */
+function pushOutOfTable(px, py, table) {
+  if (!table) return null;
+  if (!isFiniteNumber(px) || !isFiniteNumber(py)) return null;
+  const dx = px - table.x;
+  const dy = py - table.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist >= table.r || dist === 0) return null;
+  const scale = (table.r - dist) / dist;
+  return { x: px + dx * scale, y: py + dy * scale };
+}
+
+function isFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function clamp(value, lo, hi) {
+  return Math.max(lo, Math.min(hi, value));
+}
+
 /**
  * Ray-casting point-in-polygon test. Returns true if (px, py) is inside
  * the polygon (array of {x, y} vertices, implicitly closed).
@@ -311,6 +365,8 @@ module.exports = {
   distance,
   isPositionPlausible,
   nearestCorridorDistanceM,
+  cafeteriaTable,
+  pushOutOfTable,
   MAX_SNAP_DISTANCE,
   MAX_POSITION_AGE_MS,
   MAX_SPEED_MPS,
