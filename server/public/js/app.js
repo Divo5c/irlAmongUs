@@ -31,6 +31,7 @@ const App = (() => {
       'btn.use': 'Use',
       'btn.sabotage': 'Sabotage',
       'btn.kill': 'Kill',
+      'btn.emergency': 'NOTFALL',
       'btn.leave': 'Runde verlassen',
       'settings.title': 'Einstellungen',
       'settings.sound': 'Sounds & Klingeltöne',
@@ -106,6 +107,7 @@ const App = (() => {
       'btn.use': 'Use',
       'btn.sabotage': 'Sabotage',
       'btn.kill': 'Kill',
+      'btn.emergency': 'EMERGENCY',
       'btn.leave': 'Leave round',
       'settings.title': 'Settings',
       'settings.sound': 'Sounds & ringtones',
@@ -679,6 +681,8 @@ const App = (() => {
       state.role = payload;
       state.killReadyAt = payload.killReadyAt ?? 0;
       state.teammates = payload.teammates ?? [];
+      // Neue Runde = neuer Notfallknopf (Zähler lebt serverseitig).
+      state._emergencyUsedThisRound = 0;
       sfx('round_start');
       showRoleOverlay(payload);
       ensureGpsLoop();
@@ -1668,8 +1672,10 @@ const App = (() => {
   }
 
   function emergencyLeft() {
-    // Der Server z\u00e4hlt (emergencyUsed) \u2014 lokal tasten wir 1 pro Spieler.
-    return state.role && !(state._usedEmergency) ? 1 : 0;
+    // Config erlaubt 0..3 pro Runde (Divo-Wahl in der Lobby); lokal
+    // zaehlen wir unsere eigenen Drücke, der Server ist Torhüter.
+    const perRound = state.room?.config?.emergencyMeetingsPerPlayer ?? 1;
+    return Math.max(0, perRound - (state._emergencyUsedThisRound ?? 0));
   }
 
   /**
@@ -1745,7 +1751,7 @@ const App = (() => {
     // Kappe-fallende Zeremonie (~1s), DANN startet das Meeting.
     btn.classList.add('pressed');
     btn.disabled = true;
-    state._usedEmergency = true;
+    state._emergencyUsedThisRound = (state._emergencyUsedThisRound ?? 0) + 1;
     setTimeout(() => {
       btn.classList.remove('pressed');
       hideEmergencyPanel();
