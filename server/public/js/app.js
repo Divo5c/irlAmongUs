@@ -824,7 +824,7 @@ const App = (() => {
     socket.on('task:progress', ({ completedTaskId, advancedTaskId, stageIndex }) => {
       const ownList = state.role?.tasks ?? state.tasks ?? [];
       if (advancedTaskId) {
-        // Stufe am相结合 abgeschlossen: naechste Stufe wird zum Ziel.
+        // Stage abgehakt: naechste Stufe wird zum Ziel.
         const task = ownList.find((t) => t.id === advancedTaskId);
         if (task) {
           task.stageIndex = stageIndex ?? 1;
@@ -1627,17 +1627,37 @@ const App = (() => {
     const self = state.selfPos;
     const radius = state.room?.config?.taskRadiusM ?? 8;
     if (!self) return null;
-    let best = null;
-    let bestDist = Infinity;
+    // Feldtest 30.10 (Divo): Große Cafeteria, Task-Spot am Zentroid,
+    // Use-Knopf fiel auf NOTFALL statt Task — Meeting statt Minigame.
+    // Server-Gate (stageAt) akzeptiert GLEICHER RAUM als Nähe; der
+    // Client folgt jetzt exakt: Radius-Sieger zuerst, sonst nächster
+    // Task im selben Raum.
+    let radiusBest = null;
+    let radiusBestDist = Infinity;
+    let roomBest = null;
+    let roomBestDist = Infinity;
     for (const task of state.role?.tasks ?? []) {
       if (task.completed || task.x == null) continue;
       const d = Math.hypot((self.x ?? Infinity) - task.x, (self.y ?? Infinity) - task.y);
-      if (d < bestDist) {
-        bestDist = d;
-        best = task;
+      const active = stagesOf(task);
+      const spotRoomId = active?.roomId ?? task.roomId;
+      if (d <= radius && d < radiusBestDist) {
+        radiusBestDist = d;
+        radiusBest = task;
+      }
+      if (spotRoomId && spotRoomId === self.roomId && d < roomBestDist) {
+        roomBestDist = d;
+        roomBest = task;
       }
     }
-    return bestDist <= radius ? best : null;
+    return radiusBest ?? roomBest ?? null;
+  }
+
+  /** Aktiver 2-Stufen-Spot des Tasks (Stufe X hat eigene Koordinaten). */
+  function stagesOf(task) {
+    const stages = task?.stages ?? [];
+    if (!stages.length) return null;
+    return stages[task.stageIndex ?? 0] ?? null;
   }
 
   function emergencyLeft() {
