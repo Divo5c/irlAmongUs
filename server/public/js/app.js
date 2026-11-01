@@ -2326,6 +2326,66 @@ const App = (() => {
     return { x: px + dx * grow, y: py + dy * grow };
   }
 
+  /** Zeichnet den Meeting-Tisch (nur bei rp > 2 aufgerufen). */
+  function drawMeetingTable(ctx, cx, cy, rp) {
+    const pressableAtTable = emergencyBlockedReason() === null;
+    // Fuß: dunkler Tisch-Teller
+    ctx.save();
+    if (!pressableAtTable) ctx.globalAlpha = 0.55;
+    if (pressableAtTable) {
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 350);
+      ctx.shadowColor = `rgba(255, 60, 70, ${0.35 + 0.35 * pulse})`;
+      ctx.shadowBlur = 22;
+    }
+    ctx.fillStyle = '#4a5f7a';
+    ctx.beginPath();
+    ctx.arc(cx, cy, rp, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = '#2b3a4a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rp, 0, Math.PI * 2);
+    ctx.stroke();
+    // zweite Platte (kleiner): das typische Doppel-Tisch-Layout
+    ctx.fillStyle = '#39506b';
+    ctx.beginPath();
+    ctx.arc(cx, cy, rp * 0.72, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#243244';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Embleme: gelber Sicherheitsschild + roter Knopf
+    const er = rp * 0.34;
+    ctx.fillStyle = '#f5d020';
+    ctx.beginPath();
+    ctx.arc(cx, cy - rp * 0.35, er * 0.62, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1c1c1c';
+    ctx.font = `bold ${Math.max(9, rp * 0.42)}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillText('\u26A0', cx, cy - rp * 0.35 + er * 0.22);
+    // roter Knopf mit Glaskappe
+    const bx = cx;
+    const by = cy + rp * 0.38;
+    ctx.fillStyle = '#a21212';
+    ctx.beginPath();
+    ctx.arc(bx, by, er, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#5b0909';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(bx, by - er * 0.35, er * 0.55, er * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Label
+    ctx.fillStyle = pressableAtTable ? '#ffe9e9' : 'rgba(255,255,255,0.55)';
+    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.fillText('EMERGENCY', cx, cy + 2);
+    ctx.textAlign = 'left';
+  }
+
   function drawGameMap() {
     const canvas = $('game-map');
     const map = state.room?.map;
@@ -2436,62 +2496,12 @@ const App = (() => {
     if (table) {
       const [cx, cy] = toPx(table.x, table.y);
       const rp = table.r * scale; // Radius auf der Canvas in Pixel
-      const pressableAtTable = emergencyBlockedReason() === null;
-      // Fuß: dunkler Tisch-Teller
-      ctx.save();
-      if (!pressableAtTable) ctx.globalAlpha = 0.55;
-      if (pressableAtTable) {
-        const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 350);
-        ctx.shadowColor = `rgba(255, 60, 70, ${0.35 + 0.35 * pulse})`;
-        ctx.shadowBlur = 22;
+      // Feldlog-1.11: bei Mini-Canvas (z.B. Bildschirm klein/verborgen)
+      // kann scale <= 0 fallen — negative arc-Radien werfen IndexSizeError.
+      // Tisch einfach überspringen, wenn er nicht sinnvoll zeichnbar ist.
+      if (Number.isFinite(rp) && rp > 2) {
+        drawMeetingTable(ctx, cx, cy, rp);
       }
-      ctx.fillStyle = '#4a5f7a';
-      ctx.beginPath();
-      ctx.arc(cx, cy, rp, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      ctx.strokeStyle = '#2b3a4a';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(cx, cy, rp, 0, Math.PI * 2);
-      ctx.stroke();
-      // zweite Platte (kleiner): das typische Doppel-Tisch-Layout
-      ctx.fillStyle = '#39506b';
-      ctx.beginPath();
-      ctx.arc(cx, cy, rp * 0.72, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#243244';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      // Embleme: gelber Sicherheitsschild + roter Knopf
-      const er = rp * 0.34;
-      ctx.fillStyle = '#f5d020';
-      ctx.beginPath();
-      ctx.arc(cx, cy - rp * 0.35, er * 0.62, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#1c1c1c';
-      ctx.font = `bold ${Math.max(9, rp * 0.42)}px system-ui`;
-      ctx.textAlign = 'center';
-      ctx.fillText('\u26A0', cx, cy - rp * 0.35 + er * 0.22);
-      // roter Knopf mit Glaskappe
-      const bx = cx;
-      const by = cy + rp * 0.38;
-      ctx.fillStyle = '#a21212';
-      ctx.beginPath();
-      ctx.arc(bx, by, er, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#5b0909';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.beginPath();
-      ctx.ellipse(bx, by - er * 0.35, er * 0.55, er * 0.32, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Label
-      ctx.fillStyle = pressableAtTable ? '#ffe9e9' : 'rgba(255,255,255,0.55)';
-      ctx.font = '7px "Press Start 2P", monospace';
-      ctx.fillText('EMERGENCY', cx, cy + 2);
-      ctx.textAlign = 'left';
     }
 
     // Sabotage-Fixorte: rote pulsierende Badges zeigen, WO gefixt wird.
