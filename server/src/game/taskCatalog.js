@@ -156,6 +156,7 @@ function createTasks(players, tasksPerCrewmate, map = null) {
 
   const spots = collectTaskSpots(map);
   const tasks = [];
+  const spotCount = spots.length;
 
   for (let playerNr = 1; playerNr <= players.length; playerNr += 1) {
     const player = players[playerNr - 1];
@@ -164,8 +165,35 @@ function createTasks(players, tasksPerCrewmate, map = null) {
     const isFake = player.role !== 'CREWMATE';
     const usedTypes = new Set();
 
+    // Divo field bug (v19.13.1): the old formula
+    // (playerNr - 1 + i * players.length) % spots.length degenerates when
+    // gcd(players.length, spots.length) > 1 (e.g. 8 players + 8 spots -> the
+    // stride collapses and EVERY task lands on the same spot = Cafeteria).
+    // Now each player walks a personal block through the spot ring and skips
+    // spots the player already uses, so tasks spread across rooms.
+    let cursor = spotCount
+      ? ((playerNr - 1) * Math.max(1, tasksPerCrewmate)) % spotCount
+      : 0;
+    const usedSpotIndexes = new Set();
+
     for (let i = 0; i < tasksPerCrewmate; i += 1) {
-      const spot = spots[(playerNr - 1 + i * players.length) % spots.length] ?? null;
+      let spot = null;
+      if (spotCount > 0) {
+        let probe = 0;
+        while (probe < spotCount && usedSpotIndexes.has(cursor)) {
+          cursor = (cursor + 1) % spotCount;
+          probe += 1;
+        }
+        if (probe < spotCount) {
+          usedSpotIndexes.add(cursor);
+          spot = spots[cursor];
+        } else {
+          // Every spot already used (spots < tasksPerCrewmate): repeat is
+          // fine, Among Us does the same on small maps.
+          spot = spots[cursor % spotCount];
+        }
+        cursor = (cursor + 1) % spotCount;
+      }
       const pool = ROOM_TASKS[spot?.roomType ?? 'NORMAL'] ?? GENERAL_POOL;
       // Rotate through the room's pool; skip types the player already has
       // (room pools can be smaller than tasksPerCrewmate \u2014 then repeats

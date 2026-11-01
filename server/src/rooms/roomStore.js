@@ -428,14 +428,13 @@ class RoomStore {
 
     const next = sanitizeGameConfig({ ...room.config, ...(patch ?? {}) });
 
-    if (next.impostorCount > maxImpostorsFor(room.players.length)) {
-      throw new GameError(
-        'CONFIG_INVALID_IMPOSTORS',
-        `With ${room.players.length} players at most ${maxImpostorsFor(
-          room.players.length,
-        )} impostors are allowed.`,
-        { field: 'impostorCount', max: maxImpostorsFor(room.players.length) },
-      );
+    // Divo field bug (v19.13.1): the old all-or-nothing reject threw away the
+    // WHOLE patch (tasks: 6 included) when only the impostor count was too
+    // high. Now only the impostor count is clamped so the rest of the
+    // settings always sticks; the broadcast shows the clamped value.
+    const maxImpostors = maxImpostorsFor(room.players.length);
+    if (next.impostorCount > maxImpostors) {
+      next.impostorCount = maxImpostors;
     }
 
     room.config = next;
@@ -550,16 +549,12 @@ class RoomStore {
       );
     }
 
-    const { impostorCount } = room.config;
-    if (impostorCount > maxImpostorsFor(playerCount)) {
-      throw new GameError(
-        'CONFIG_INVALID_IMPOSTORS',
-        `With ${playerCount} players at most ${maxImpostorsFor(
-          playerCount,
-        )} impostors are allowed.`,
-        { field: 'impostorCount', max: maxImpostorsFor(playerCount) },
-      );
-    }
+    // Clamp instead of reject: players may have left since the host set the
+    // impostors, and the game must still be startable (v19.13.1).
+    const impostorCount = Math.min(
+      room.config.impostorCount,
+      maxImpostorsFor(playerCount),
+    );
 
     // Partial Fisher-Yates: pick N distinct random impostor seats.
     const indices = room.players.map((_, index) => index);

@@ -229,14 +229,16 @@ describe('game configuration', () => {
     assert.equal('hackerField' in config, false);
   });
 
-  test('impostor count must fit the current player count', () => {
+  test('impostor count is clamped to the current player count (v19.13.1)', () => {
     const store = new RoomStore();
     createRoomWithPlayers(store, 4); // max = floor(3/2) = 1
 
-    assertGameError(
-      () => store.updateConfig('ABC234', { impostorCount: 2 }),
-      'CONFIG_INVALID_IMPOSTORS',
-    );
+    // v19.13.1: no more all-or-nothing reject — the patch is applied and only
+    // the impostor count is clamped down to what fits.
+    store.updateConfig('ABC234', { impostorCount: 2, tasksPerCrewmate: 5 });
+    const config = store.getRoom('ABC234').config;
+    assert.equal(config.impostorCount, 1);
+    assert.equal(config.tasksPerCrewmate, 5);
 
     store.addPlayerToRoom('ABC234', { id: 'player-5', name: 'P5' }); // now 5p -> max 2
     store.updateConfig('ABC234', { impostorCount: 2 });
@@ -300,13 +302,16 @@ describe('game start & multiple impostors', () => {
     }
   });
 
-  test('start rejects impostor counts that do not fit the player count', () => {
+  test('start clamps impostor counts that no longer fit (v19.13.1)', () => {
     const store = new RoomStore();
     createRoomWithPlayers(store, 4, 'ABC234', { impostorCount: 2 }); // max 1 @4p
-
-    // Config validation at update time would have caught this too; force it:
+    // Players left / legacy config: force the stale count and check the game
+    // still starts with the clamped impostor count.
     store.getRoom('ABC234').config.impostorCount = 2;
-    assertGameError(() => beginGame(store), 'CONFIG_INVALID_IMPOSTORS');
+    beginGame(store);
+    const room = store.getRoom('ABC234');
+    const impostors = room.players.filter((player) => player.role === 'IMPOSTOR');
+    assert.equal(impostors.length, 1);
   });
 
   test('cannot start twice or without enough players', () => {

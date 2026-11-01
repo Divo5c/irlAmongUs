@@ -750,3 +750,82 @@ describe('cafeteria task spot keeps clear of the meeting table', () => {
     }
   });
 });
+
+describe('task spots spread across rooms (Divo-Report v19.13.1)', () => {
+  const { createTasks } = require('../src/game/taskCatalog');
+
+  /** His space map: 9 rooms, CAFETERIA first (rooms[0]). */
+  const roomsFor = (count) => {
+    const types = ['CAFETERIA', 'ADMIN', 'REACTOR', 'O2', 'ELECTRICAL',
+      'MEDBAY', 'WEAPONS', 'STORAGE', 'SECURITY'];
+    const names = ['Cafeteria', 'Admin', 'Reactor Comma', 'O2', 'Elektro',
+      'Medbay', 'Weapons', 'Storage', 'Security'];
+    const rooms = [];
+    for (let i = 0; i < count; i += 1) {
+      const x = (i % 3) * 20 + 10;
+      const y = Math.floor(i / 3) * 20 + 10;
+      rooms.push({
+        id: `room-${i}`,
+        name: names[i % names.length],
+        type: types[i % types.length],
+        polygon: [
+          { x, y }, { x: x + 8, y }, { x: x + 8, y: y + 8 }, { x, y: y + 8 },
+        ],
+      });
+    }
+    return rooms;
+  };
+
+  const crew = (n) => Array.from({ length: n }, (_, index) => ({
+    id: `p-${index + 1}`,
+    role: index === n - 1 ? 'IMPOSTOR' : 'CREWMATE',
+  }));
+
+  test('each crewmate gets 6 tasks, spread over several rooms (not just cafeteria)', () => {
+    const map = { nodes: [], corridors: [], rooms: roomsFor(9), connections: [] };
+    const players = crew(9); // 8 crew -> taskbar total must be 8 * 6 = 48
+    const tasks = createTasks(players, 6, map);
+    const seenRooms = new Set();
+    for (let playerNr = 1; playerNr <= 8; playerNr += 1) {
+      const own = tasks.filter((task) => task.assignedTo === `p-${playerNr}`);
+      assert.equal(own.length, 6, `crewmate ${playerNr} keeps all 6 tasks`);
+      assert.ok(own.some((task) => task.roomType !== 'CAFETERIA'),
+        `crewmate ${playerNr} got tasks outside the cafeteria`);
+      own.forEach((task) => seenRooms.add(task.roomId));
+    }
+    assert.equal(tasks.filter((task) => !task.isFake).length, 48);
+    assert.ok(seenRooms.size >= 7, `tasks must cover the map (got ${seenRooms.size} rooms)`);
+  });
+
+  test('old degeneracy case: 8 players + 8 spots -> tasks NOT all in one room', () => {
+    const map = { nodes: [], corridors: [], rooms: roomsFor(8), connections: [] };
+    const tasks = createTasks(crew(8), 6, map);
+    for (let playerNr = 1; playerNr <= 8; playerNr += 1) {
+      const own = tasks.filter((task) => task.assignedTo === `p-${playerNr}`);
+      const distinct = new Set(own.map((task) => task.roomId)).size;
+      assert.ok(distinct >= 5,
+        `player ${playerNr}: 6 tasks over 8 spots must hit >=5 distinct rooms (got ${distinct})`);
+    }
+  });
+
+  test('tasksPerCrewmate above spot count still yields the full task amount', () => {
+    const map = { nodes: [], corridors: [], rooms: roomsFor(4), connections: [] };
+    const tasks = createTasks(crew(3), 6, map);
+    const own = tasks.filter((task) => task.assignedTo === 'p-1');
+    assert.equal(own.length, 6);
+  });
+
+  test('no player doubles up on the same type per round', () => {
+    const map = { nodes: [], corridors: [], rooms: roomsFor(9), connections: [] };
+    const tasks = createTasks(crew(9), 6, map);
+    for (let playerNr = 1; playerNr <= 8; playerNr += 1) {
+      const own = tasks.filter((task) => task.assignedTo === `p-${playerNr}`);
+      // Same type on DIFFERENT spots is allowed (small room pools), but one
+      // type must not flood the whole list.
+      const typeCounts = {};
+      own.forEach((task) => { typeCounts[task.type] = (typeCounts[task.type] ?? 0) + 1; });
+      const worst = Math.max(...Object.values(typeCounts));
+      assert.ok(worst <= 3, `player ${playerNr}: a type floods the list (${worst}x)`);
+    }
+  });
+});
