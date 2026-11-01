@@ -1612,6 +1612,11 @@ const App = (() => {
       if (sab.type === 'COMMS' && roomIdContains('COMMUNICATIONS')) {
         return { label: 'Comms Fix', kind: 'FIX', panel: 'COMMS' };
       }
+      // Sabotage aktiv: in der Cafeteria das (blockierte) Meeting-Feld
+      // anbieten — der Knopf am Tisch zeigt BLOCKIERT (Among Us-Regel).
+      if (roomIdContains('CAFETERIA')) {
+        return { label: 'Notfall', kind: 'EMERGENCY' };
+      }
       return null;
     }
     const task = nearestIncompleteTask();
