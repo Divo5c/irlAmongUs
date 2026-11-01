@@ -451,6 +451,13 @@ const App = (() => {
       state.isHost = room.hostId === state.playerId;
       renderLobbyPlayers(room);
       renderPhaseHint(room);
+      // Regelkarte (nur Host) + Impostoren-Optionen aktuell halten.
+      $('lobby-rules')?.classList.toggle('hidden', !(state.isHost
+        && (room.status === 'LOBBY' || room.status === 'MAP_READY')));
+      if (room.status === 'LOBBY' || room.status === 'MAP_READY') {
+        updateImpostorOptions(room);
+        applyLobbyConfig(room);
+      }
 
       // Only auto-route when the user is not already in a deeper screen.
       const active = document.querySelector('.screen.active')?.id;
@@ -957,7 +964,13 @@ const App = (() => {
     // mit der Rollen-Zuteilung im Spiel an).
     ensureGpsLoop();
     $('host-controls').classList.toggle('hidden', !isHost);
+    // Divo (v19.13): die Spielregeln leben jetzt DIREKT in der Lobby —
+    // kein Zahnrad-Umweg mehr. Gäste sehen die Karte nicht (nur Host).
+    const rulesEditable = isHost
+      && (room.status === 'LOBBY' || room.status === 'MAP_READY');
+    $('lobby-rules').classList.toggle('hidden', !rulesEditable);
     applyLobbyConfig(room);
+    updateImpostorOptions(room);
     $('lobby-waiting').classList.toggle('hidden', isHost);
     $('lobby-code').textContent = room.code;
     renderLobbyPlayers(room);
@@ -1380,6 +1393,55 @@ const App = (() => {
       },
     });
     beep(660);
+  });
+
+  /**
+   * Divo (v19.13): kompakte Impostoren-Wahl mit automatischer Ausgrauung.
+   * Server-Formel (game/config.js): max = max(1, floor((Spieler-1)/2)).
+   * Was nicht geht, ist disabled UND erklärt beim Antippen, WARUM.
+   */
+  function maxImpostorsForClient(playerCount) {
+    return Math.max(1, Math.floor((playerCount - 1) / 2));
+  }
+
+  function updateImpostorOptions(room) {
+    const select = $('cfg-impostors');
+    if (!select) return;
+    const playerCount = room?.players?.filter((p) => !p.isBot).length
+      ?? room?.players?.length ?? 1;
+    // Bots zählen als Spieler — sie nehmen am Spiel voll teil.
+    const count = room?.players?.length ?? playerCount;
+    const max = maxImpostorsForClient(count);
+    const current = Number(select.value) || 1;
+    if (select.options.length !== 3 || Number(select.options[2].value) !== max) {
+      select.innerHTML = '';
+      for (let n = 1; n <= 3; n += 1) {
+        const option = document.createElement('option');
+        option.value = `${n}`;
+        option.textContent = max >= n
+          ? `${n}`
+          : `${n} \u2014 braucht ${Math.min(2 * n + 1, 10)} Spieler`;
+        option.disabled = max < n;
+        select.appendChild(option);
+      }
+    }
+    if (current > max) {
+      select.value = `${max}`;
+      showToast(`Bei ${count} Spielern sind maximal ${max} Impostoren möglich (mindestens die Hälfte muss Crew bleiben).`);
+    } else if (select.value !== `${current}` && !select.querySelector('option:checked')?.disabled) {
+      select.value = `${current}`;
+    }
+  }
+
+  // Antippen der ausgegrauten Option erklärt die Regel (statt Stummheit).
+  $('cfg-impostors')?.addEventListener('click', (event) => {
+    const option = event.target.closest('option');
+    if (!option?.disabled) return;
+    const count = state.room?.players?.length ?? 1;
+    const max = maxImpostorsForClient(count);
+    showToast(`${option.value} Impostoren gehen erst ab ${Math.min(2 * Number(option.value) + 1, 10)}`
+      + ` Spielern — aktuell ${count} (max ${max}).`);
+    beep(300);
   });
 
   // ---------------------------------------------------------------- game //
@@ -1919,6 +1981,7 @@ const App = (() => {
   /** GPS->Meter Projektion auf Basis des gespeicherten Karten-Ankers. */
   function projectorFor(key = null) {
     if (key) return key === state.projKey ? state.proj : null;
+    const code = state.code;
     // Bevorzugt: 2-Punkt-Kalibrierung (permanent, gedreht + skaliert).
     const mapData = state.room?.map;
     const cal = mapData?.cal;
@@ -1927,8 +1990,22 @@ const App = (() => {
       if (state.projKey !== calKey) {
         state.proj = twoPointProjector(cal);
         state.projKey = state.proj ? calKey : null;
+        // Merken: der SERVER hat die Kalibrierung einmal sauber geliefert.
+        if (state.proj) state._lastGoodCal = { code, cal: JSON.parse(JSON.stringify(cal)) };
       }
       return state.proj;
+    }
+    // Feldlog 1.11 (Divo): nach Settings-Änderung meldete die App
+    // fälschlich "nicht kalibriert". Der Server behält cal niemals weg
+    // (getestet) — falls hier trotzdem ein Snapshot ohne cal kommt,
+    // greift die letzte GUTE Kalibrierung desselben Raums.
+    const last = state._lastGoodCal;
+    if (last?.code === code) {
+      state.proj = twoPointProjector(last.cal);
+      state.projKey = state.proj ? `cal:cached` : null;
+      if (state.proj) {
+        return state.proj;
+      }
     }
     const anchor = mapData?.anchor;
     if (!anchor || typeof anchor.lat !== 'number') return null;
@@ -2085,7 +2162,11 @@ const App = (() => {
       el.classList.add('hidden');
       el.classList.remove('hidden');
       if (renderGpsStatus.lastMsg !== msg && msg !== t('gps.waiting')) {
-        logAppError('gps', msg);
+        // Diagnose für das RLAUS-Log: warum der Projektor fehlt.
+        const diag = state.room?.map?.cal?.p1
+          ? 'cal-present-proj-null'
+          : state._lastGoodCal?.code === state.code ? 'cal-missing-cached-fallback-failed' : 'cal-missing-in-room';
+        logAppError('gps', `${msg} [${diag} code=${state.code}]`);
         renderGpsStatus.lastMsg = msg;
       }
     } else {
@@ -3319,24 +3400,6 @@ const App = (() => {
       $('opt-lang').value = langActive();
       refreshAnchorUi();
       showErrorLogUi();
-      // Divo-Regeln: Das Regeln-Panel im ⚙ existiert NUR für den Host —
-      // andere Spieler sehen es gar nicht. Mid-game sichtbar, aber
-      // eingefroren (Server wirft eh CONFIG_LOCKED).
-      $('host-settings').classList.add('hidden');
-      const cfgEditable = state.isHost && state.room
-        && (state.room.status === 'LOBBY' || state.room.status === 'MAP_READY');
-      if (state.isHost && state.room) {
-        $('host-settings').classList.remove('hidden');
-        $('host-settings').querySelector('summary').textContent = cfgEditable
-          ? '\u2699\uFE0E Regeln einstellen (nur Host)'
-          : '\u2699\uFE0E Regeln — in der Runde gesperrt';
-        document.querySelectorAll('#host-settings select, #host-settings input')
-          .forEach((el) => { el.disabled = !cfgEditable; });
-        const applyBtn = $('cfg-apply');
-        applyBtn.disabled = !cfgEditable;
-        applyBtn.textContent = cfgEditable ? 'Speichern' : 'Gilt ab der n\u00e4chsten Runde';
-        applyLobbyConfig(state.room);
-      }
       $('settings-menu').classList.remove('hidden');
     } else if (target.id === 'btn-settings-close') {
       $('settings-menu').classList.add('hidden');

@@ -41,15 +41,92 @@
     </div>
     <h2>Lobby</h2>
     <ul id="lobby-players" class="player-list"></ul>
-    <div class="card" id="host-controls">
-      <div class="bot-row">
-        <button id="btn-bot-add" class="secondary">&plus; Bot hinzuf&uuml;gen</button>
-        <button id="btn-bot-remove" class="ghost">&minus; Bot entfernen</button>
+  <div class="card hidden" id="lobby-rules">
+    <div class="rules-panels">
+      <div class="rules-group">
+        <div class="rules-tab">spieler &amp; impostoren</div>
+        <div class="settings-grid">
+          <label># Impostoren
+            <select id="cfg-impostors"><option>1</option><option>2</option><option>3</option></select>
+          </label>
+        </div>
       </div>
-      <button id="btn-load-cached-lobby" class="secondary big hidden"></button>
-      <button id="btn-edit-map" class="primary big">Karte bearbeiten / neue Stra&szlig;en laden</button>
-      <button id="btn-start-game" class="primary big">Spiel starten</button>
+      <div class="rules-group">
+        <div class="rules-tab">impostoren</div>
+        <div class="settings-grid">
+          <label>Kill-Cooldown (s)
+            <select id="cfg-cooldown">
+              <option>0</option><option>10</option><option>20</option><option>30</option>
+              <option>45</option><option>60</option><option>90</option><option>120</option><option>180</option>
+            </select>
+          </label>
+          <label>Kill-Distanz (m)
+            <select id="cfg-kill-radius"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+          </label>
+        </div>
+      </div>
+      <div class="rules-group">
+        <div class="rules-tab">meetings</div>
+        <div class="settings-grid">
+          <label>Notfall-Meetings / Spieler
+            <select id="cfg-emergency"><option>0</option><option>1</option><option>2</option><option>3</option></select>
+          </label>
+          <label>Diskussion (s)
+            <select id="cfg-discuss">
+              <option>0</option><option>15</option><option>30</option><option>45</option><option>60</option><option>120</option>
+            </select>
+          </label>
+          <label>Abstimmung (s)
+            <select id="cfg-vote">
+              <option>30</option><option>45</option><option>60</option><option>90</option><option>120</option><option>180</option>
+            </select>
+          </label>
+          <label class="settings-toggle-inline">
+            <span>Anonym abstimmen</span>
+            <input type="checkbox" id="cfg-anonymous">
+          </label>
+          <label class="settings-toggle-inline">
+            <span>Rauswurf best&auml;tigen</span>
+            <input type="checkbox" id="cfg-confirm">
+          </label>
+        </div>
+      </div>
+      <div class="rules-group">
+        <div class="rules-tab">aufgaben</div>
+        <div class="settings-grid">
+          <label>Tasks pro Crewmate
+            <select id="cfg-tasks"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select>
+          </label>
+          <label>Task-Wirkweite (m)
+            <select id="cfg-taskradius"><option>5</option><option>8</option><option>12</option><option>15</option><option>20</option></select>
+          </label>
+          <label class="settings-toggle-inline">
+            <span>Task-Balken immer sichtbar</span>
+            <input type="checkbox" id="cfg-taskbar" checked>
+          </label>
+        </div>
+      </div>
+      <div class="rules-group">
+        <div class="rules-tab">real life</div>
+        <div class="settings-grid">
+          <label>Raus-Lauf-Abstand (m)
+            <select id="cfg-boundary"><option>2</option><option>4</option><option>5</option><option>10</option><option>15</option><option>20</option><option>30</option></select>
+          </label>
+        </div>
+      </div>
     </div>
+    <button id="cfg-apply" class="primary big">Regeln speichern</button>
+  </div>
+
+  <div class="card" id="host-controls">
+    <div class="bot-row">
+      <button id="btn-bot-add" class="secondary">&plus; Bot hinzuf&uuml;gen</button>
+      <button id="btn-bot-remove" class="ghost">&minus; Bot entfernen</button>
+    </div>
+    <button id="btn-load-cached-lobby" class="secondary big hidden"></button>
+    <button id="btn-edit-map" class="primary big">Karte bearbeiten / neue Stra&szlig;en laden</button>
+    <button id="btn-start-game" class="primary big">Spiel starten</button>
+  </div>
     <p id="lobby-waiting" class="hint">Warte auf den Host&hellip; hier l&auml;uft gleich was.</p>
     <button class="ghost" id="btn-leave">Lobby verlassen</button>
   </section>
@@ -215,78 +292,6 @@
               <option value="en">English</option>
             </select>
           </label>
-          <details id="host-settings" class="hidden">
-            <summary>&#9881;&#xFE0E; Regeln einstellen (nur Host)</summary>
-            <div class="rules-panels">
-              <div class="rules-group">
-                <div class="rules-tab">IMPOSTORS</div>
-                <div class="settings-grid">
-                  <label># Impostoren
-                    <select id="cfg-impostors"><option>1</option><option>2</option><option>3</option></select>
-                  </label>
-                  <label>Kill-Cooldown (s)
-                    <select id="cfg-cooldown">
-                      <option>0</option><option>10</option><option>20</option><option>30</option>
-                      <option>45</option><option>60</option><option>90</option><option>120</option><option>180</option>
-                    </select>
-                  </label>
-                  <label>Kill-Distanz (m)
-                    <select id="cfg-kill-radius"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
-                  </label>
-                </div>
-              </div>
-              <div class="rules-group">
-                <div class="rules-tab">MEETINGS</div>
-                <div class="settings-grid">
-                  <label>Notfall-Meetings / Spieler
-                    <select id="cfg-emergency"><option>0</option><option>1</option><option>2</option><option>3</option></select>
-                  </label>
-                  <label>Diskussion (s)
-                    <select id="cfg-discuss">
-                      <option>0</option><option>15</option><option>30</option><option>45</option><option>60</option><option>120</option>
-                    </select>
-                  </label>
-                  <label>Abstimmung (s)
-                    <select id="cfg-vote">
-                      <option>30</option><option>45</option><option>60</option><option>90</option><option>120</option><option>180</option>
-                    </select>
-                  </label>
-                  <label class="settings-toggle-inline">
-                    <span>Anonym abstimmen</span>
-                    <input type="checkbox" id="cfg-anonymous">
-                  </label>
-                  <label class="settings-toggle-inline">
-                    <span>Rauswurf bestätigen</span>
-                    <input type="checkbox" id="cfg-confirm">
-                  </label>
-                </div>
-              </div>
-              <div class="rules-group">
-                <div class="rules-tab">TASKS</div>
-                <div class="settings-grid">
-                  <label>Tasks pro Crewmate
-                    <select id="cfg-tasks"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select>
-                  </label>
-                  <label>Task-Wirkweite (m)
-                    <select id="cfg-taskradius"><option>5</option><option>8</option><option>12</option><option>15</option><option>20</option></select>
-                  </label>
-                  <label class="settings-toggle-inline">
-                    <span>Task-Balken immer sichtbar</span>
-                    <input type="checkbox" id="cfg-taskbar" checked>
-                  </label>
-                </div>
-              </div>
-              <div class="rules-group">
-                <div class="rules-tab">REAL LIFE</div>
-                <div class="settings-grid">
-                  <label>Raus-Lauf-Abstand (m)
-                    <select id="cfg-boundary"><option>5</option><option>10</option><option>15</option><option>20</option><option>30</option></select>
-                  </label>
-                </div>
-              </div>
-            </div>
-            <button id="cfg-apply" class="primary big">Speichern</button>
-          </details>
           <button id="btn-set-anchor" class="primary big hidden">&#128205; Karte kalibrieren</button>
           <p class="hint hidden" id="anchor-hint">Kalibriere ein Mal: 2 klare Punkte (z. B. Stra&#223;enecken) abgehen, die App merkt sich das f&#252;r immer.</p>
           <button id="btn-leave-from-menu" class="danger-big" data-i18n="btn.leave">Verlassen</button>
@@ -338,9 +343,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.12.4"></script>
-  <script src="/js/mapEditor.js?v=19.12.4"></script>
-  <script src="/js/tasks.js?v=19.12.4"></script>
-  <script src="/js/app.js?v=19.12.4"></script>
+  <script src="/js/osm.js?v=19.13.0"></script>
+  <script src="/js/mapEditor.js?v=19.13.0"></script>
+  <script src="/js/tasks.js?v=19.13.0"></script>
+  <script src="/js/app.js?v=19.13.0"></script>
 </body>
 </html>
