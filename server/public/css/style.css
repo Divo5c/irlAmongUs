@@ -680,6 +680,14 @@ button.round {
   touch-action: manipulation; }
 
 /* Regel-Panels im Lobby-Stil (Among-Us-Tabs) */
+/* Spiel-Einstellungen einklappbar (Divo: "wie früher im Zahnrad") */
+.rules-toggle { display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 2px 0 6px; background: none; border: none; cursor: pointer;
+  color: #fff; font-weight: 700; font-size: 15px; letter-spacing: 1px; }
+.rules-toggle .rules-chevron { font-size: 18px; transition: transform 0.15s ease;
+  color: rgba(255,255,255,0.6); }
+.rules-toggle[aria-expanded="true"] .rules-chevron { transform: rotate(180deg); }
+.rules-body.collapsed { display: none; }
 .rules-panels { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
 .rules-group { position: relative; padding: 14px 4px 6px; border-radius: 12px;
   background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }

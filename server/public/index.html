@@ -37,11 +37,16 @@
         <div class="topbar">
       <span class="room-code" id="lobby-code">&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;</span>
       <button class="ghost small" id="btn-share">Code kopieren</button>
-      <button id="btn-lobby-settings" class="gear-btn" aria-label="Einstellungen">&#9881;&#xFE0E;</button>
+      <button id="btn-lobby-settings" class="gear-btn" aria-label="Haupt-Einstellungen">&#9881;&#xFE0E;</button>
     </div>
     <h2>Lobby</h2>
     <ul id="lobby-players" class="player-list"></ul>
   <div class="card hidden" id="lobby-rules">
+    <button id="btn-rules-toggle" class="rules-toggle" aria-expanded="false">
+      <span>Spiel-Einstellungen</span>
+      <span class="rules-chevron">&#9662;</span>
+    </button>
+    <div class="rules-body collapsed" id="rules-body">
     <div class="rules-panels">
       <div class="rules-group">
         <div class="rules-tab">spieler &amp; impostoren</div>
@@ -116,6 +121,7 @@
       </div>
     </div>
     <button id="cfg-apply" class="primary big">Regeln speichern</button>
+    </div>
   </div>
 
   <div class="card" id="host-controls">
@@ -162,7 +168,7 @@
           <button data-room-type="WEAPONS">Weapons</button>
         </div>
       </div>
-      <button id="btn-map-settings" class="gear-btn" aria-label="Einstellungen">&#9881;&#xFE0E;</button>
+      <button id="btn-map-settings" class="gear-btn" aria-label="Haupt-Einstellungen">&#9881;&#xFE0E;</button>
     </div>
     <div class="map-frame">
       <canvas id="map-canvas"></canvas>
@@ -187,7 +193,7 @@
     <div class="topbar">
       <span class="room-code small" id="game-code">&mdash;&mdash;</span>
       <span class="hint" id="game-phase-hint"></span>
-      <button id="btn-settings" class="gear-btn" aria-label="Einstellungen">&#9881;&#xFE0E;</button>
+      <button id="btn-settings" class="gear-btn" aria-label="Haupt-Einstellungen">&#9881;&#xFE0E;</button>
     </div>
     <div id="task-progress-strip" aria-hidden="true">
       <div id="task-progress-fill"></div>
@@ -265,7 +271,7 @@
     <div id="settings-menu" class="task-overlay hidden">
       <div class="task-card settings-card">
         <div class="task-head">
-          <div class="task-title" data-i18n="settings.title">Einstellungen</div>
+          <div class="task-title" data-i18n="settings.title">Haupt-Einstellungen</div>
           <button id="btn-settings-close" class="task-close">&#10005;</button>
         </div>
         <div class="settings-body">
@@ -343,9 +349,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.13.1"></script>
-  <script src="/js/mapEditor.js?v=19.13.1"></script>
-  <script src="/js/tasks.js?v=19.13.1"></script>
-  <script src="/js/app.js?v=19.13.1"></script>
+  <script src="/js/osm.js?v=19.13.2"></script>
+  <script src="/js/mapEditor.js?v=19.13.2"></script>
+  <script src="/js/tasks.js?v=19.13.2"></script>
+  <script src="/js/app.js?v=19.13.2"></script>
 </body>
 </html>

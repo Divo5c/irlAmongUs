@@ -33,7 +33,7 @@ const App = (() => {
       'btn.kill': 'Kill',
       'btn.emergency': 'NOTFALL',
       'btn.leave': 'Runde verlassen',
-      'settings.title': 'Einstellungen',
+      'settings.title': 'Haupt-Einstellungen',
       'settings.sound': 'Sounds & Klingeltöne',
       'settings.vibration': 'Vibration',
       'settings.bots': 'Bot-Positionen anzeigen',
@@ -109,7 +109,7 @@ const App = (() => {
       'btn.kill': 'Kill',
       'btn.emergency': 'EMERGENCY',
       'btn.leave': 'Leave round',
-      'settings.title': 'Settings',
+      'settings.title': 'Main settings',
       'settings.sound': 'Sounds & ringtones',
       'settings.vibration': 'Vibration',
       'settings.bots': 'Show bot positions',
@@ -1374,6 +1374,26 @@ const App = (() => {
     state.taskbarAlways = cfg.taskbarAlways !== false;
   }
 
+  // Divo (v19.13.1): Spiel-Einstellungen wieder einklappbar — Beginn
+  // zugeklappt wie frueher im Zahnrad, Zustand merkt sich pro Geraet.
+  $('btn-rules-toggle')?.addEventListener('click', () => {
+    const body = $('rules-body');
+    if (!body) return;
+    const button = $('btn-rules-toggle');
+    const collapsed = !body.classList.contains('collapsed');
+    body.classList.toggle('collapsed', collapsed);
+    button?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    try {
+      localStorage.setItem('rlausRulesOpen', collapsed ? '0' : '1');
+    } catch { /* private mode: toggle works without memory */ }
+  });
+  try {
+    if (localStorage.getItem('rlausRulesOpen') === '1') {
+      $('rules-body')?.classList.remove('collapsed');
+      $('btn-rules-toggle')?.setAttribute('aria-expanded', 'true');
+    }
+  } catch { /* private mode */ }
+
   $('cfg-apply').addEventListener('click', () => {
     ensureSocket().emit('game:update_config', {
       code: state.code,
@@ -2166,7 +2186,9 @@ const App = (() => {
         const diag = state.room?.map?.cal?.p1
           ? 'cal-present-proj-null'
           : state._lastGoodCal?.code === state.code ? 'cal-missing-cached-fallback-failed' : 'cal-missing-in-room';
-        logAppError('gps', `${msg} [${diag} code=${state.code}]`);
+        // Phase dranhängen: zeigt beim nächsten Log sofort, WANN es
+        // (IN_GAME erwartbar; Lobby wäre es ein Bug).
+        logAppError('gps', `${msg} [${diag} room=${state.room?.status ?? '?'} code=${state.code}]`);
         renderGpsStatus.lastMsg = msg;
       }
     } else {
