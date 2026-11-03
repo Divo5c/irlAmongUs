@@ -21,13 +21,20 @@ const BOT_SPEED_MPS = 4.0;
 // 45 * 2s = ~90s pro Task — Bots sollen IRL kein Turbo-Chefteam sein.
 const TASK_TICKS = 45;
 
+// One bot sabotage attempt every SABOTAGE_TICKS * MOVE_INTERVAL_MS
+// (~120 s) — the store still enforces its own cooldown/active rules.
+const SABOTAGE_TICKS = 60;
+
 const MAX_BOTS = 5;
 
 function createBotEngine(roomStore, {
   moveIntervalMs = MOVE_INTERVAL_MS,
   taskTicks = TASK_TICKS,
+  sabotageTicks = SABOTAGE_TICKS,
   /** optional (code, event, payload, playerId?) -> emit adapter (browser map) */
   broadcast = null,
+  /** optional server hooks: onGameOver(code, winner), onSabotageStarted(code) */
+  botHooks = null,
 } = {}) {
   /** code -> interval */
   const timers = new Map();
@@ -135,6 +142,12 @@ function createBotEngine(roomStore, {
       }
       if (room.sabotage) {
         botCrewFixSabotage(code, room, bots);
+      }
+      // Divo field request (v19.13.4): impostor bots PLAY like impostors —
+      // killing nearby crewmates (store-gated) and firing sabotages.
+      tryBotImpostorKill(code, room, bots);
+      if (progress % sabotageTicks === 0) {
+        tryBotSabotage(code, room, bots);
       }
       broadcastBotPositions(code, room, bots);
       return;
@@ -256,14 +269,12 @@ function createBotEngine(roomStore, {
       })
       .filter((entry) => entry.x != null);
     if (impostorBots.length) {
-      for (const player of room.players) {
-        if (player.role === 'IMPOSTOR' && player.isAlive !== false) {
-          broadcast(code, 'game:bot_positions', {
-            impostor: true,
-            positions: impostorBots,
-          }, player.id);
-        }
-      }
+      // v19.13.4: public broadcast with impostor=true -> red dots for all
+      // (Divo wants to SEE the threat while testing solo).
+      broadcast(code, 'game:bot_positions', {
+        impostor: true,
+        positions: impostorBots,
+      }, null);
     }
   }
 
@@ -328,7 +339,74 @@ function botCrewFixSabotage(code, room, bots) {
   }
 }
 
-function autoCompleteOneTask(code, room, bots) {    for (const bot of bots) {
+  /**
+   * Divo field request (v19.13.4): impostor bots hunt like impostors —
+   * the nearest crewmate inside the configured kill radius gets killed
+   * through the REAL store gate (cooldown + GPS positions of both, so a
+   * bot kill is as verifiable as a human kill).
+   */
+  function tryBotImpostorKill(code, room, bots) {
+    const radius = room.config?.killRadiusM ?? 2;
+    const cooldownMs = room.config?.killCooldownMs ?? 20_000;
+    if (Date.now() - (room.lastKillAt ?? 0) < cooldownMs) return;
+    for (const bot of bots) {
+      if (bot.role !== 'IMPOSTOR') continue;
+      const walk = walkers.get(code)?.get(bot.id);
+      if (!walk) continue;
+      let target = null;
+      let bestDist = radius + 0.001;
+      for (const player of room.players) {
+        if (player.id === bot.id) continue;
+        if (player.role === 'IMPOSTOR' || player.isAlive === false) continue;
+        const pos = roomStore.getPlayerPosition(code, player.id);
+        if (!pos) continue;
+        const distance = Math.hypot(pos.x - walk.x, pos.y - walk.y);
+        if (distance <= bestDist) {
+          bestDist = distance;
+          target = player;
+        }
+      }
+      if (!target) continue;
+      try {
+        const result = roomStore.killPlayer(code, bot.id, target.id);
+        if (typeof broadcast === 'function') {
+          broadcast(code, 'room:updated', result.room);
+          broadcast(code, 'game:killed', {
+            code,
+            killedPlayerId: result.killedPlayerId,
+          });
+        }
+        // Player-forbidden profit: game over needs the socket layer chain.
+        botHooks?.onGameOver?.(code, result.winner);
+        return; // one kill per tick like the old hot-blooded engine
+      } catch {
+        // Cooldown race / position missing: try the next impostor bot.
+      }
+    }
+  }
+
+  /** Bots trigger the next sabotage in the store cycle (~every 2 min). */
+  function tryBotSabotage(code, room, bots) {
+    if (room.sabotage) return;
+    const bot = bots.find((entry) => entry.role === 'IMPOSTOR');
+    if (!bot) return;
+    try {
+      const result = roomStore.startSabotage(code, bot.id, null);
+      if (typeof broadcast === 'function') {
+        broadcast(code, 'room:updated', result.room);
+        broadcast(code, 'game:sabotage_started', {
+          code,
+          type: result.type,
+          deadline: result.deadline,
+        });
+      }
+      botHooks?.onSabotageStarted?.(code);
+    } catch {
+      // Cooldown active / critical running: wait silently for the next window.
+    }
+  }
+
+  function autoCompleteOneTask(code, room, bots) {    for (const bot of bots) {
       if (bot.role !== 'CREWMATE') continue;
       try {
         const tasks = roomStore

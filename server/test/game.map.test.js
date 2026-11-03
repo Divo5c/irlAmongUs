@@ -302,3 +302,38 @@ describe('validateForSave (minimum viable map)', () => {
     );
   });
 });
+
+describe('map payloads carry calibration into fresh rooms (Divo 3.11)', () => {
+  const { RoomStore } = require('../src/rooms/roomStore');
+
+  test('map:update with a cal payload sets it on a room with no prior map', () => {
+    const store = new RoomStore();
+    store.createRoom({ code: 'ABC234', hostId: 'host-1', hostName: 'Divo' });
+    store.startMapSetup('ABC234');
+    const valid = VALID_MAP;
+    const cal = {
+      p1: { x: 0, y: 0, lat: 52.0, lon: 8.0 },
+      p2: { x: 200, y: 0, lat: 52.001, lon: 8.015 },
+    };
+    store.updateMap('ABC234', { ...valid, cal });
+    const room = store.getRoom('ABC234');
+    assert.ok(room.map?.cal?.p1, 'cal survives map:update into a FRESH room');
+    assert.deepEqual(room.map.cal.p1, cal.p1);
+  });
+
+  test('map:save WITHOUT cal keeps the saved calibration (protection stands)', () => {
+    const store = new RoomStore();
+    store.createRoom({ code: 'ABC234', hostId: 'host-1', hostName: 'Divo' });
+    store.startMapSetup('ABC234');
+    const cal = {
+      p1: { x: 0, y: 0, lat: 52.0, lon: 8.0 },
+      p2: { x: 200, y: 0, lat: 52.001, lon: 8.015 },
+    };
+    store.updateMap('ABC234', { ...VALID_MAP, cal });
+    store.saveMap('ABC234', {
+      ...VALID_MAP,
+      rooms: [...VALID_MAP.rooms, ...require('./criticalRooms').criticalRooms()],
+    });
+    assert.ok(store.getRoom('ABC234').map?.cal?.p2, 'cal survives saving without payload cal');
+  });
+});

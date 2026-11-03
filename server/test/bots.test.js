@@ -85,6 +85,12 @@ test('bots auto-complete crew tasks and can trigger crew victory', async () => {
   // run ticks until game over or enough progress. Bots: 2 alive, host: 1.
   store.startGame(code);
   const room = store.getRoom(code);
+  // Task-victory chain test: force BOTH bots crewmate so the impostor-bot
+  // kill loop (v19.13.4) cannot insta-eject a crew bot to parity before any
+  // task completes. Impostor bot behaviour has its own tests now.
+  for (const player of store.getRoom(code).players) {
+    if (player.isBot) player.role = 'CREWMATE';
+  }
 
   let gameOver = false;
   for (let i = 0; i < 40 && !gameOver; i += 1) {
@@ -93,14 +99,16 @@ test('bots auto-complete crew tasks and can trigger crew victory', async () => {
     if (current.winner) gameOver = true;
   }
   // With taskTicks=2 and 2 bots ticking independent tasks, tasks complete
-  // fast; crew victory (ALL_TASKS_DONE) must fire when bots are crewmate.
+  // fast — BUT since v19.13.4 an impostor bot may kill a crew bot first,
+  // freezing ITS tasks. So grant progress credit: EITHER the game ended,
+  // OR any crew bot managed at least one completed task.
   const crewBots = store
     .getRoom(code)
     .players.filter((player) => player.isBot && player.role === 'CREWMATE');
-  const completed = (store.getTasksForPlayer(code, crewBots[0]?.id) ?? []).filter(
-    (task) => task.completed,
-  );
-  assert.equal(gameOver || completed.length > 0, true);
+  const anyCompleted = crewBots.some((bot) =>
+    (store.getTasksForPlayer(code, bot.id) ?? [])
+      .some((task) => task.completed));
+  assert.equal(gameOver || anyCompleted, true);
 });
 
 test('bots vote in meetings so games advance without humans', async () => {
@@ -133,4 +141,86 @@ test('bot removal takes the last bot out of the lobby', async () => {
   const room = store.getRoom(code);
   assert.equal(room.players.filter((p) => p.isBot).length, 1);
   assert.equal(room.players.length, 2);
+});
+
+test('impostor bots kill nearby crewmates through the real store gates (v19.13.4)', async () => {
+  const store = new RoomStore();
+  const events = [];
+  const hooks = { gameOver: null };
+  const botsEngine = createBotEngine(store, {
+    moveIntervalMs: 50,
+    taskTicks: 9999,
+    broadcast: (code, event, payload) => events.push({ event, payload }),
+    botHooks: {
+      onGameOver: (code, winner) => { hooks.gameOver = winner; },
+    },
+  });
+  const room = store.createRoom({ code: 'TESTAB', hostId: 'host-1', hostName: 'Divo' });
+  botsEngine.addBots(room.code, 2);
+  store.startMapSetup(room.code);
+  store.saveMap(room.code, validMap());
+  store.startGame(room.code);
+
+  const internal = store.getRoom(room.code);
+  const botImp = internal.players.find((player) => player.isBot);
+  botImp.role = 'IMPOSTOR';
+  for (const player of internal.players) {
+    if (player.id !== botImp.id) player.role = 'CREWMATE';
+  }
+
+  botsEngine.tickNow(room.code); // place the bot walker
+  events.length = 0;
+  // Real tick pacing: back-to-back script ticks make the plausibility gate
+  // reject every bot move (0.2 m in ~0 ms => >8 m/s), freezing stored
+  // positions while the walker drifts on. Real cadence = accepted moves.
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const internalRoom = () => store.getRoom(room.code);
+  const deadCrew = () => internalRoom().players
+    .filter((player) => player.role === 'CREWMATE' && player.isAlive === false).length;
+  for (let attempt = 0; attempt < 15 && deadCrew() === 0; attempt += 1) {
+    const botPos = store.getPlayerPosition(room.code, botImp.id);
+    if (botPos) {
+      // Pin the human host ONTO the bot's stored position (plausibility
+      // skipped on purpose: test teleports the target onto the killer).
+      store.updatePosition(room.code, internal.players[0].id, {
+        x: botPos.x, y: botPos.y, confidence: 1,
+      }, { skipPlausibilityCheck: true });
+    }
+    botsEngine.tickNow(room.code);
+    await wait(40);
+  }
+  // ANY crewmate death by the bot counts (the engine picks the nearest
+  // crewmate — with two crew bots the second bot may be the closer victim;
+  // after a kill parity may already end the game, which is Among Us correct).
+  assert.ok(deadCrew() >= 1, 'impostor bot killed a crewmate');
+  assert.ok((internalRoom().corpses ?? []).length >= 1);
+});
+
+test('impostor bots trigger sabotages in the store cycle (v19.13.4)', async () => {
+  const store = new RoomStore();
+  const events = [];
+  const botsEngine = createBotEngine(store, {
+    moveIntervalMs: 50,
+    taskTicks: 9999,
+    sabotageTicks: 1,
+    broadcast: (code, event, payload) => events.push({ event, payload }),
+  });
+  const room = store.createRoom({ code: 'TESTAB', hostId: 'host-1', hostName: 'Divo' });
+  botsEngine.addBots(room.code, 2);
+  store.startMapSetup(room.code);
+  store.saveMap(room.code, validMap());
+  store.startGame(room.code);
+
+  const internal = store.getRoom(room.code);
+  const botImp = internal.players.find((player) => player.isBot);
+  botImp.role = 'IMPOSTOR';
+  for (const player of internal.players) {
+    if (player.id !== botImp.id) player.role = 'CREWMATE';
+  }
+
+  botsEngine.tickNow(room.code);
+  botsEngine.tickNow(room.code);
+  const sabotaged = store.getRoom(room.code).sabotage;
+  assert.ok(sabotaged?.type, 'impostor bot started a sabotage');
+  assert.ok(events.some((entry) => entry.event === 'game:sabotage_started'));
 });

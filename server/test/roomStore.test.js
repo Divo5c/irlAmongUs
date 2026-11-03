@@ -345,7 +345,8 @@ describe('tasks', () => {
 
     assert.match(task.id, new RegExp(`^${task.type}-\\d+-\\d+(-fake)?$`));
     assert.equal(typeof task.type, 'string');
-    assert.match(task.type, /^[a-z_]+$/);
+    // clean_o2_filter contains a digit (O2) — allow it.
+    assert.match(task.type, /^[a-z0-9_]+$/);
     assert.equal(tasksByPlayer[firstCrew][0].type, task.type);
   });
 

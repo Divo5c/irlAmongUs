@@ -5,6 +5,9 @@ const { createBotEngine } = require('../game/bots');
 
 function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 } = {}) {
   const io = new Server(httpServer);
+  // Hooks for the bot engine: game over + sabotage need the socket-layer
+  // chains (broadcastGameOver / deadline timer are defined below).
+  const botHooks = {};
   const bots = createBotEngine(roomStore, {
     broadcast(code, event, payload, playerId = null) {
       if (playerId) {
@@ -13,7 +16,10 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
         io.to(code).emit(event, payload);
       }
     },
+    botHooks,
   });
+  botHooks.onGameOver = (code, winner) => broadcastGameOver(io, code, winner);
+  botHooks.onSabotageStarted = (code) => armSabotageDeadlineTimer(code, io);
   const meetingTimers = new Map();
   const pendingDisconnects = new Map();
 

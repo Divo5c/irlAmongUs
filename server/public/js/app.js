@@ -494,6 +494,7 @@ const App = (() => {
               version: cached.version + 1, nodes: cached.nodes,
               corridors: cached.corridors, rooms: cached.rooms ?? [],
               connections: [],
+              ...(cached.cal ? { cal: cached.cal } : {}),
             },
           });
           ensureSocket().emit('map:save', {
@@ -502,6 +503,7 @@ const App = (() => {
               version: cached.version + 2, nodes: cached.nodes,
               corridors: cached.corridors, rooms: cached.rooms ?? [],
               connections: [],
+              ...(cached.cal ? { cal: cached.cal } : {}),
             },
           });
           showToast('Gespeicherte Karte \u00fcbernommen.');
@@ -1104,9 +1106,17 @@ const App = (() => {
     $('btn-build-streets').disabled = true;
     ensureSocket().emit('map:update', {
       code: state.code,
-      // KRITISCH: rooms MITRAUMEN — fr\u00fcher stand hier rooms: [] und der
-      // Server l\u00f6schte alle R\u00e4ume (Millisekunden-Flash!).
-      map: { ...working, rooms: editor.rooms, connections: [] },
+      // KRITISCH: rooms MITRAUMEN — früher stand hier rooms: [] und der
+      // Server löschte alle Räume (Millisekunden-Flash!).
+      // v19.13.4: cal MIT-SCHICKEN — in einem NEUEN Raum hat room.map
+      // noch keine Kalibrierung, der Server-Schutz kann nichts retten,
+      // was im Payload fehlt.
+      map: {
+        ...working,
+        rooms: editor.rooms,
+        connections: [],
+        ...(cached.cal ? { cal: cached.cal } : {}),
+      },
     });
     $('map-status').textContent = `Gespeicherte Karte geladen (${working.nodes.length} Knoten) \u2014 erweitern oder speichern`;
   }
@@ -1321,6 +1331,9 @@ const App = (() => {
       map: { ...working, rooms: editor.rooms, connections: [] },
     });
     // Local copy for the next round: skip Overpass entirely.
+    // v19.13.4: cal MIT ins Cache — sonst verliert JEDER neue Raum die
+    // 2-Punkt-Kalibrierung (Divo 3.11: "anscheinend die map nicht
+    // kalibriert" bei 4°C in Schlappen — nie wieder).
     try {
       localStorage.setItem(
         SAVED_MAP_KEY,
@@ -1330,6 +1343,7 @@ const App = (() => {
           corridors: working.corridors,
           rooms: editor.rooms,
           anchor: editor.anchor,
+          cal: state.room?.map?.cal ?? null,
           savedAt: new Date().toISOString(),
         }),
       );
@@ -1394,25 +1408,32 @@ const App = (() => {
     }
   } catch { /* private mode */ }
 
-  $('cfg-apply').addEventListener('click', () => {
+  // Divo (v19.13.4, Feldtest 3.11): "Regeln speichern"-Knopf ENTFERNT.
+  // Jede Aenderung (select/checkbox)	sendet die komplette Einstellung
+  // sofort — der Server broadcastet die Bestätigung zurueck; wenn Divo
+  // dachte "es hat nicht geklappt", war es vermutlich ein verworfener Patch.
+  const collectLobbyConfig = () => ({
+    impostorCount: Number($('cfg-impostors').value),
+    tasksPerCrewmate: Number($('cfg-tasks').value),
+    killRadiusM: Number($('cfg-kill-radius').value),
+    taskRadiusM: Number($('cfg-taskradius').value),
+    killCooldownMs: Number($('cfg-cooldown').value) * 1000,
+    discussionDurationMs: Number($('cfg-discuss').value) * 1000,
+    votingDurationMs: Number($('cfg-vote').value) * 1000,
+    emergencyMeetingsPerPlayer: Number($('cfg-emergency').value),
+    boundaryWarnM: Number($('cfg-boundary').value),
+    anonymousVoting: $('cfg-anonymous').checked,
+    confirmEjects: $('cfg-confirm').checked,
+    taskbarAlways: $('cfg-taskbar').checked,
+  });
+  $('lobby-rules').addEventListener('change', (event) => {
+    if (!event.target.closest('select, input[type="checkbox"]')) return;
     ensureSocket().emit('game:update_config', {
       code: state.code,
-      config: {
-        impostorCount: Number($('cfg-impostors').value),
-        tasksPerCrewmate: Number($('cfg-tasks').value),
-        killRadiusM: Number($('cfg-kill-radius').value),
-        taskRadiusM: Number($('cfg-taskradius').value),
-        killCooldownMs: Number($('cfg-cooldown').value) * 1000,
-        discussionDurationMs: Number($('cfg-discuss').value) * 1000,
-        votingDurationMs: Number($('cfg-vote').value) * 1000,
-        emergencyMeetingsPerPlayer: Number($('cfg-emergency').value),
-        boundaryWarnM: Number($('cfg-boundary').value),
-        anonymousVoting: $('cfg-anonymous').checked,
-        confirmEjects: $('cfg-confirm').checked,
-        taskbarAlways: $('cfg-taskbar').checked,
-      },
+      config: collectLobbyConfig(),
     });
     beep(660);
+    showToast(`Gespeichert: ${event.target.closest('label')?.firstChild?.textContent?.trim() ?? 'Einstellung'}`);
   });
 
   /**
@@ -2691,24 +2712,30 @@ const App = (() => {
       ctx.textAlign = 'left';
     }
 
-    // Bots (nur virtuelle Bewohner): hellblaue Pinguin-Dots mit Namen.
+    // Bots (nur virtuelle Bewohner): Crew hellblau, IMPOSTOR-BOTS ROT
+    // (Divo v19.13.4: der Feind soll sichtbar sein, solange getestet wird).
     if (showBotsEnabled()) {
-      const groups = [state.botPositions?.crew, state.botPositions?.impostor];
-      for (const list of groups) {
-        for (const bot of list ?? []) {
+      const groups = [
+        { list: state.botPositions?.crew, impostor: false },
+        { list: state.botPositions?.impostor, impostor: true },
+      ];
+      for (const group of groups) {
+        for (const bot of group.list ?? []) {
           if (bot.x == null) continue;
           const [bx, by] = toPx(bot.x, bot.y);
-          ctx.fillStyle = 'rgba(147, 197, 253, 0.9)';
+          ctx.fillStyle = group.impostor
+            ? 'rgba(239, 68, 68, 0.95)'
+            : 'rgba(147, 197, 253, 0.9)';
           ctx.beginPath();
           ctx.arc(bx, by, 9, 0, Math.PI * 2);
           ctx.fill();
           ctx.strokeStyle = 'rgba(255,255,255,0.9)';
           ctx.lineWidth = 2;
           ctx.stroke();
-          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.fillStyle = group.impostor ? '#fff' : 'rgba(255,255,255,0.85)';
           ctx.font = '600 10px system-ui';
           ctx.textAlign = 'center';
-          ctx.fillText(bot.name ?? 'Bot', bx, by - 12);
+          ctx.fillText(group.impostor ? `\u2620 ${bot.name ?? 'Bot'}` : (bot.name ?? 'Bot'), bx, by - 12);
           ctx.textAlign = 'left';
         }
       }
