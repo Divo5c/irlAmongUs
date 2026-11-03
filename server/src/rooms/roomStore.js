@@ -1968,4 +1968,5 @@ module.exports = {
   RoomStoreError,
   MAX_PLAYERS,
   DEFAULT_GAME_CONFIG,
+  groupTasksByPlayer,
 };

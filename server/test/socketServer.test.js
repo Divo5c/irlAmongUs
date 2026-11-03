@@ -873,6 +873,19 @@ describe('socket flow security & gameplay', () => {
       const assignment = await roleAgain;
       assert.equal(assignment.role, originalAssignment.role);
       assert.ok(Array.isArray(assignment.tasks));
+      // Divo field bug (v19.13.3): rejoin tasks MUST carry the full shape
+      // (stages + coordinates), not just {id,type,title} — otherwise every
+      // marker loses its position after a reload/GPS reset.
+      assert.ok(assignment.tasks.length >= 2);
+      for (const task of assignment.tasks) {
+        assert.ok(Array.isArray(task.stages) && task.stages.length >= 1,
+          `rejoined task ${task.id} must carry its stages`);
+        const first = task.stages[0];
+        assert.ok(first && typeof first.x === 'number' && typeof first.y === 'number',
+          `rejoined task ${task.id} must carry coordinates`);
+        assert.ok(first.roomName || first.roomId,
+          `rejoined task ${task.id} must name its room`);
+      }
 
       await sleep(200);
       assert.equal(foreignRoleEvents, 0);

@@ -1,6 +1,6 @@
 const { Server } = require('socket.io');
 
-const { RoomStoreError } = require('../rooms/roomStore');
+const { RoomStoreError, groupTasksByPlayer } = require('../rooms/roomStore');
 const { createBotEngine } = require('../game/bots');
 
 function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 } = {}) {
@@ -670,9 +670,12 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
               .filter((other) => other.role === 'IMPOSTOR' && other.id !== playerId)
               .map(({ id, name }) => ({ id, name }))
           : [],
-      tasks: roomStore
-        .getTasksForPlayer(room.code, playerId)
-        .map(({ id, type, title }) => ({ id, type, title })),
+      // Divo field bug (v19.13.3): the rejoin path stripped tasks down to
+      // {id, type, title} — no stages, no x/y/roomId. After ANY reload
+      // (GPS reset) every marker lost its position and only leftovers
+      // rendered. Now the rejoin carries the EXACT same shape as the
+      // game:start path: groupTasksByPlayer with stages + coordinates.
+      tasks: groupTasksByPlayer(room.tasks)[playerId] ?? [],
       // 0 = kill available; otherwise epoch ms when the next kill unlocks.
       killReadyAt:
         room.status === 'IN_GAME' && (room.lastKillAt ?? 0) > 0
