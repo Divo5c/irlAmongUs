@@ -367,6 +367,54 @@ describe('socket flow security & gameplay', () => {
     }
   });
 
+  test('kill notifications stay private: victim + impostors only (Among Us)', async () => {
+    const { clients, code } = await createRoomWithNPlayers(4, {
+      killCooldownMs: 5000,
+    });
+    try {
+      await makeMapReadyOverWire(clients[0], code);
+      const started = Promise.all(
+        clients.map((client) => waitForEvent(client, 'game:role_assigned', 8000)),
+      );
+      clients[0].emit('game:start', { code });
+      const roles = await started;
+
+      const killerIndex = roles.findIndex((entry) => entry.role === 'IMPOSTOR');
+      assert.ok(killerIndex >= 0, 'one of four players must be impostor');
+      // Choose crewmates for victim + innocent listener FIRST, so the
+      // "innocent" socket can never collide with the killer by index.
+      const crewIndexes = roles
+        .map((entry, index) => (entry.role === 'IMPOSTOR' ? -1 : index))
+        .filter((index) => index >= 0);
+      const victimIndex = crewIndexes[0];
+      const innocentIndex = crewIndexes[1];
+      const idFor = (index) => (index === 0 ? 'host-1' : `player-${index + 1}`);
+      const killerId = idFor(killerIndex);
+      const victimId = idFor(victimIndex);
+
+      placePlayersTogether(code, killerId, victimId);
+
+      let innocentKillEvents = 0;
+      clients[innocentIndex].on('game:killed', () => {
+        innocentKillEvents += 1;
+      });
+
+      const victimSeen = waitForEvent(clients[victimIndex], 'game:killed', 8000);
+      const killerSeen = waitForEvent(clients[killerIndex], 'game:killed', 8000);
+      clients[killerIndex].emit('game:kill', { code, targetPlayerId: victimId });
+      const victimKill = await victimSeen;
+      const killerKill = await killerSeen;
+      assert.equal(victimKill.killedPlayerId, victimId);
+      assert.equal(killerKill.killedPlayerId, victimId);
+
+      // Fill in the innocent crew: nothing arrives (they discover the corpse).
+      await sleep(250);
+      assert.equal(innocentKillEvents, 0);
+    } finally {
+      for (const client of clients) client.disconnect();
+    }
+  });
+
   test('impostor can kill; victims are public; cooldown event is private', async () => {
     const { host, player, code } = await createRoomWithTwoPlayers({
       killCooldownMs: 5000,

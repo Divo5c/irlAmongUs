@@ -81,6 +81,7 @@ const App = (() => {
       'map.warning': 'Warnung',
       'map.adminOut': 'ist so weit draußen:',
       'game.youKilled': 'Du wurdest eliminiert! Beobachte weiter — Report geht als Geist.',
+      'game.killLanded': 'Kill gelandet! Lauft weiter und haltet den Cooldown ein.',
       'game.someoneKilled': 'Jemand wurde eliminiert. Halte die Augen offen!',
       'game.alive': 'Lebende Spieler:',
       'game.someoneKilled': 'Jemand wurde eliminiert. Halte die Augen offen!',
@@ -152,6 +153,7 @@ const App = (() => {
       'map.warning': 'Warning',
       'map.adminOut': 'is this far outside:',
       'game.youKilled': 'You were eliminated! Keep watching — you can report as a ghost.',
+      'game.killLanded': 'Kill landed! Keep moving and respect the cooldown.',
       'game.someoneKilled': 'Someone was eliminated. Keep your eyes open!',
       'game.alive': 'Players alive:',
       'game.someoneKilled': 'Someone was eliminated. Keep your eyes open!',
@@ -449,6 +451,13 @@ const App = (() => {
       state.room = room;
       if (room.code) state.code = room.code;
       state.isHost = room.hostId === state.playerId;
+      // Remember the lobby settings of this round on the device; a fresh
+      // room later auto-applies them (Divo request).
+      if (state.isHost && room.config) {
+        try {
+          localStorage.setItem('rlaus.lastConfig', JSON.stringify(room.config));
+        } catch { /* storage full/blocked: settings just don't persist */ }
+      }
       renderLobbyPlayers(room);
       renderPhaseHint(room);
       // Regelkarte (nur Host) + Impostoren-Optionen aktuell halten.
@@ -537,6 +546,18 @@ const App = (() => {
       state.room = room;
       state.code = room.code;
       state.isHost = room.hostId === state.playerId;
+      state.autoMapReloaded = false;
+      // Carry the lobby settings of the last round into the new room
+      // (server clamps/validates everything again anyway).
+      try {
+        const lastConfig = JSON.parse(localStorage.getItem('rlaus.lastConfig') ?? 'null');
+        if (lastConfig) {
+          ensureSocket().emit('game:update_config', {
+            code: room.code,
+            config: lastConfig,
+          });
+        }
+      } catch { /* no stored settings: defaults apply */ }
       // Session (code/token) persists via session:created; code ins URL fürs Teilen.
       const url = new URL(location.href);
       url.searchParams.set('code', room.code);
@@ -700,13 +721,15 @@ const App = (() => {
     socket.on('game:kill_cooldown', ({ killReadyAt }) => {
       state.killReadyAt = killReadyAt;
     });
+    // Getting this event means: SELF killed, or SELF is an impostor the
+    // kill belonged to. Crewmates only learn about deaths via found bodies.
     socket.on('game:killed', ({ killedPlayerId }) => {
       sfx('kill');
       vibrate([200, 80, 200]);
       if (killedPlayerId === state.playerId) {
         $('game-phase-hint').textContent = t('game.youKilled');
       } else {
-        $('game-phase-hint').textContent = t('game.someoneKilled');
+        $('game-phase-hint').textContent = t('game.killLanded');
       }
     });
     socket.on('game:meeting_started', (payload) => renderMeeting(payload));
@@ -977,6 +1000,21 @@ const App = (() => {
     $('lobby-code').textContent = room.code;
     renderLobbyPlayers(room);
     refreshCachedMapButton();
+    // Divo: after the v19.13.4 cal-carry, a fresh room now ALSO restores the
+    // saved map WITHOUT pressing the "load map" button — host, empty room,
+    // device cache present -> straight into MAP_SETUP + load + save.
+    if (
+      isHost
+      && room.status === 'LOBBY'
+      && !room.map
+      && readSavedLocalMap()
+      && !state.autoMapReloaded
+    ) {
+      state.autoMapReloaded = room.code;
+      state.pendingCachedLoad = true;
+      showToast('Gespeicherte Karte wird automatisch geladen\u2026');
+      ensureSocket().emit('map:start', { code: room.code });
+    }
   }
 
   function renderLobbyPlayers(room) {

@@ -468,12 +468,21 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
           targetPlayerId,
         );
 
-        // The victims are public; the killer's identity stays hidden.
-        io.to(code).emit('room:updated', result.room);
-        io.to(code).emit('game:killed', {
+        // Among Us (Divo-Report): ONLY the victim and the impostors learn
+        // that a kill happened — the crew must FIND the body on the map.
+        // Everyone else stays silent (no kill sound, no hint text).
+        const killPayload = {
           code,
           killedPlayerId: result.killedPlayerId,
-        });
+        };
+        emitToPlayer(code, result.killedPlayerId, 'game:killed', killPayload);
+        for (const [memberId, role] of Object.entries(
+          getRolesSnapshot(roomStore.getRequiredRoom(code)),
+        )) {
+          if (role === 'IMPOSTOR') {
+            emitToPlayer(code, memberId, 'game:killed', killPayload);
+          }
+        }
 
         // Synchronized cooldown info for every impostor (private).
         const cooldownMs = roomStore.getRequiredRoom(code).config.killCooldownMs;

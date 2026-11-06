@@ -370,11 +370,18 @@ function botCrewFixSabotage(code, room, bots) {
       try {
         const result = roomStore.killPlayer(code, bot.id, target.id);
         if (typeof broadcast === 'function') {
-          broadcast(code, 'room:updated', result.room);
-          broadcast(code, 'game:killed', {
+          // Among Us privacy (same as human kills): only the victim and
+          // impostor HUMANS learn a kill happened; crew must find the body.
+          const killPayload = {
             code,
             killedPlayerId: result.killedPlayerId,
-          });
+          };
+          broadcast(code, 'game:killed', killPayload, result.killedPlayerId);
+          for (const player of roomStore.getRequiredRoom(code).players) {
+            if (player.role === 'IMPOSTOR' && !player.isBot) {
+              broadcast(code, 'game:killed', killPayload, player.id);
+            }
+          }
         }
         // Player-forbidden profit: game over needs the socket layer chain.
         botHooks?.onGameOver?.(code, result.winner);
