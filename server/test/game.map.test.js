@@ -337,3 +337,58 @@ describe('map payloads carry calibration into fresh rooms (Divo 3.11)', () => {
     assert.ok(store.getRoom('ABC234').map?.cal?.p2, 'cal survives saving without payload cal');
   });
 });
+
+describe('server-side last-good-map memory seeds fresh rooms (Divo 4.11 field bug)', () => {
+  const { RoomStore } = require('../src/rooms/roomStore');
+
+  function calibratedStore() {
+    const store = new RoomStore();
+    store.createRoom({ code: 'ABC234', hostId: 'host-1', hostName: 'Divo' });
+    store.startMapSetup('ABC234');
+    const cal = {
+      p1: { x: 0, y: 0, lat: 52.0, lon: 8.0 },
+      p2: { x: 200, y: 0, lat: 52.001, lon: 8.015 },
+    };
+    // Editor preset without cal must not REPLACE the calibrated memory.
+    const rooms = [...VALID_MAP.rooms, ...require('./criticalRooms').criticalRooms()];
+    store.updateMap('ABC234', { ...VALID_MAP, rooms, cal });
+    store.saveMap('ABC234', { ...VALID_MAP, rooms, cal });
+    return { store, cal };
+  }
+
+  test('a fresh room seeds from the last validly saved map incl. cal', () => {
+    const { store, cal } = calibratedStore();
+    store.createRoom({ code: 'NEW234', hostId: 'host-1', hostName: 'Divo' });
+    store.startMapSetup('NEW234');
+    const room = store.getRoom('NEW234');
+    assert.ok(room.map.nodes.length > 0, 'seeded map carries nodes');
+    assert.deepEqual(room.map.cal.p1, cal.p1, 'new room arrives CALIBRATED');
+  });
+
+  test('a stale editor snapshot without cal cannot erase the seeded cal', () => {
+    const { store } = calibratedStore();
+    store.createRoom({ code: 'NEW345', hostId: 'host-1', hostName: 'Divo' });
+    store.startMapSetup('NEW345');
+    // The real client always ships all rooms — the stale part is only the
+    // MISSING cal (device cache saved by an old app).
+    const rooms = [...VALID_MAP.rooms, ...require('./criticalRooms').criticalRooms()];
+    store.updateMap('NEW345', { ...VALID_MAP, rooms });
+    store.saveMap('NEW345');
+    assert.ok(store.getRoom('NEW345').map?.cal?.p1, 'seeded cal survives later updates');
+  });
+
+  test('a cal-LESS save in the fresh room does not wipe the memory', () => {
+    const { store } = calibratedStore();
+    store.createRoom({ code: 'NEW456', hostId: 'host-1', hostName: 'Grace' });
+    store.startMapSetup('NEW456');
+    store.saveMap('NEW456', {
+      ...VALID_MAP,
+      rooms: [...VALID_MAP.rooms, ...require('./criticalRooms').criticalRooms()],
+    });
+    assert.ok(store.getRoom('NEW456').map?.cal, 'protected cal rides along in the room');
+    const next = new RoomStore();
+    next.createRoom({ code: 'NEXT23', hostId: 'host-1', hostName: 'Grace' });
+    next.startMapSetup('NEXT23');
+    assert.equal(next.getRoom('NEXT23').map.nodes.length, 0, 'other store instances unaffected');
+  });
+});

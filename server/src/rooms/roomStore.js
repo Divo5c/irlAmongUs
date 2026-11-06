@@ -116,6 +116,16 @@ class RoomStore {
   /** Per-room player positions: code -> Map<playerId, positionState>. */
   #positions = new Map();
 
+  /**
+   * Device-independent memory of the LAST VALIDLY SAVED map (Divo
+   * v19.13.6): even with the phone cache fixed, a host with a stale cache
+   * (missing `cal` from an old app version) created fresh rooms that lost
+   * calibration. The server is the one place that never forgets — every
+   * successful saveMap() refreshes this snapshot, and a fresh room's map
+   * setup seeds from it, calibration included.
+   */
+  #lastGoodMap = null;
+
   /** Boundary strike counters: `${code}|${playerId}` -> {strikes, alerted}. */
   #boundaryStrikes = new Map();
 
@@ -1340,13 +1350,20 @@ class RoomStore {
       );
     }
     if (!room.map) {
-      room.map = {
-        version: 1,
-        nodes: [],
-        corridors: [],
-        rooms: [],
-        connections: [],
-      };
+      if (this.#lastGoodMap?.nodes?.length) {
+        // Seed the fresh room from the last validly saved map — `cal`
+        // rides along, so a new room stays calibrated even when the
+        // host's device cache is stale (no cal inside).
+        room.map = JSON.parse(JSON.stringify(this.#lastGoodMap));
+      } else {
+        room.map = {
+          version: 1,
+          nodes: [],
+          corridors: [],
+          rooms: [],
+          connections: [],
+        };
+      }
     }
     room.status = STATUS_MAP_SETUP;
     room.updatedAt = new Date().toISOString();
@@ -1480,6 +1497,12 @@ class RoomStore {
     room.map = sanitized;
     room.status = STATUS_MAP_READY;
     room.updatedAt = new Date().toISOString();
+    // Remember this as the device-independent "last good" map (includes
+    // cal, anchor, rooms) for seeding future fresh rooms. A cal-less save
+    // must NEVER wipe the calibrated memory (fixes Divo's field bug class).
+    if (sanitized.cal) {
+      this.#lastGoodMap = JSON.parse(JSON.stringify(sanitized));
+    }
     return this.toPublicRoom(room);
   }
 

@@ -83,5 +83,40 @@ After (Among Uem: like Among Us):
 ## Deploy
 - `?v=19.13.5`, sw `rlaus-shell-v60`. Full suite: 201 pass / 0 fail
   (`node --test --test-force-exit server/test/*.test.js`).
+
+## v19.13.6 hotfix (same day): "neue Runde → map nicht kalibriert" PERSISTED
+
+Divo re-tested after the v19.13.5 deploy: leave a round, create a brand-new
+room → still not calibrated. Missing piece: his device cache was saved by an
+OLD app version (before v19.13.4), so `rlaus.savedMap.v1` has **no `cal` at
+all** — the auto-load restores nodes faithfully but no calibration. And the
+one-time "recalibrate + save" instruction was not executed between deploys.
+
+Server-side solution: the store now keeps a **device-independent memory of
+the last VALIDLY SAVED map** (`roomStore.#lastGoodMap`, includes the
+calibration):
+
+- `saveMap()` successfully validating + sanitized copies the map into the
+  memory — but ONLY when the map carries a `cal` (a cal-less save can never
+  wipe the calibrated memory).
+- `startMapSetup()` seeds a brand-new empty-room map from that memory
+  instead of starting with an empty skeleton. The room arrives in MAP_SETUP
+  already calibrated; the client's subsequent map:update/map:save without a
+  cal payload keep the seeded `cal` (existing protection in both handlers).
+
+Two independent paths now deliver a calibrated new room:
+1. fresh device cache WITH cal (v19.13.4 client path), or
+2. server memory seeded by ANY successful calibrated save (any phone, after
+   exactly ONE manual calibration on any room).
+
+One-time bootstrapping note for Divo (unchanged): after a Render restart the
+server memory is empty — walk out once, click 2 calibration points, save.
+After that, EVERY new room on the server stays calibrated even across device
+caches gone stale.
+
+New tests (game.map.test.js): fresh room seeds incl. cal; stale editor
+snapshot without cal cannot erase the seeded cal; cal-less save does not
+wipe the memory. Suite: 202 pass / 0 fail.
+
 - Open follow-up ideas: ROOM_TASKS per-map catalog (Divo's Among-Us-Werk doc),
   optional restyle of the rules card, "bots a bit slow" pacing.
