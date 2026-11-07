@@ -120,3 +120,44 @@ wipe the memory. Suite: 202 pass / 0 fail.
 
 - Open follow-up ideas: ROOM_TASKS per-map catalog (Divo's Among-Us-Werk doc),
   optional restyle of the rules card, "bots a bit slow" pacing.
+
+## v19.13.7 (same day): Divo's four round-11.5 requests
+
+### 1. Ghost buttons (Among Us rules)
+- Dead CREWMATES keep the USE button and can finish their own tasks
+  server-side (`completeTask` no longer throws PLAYER_DEAD for dead crew).
+  Ghost task completions count into the shared task bar — among the
+  reasons: among the real task-bar semantics of Among Us.
+- Dead IMPOSTORS keep the SABOTAGE button + `startSabotage` allows ghosts
+  (kill pressure survives death). Ghost KILLS stay blocked
+  (impostor ghost can't kill) — `killClient` hides the kill button on death.
+- i18n `game.youKilled` rewritten: instead of the outdated
+  "Report geht als Geist" line it mentions ghost tasks.
+
+### 2. Role reveal screen stays until tapped
+`showRoleOverlay` had a 3-second auto-fade (`ROLE_OVERLAY_MS`). Removed:
+the full-screen role card is dismissed EXCLUSIVELY by tapping (beep + hide
+in the existing tap handler). The impostor instructions can never slip past
+unread again.
+
+### 3. Room-code dashes removed from the game screen
+The `#game-code` element (the `——` in the screenshot) always rendered during
+a round and only showed a code after a reload. Joining mid-round isn't
+allowed anyway: the element is GONE from `#screen-game` and the code lives
+only in the lobby.
+
+### 4. Host abort (Divo: "zu früh gestartet, noch jemand soll joinen")
+- Server: `roomStore.abortRound(code)` — only valid from IN_GAME, mirrors
+  `resetToLobby` but keeps admin auth, positions and boundary strikes
+  cleared, map + calibration PRESERVED, everyone stays in the room.
+- Wire: `game:abort` (host-only via `assertHost`) clears meeting + sabotage
+  timers and broadcasts `room:updated` + `game:reset_done {aborted: true}`.
+- Client: `#btn-abort` (!flag icon) next to the gear, HOST + IN_GAME only;
+  TWO-TAP confirm (armed state with red pulse CSS, 4s window). On
+  `game:reset_done(aborted)` the client resets role/tasks and lands in the
+  lobby with toast `game.aborted`.
+- New tests: roomStore (ghost tasks / ghost sabotage / abort keeps map) and
+  socketServer (guest abort rejected as NOT_ROOM_HOST; host abort works,
+  guests stay).
+
+Final: 207 pass / 0 fail. Deploy `?v=19.13.7`, sw `rlaus-shell-v61`.
