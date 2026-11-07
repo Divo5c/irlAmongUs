@@ -457,6 +457,31 @@ describe('socket flow security & gameplay', () => {
     }
   });
 
+  test('host aborts the round mid-game; guests stay and land in the lobby', async () => {
+    const { host, player, code } = await createRoomWithTwoPlayers();
+    try {
+      await startGameFor({ host, player, code });
+
+      const guestAbortSeen = waitForEvent(player, 'room:error');
+      player.emit('game:abort', { code });
+      const guestError = await guestAbortSeen;
+      assert.equal(guestError.code, 'NOT_ROOM_HOST');
+
+      const abortDone = waitForEvent(player, 'game:reset_done');
+      host.emit('game:abort', { code });
+      const done = await abortDone;
+      assert.equal(done.aborted, true);
+
+      const room = roomStore.getRoom(code);
+      assert.equal(room.status, 'MAP_READY', 'abort returns the lobby with the map');
+      assert.equal(room.players.length, 2, 'nobody got kicked by the abort');
+      assert.equal(roomStore.getRoom(code).tasks.length, 0);
+    } finally {
+      host.disconnect();
+      player.disconnect();
+    }
+  });
+
   test('crewmates cannot send kill events (server rejects)', async () => {
     const { host, player, code } = await createRoomWithTwoPlayers();
 

@@ -283,6 +283,28 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
       }
     });
 
+    // Host aborts the RUNNING round (Divo: started too early, someone still
+    // wants to join). Everyone stays in the room; the lobby keeps the map.
+    socket.on('game:abort', (payload) => {
+      try {
+        const { code } = payload ?? {};
+        assertSocketInRoom(socket, code);
+        assertHost(socket, code);
+
+        clearMeetingTimer(code);
+        clearSabotageTimer(code);
+        const publicRoom = roomStore.abortRound(code);
+        io.to(code).emit('room:updated', publicRoom);
+        io.to(code).emit('game:reset_done', {
+          code,
+          status: publicRoom.status,
+          aborted: true,
+        });
+      } catch (error) {
+        emitRoomError(socket, error);
+      }
+    });
+
     // ----------------------------------------------------------- bots //
     // Solo testing: bots are regular players that walk, vote and complete
     // their crew tasks server-side without ever owning a socket.

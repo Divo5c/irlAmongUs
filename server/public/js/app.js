@@ -80,7 +80,8 @@ const App = (() => {
       'map.back': 'Geh zurück aufs Spielfeld!',
       'map.warning': 'Warnung',
       'map.adminOut': 'ist so weit draußen:',
-      'game.youKilled': 'Du wurdest eliminiert! Beobachte weiter — Report geht als Geist.',
+      'game.youKilled': 'Du wurdest eliminiert! Als Geist kannst du Tasks weiter machen und beobachten.',
+      'game.aborted': 'Runde abgebrochen 2014 alle sind zur00fcck in der Lobby.',
       'game.killLanded': 'Kill gelandet! Lauft weiter und haltet den Cooldown ein.',
       'game.someoneKilled': 'Jemand wurde eliminiert. Halte die Augen offen!',
       'game.alive': 'Lebende Spieler:',
@@ -152,7 +153,8 @@ const App = (() => {
       'map.back': 'Back to the play area!',
       'map.warning': 'Warning',
       'map.adminOut': 'is this far outside:',
-      'game.youKilled': 'You were eliminated! Keep watching — you can report as a ghost.',
+      'game.youKilled': 'You were eliminated! As a ghost you can still finish tasks and spectate.',
+      'game.aborted': 'Round aborted 2014 everyone is back in the lobby.',
       'game.killLanded': 'Kill landed! Keep moving and respect the cooldown.',
       'game.someoneKilled': 'Someone was eliminated. Keep your eyes open!',
       'game.alive': 'Players alive:',
@@ -733,6 +735,14 @@ const App = (() => {
       }
     });
     socket.on('game:meeting_started', (payload) => renderMeeting(payload));
+    // Host rematch or round abort: land everyone in the lobby screen.
+    socket.on('game:reset_done', ({ aborted }) => {
+      if (!aborted) return;
+      state.role = null;
+      state.tasks = [];
+      show('lobby');
+      showToast(t('game.aborted'));
+    });
     socket.on('game:voting_started', ({ votingDeadline }) => {
       state.votingDeadline = votingDeadline ?? 0;
       startVoteCountdown(state.votingDeadline);
@@ -1525,23 +1535,20 @@ const App = (() => {
 
   // ---------------------------------------------------------------- game //
 
-  const ROLE_OVERLAY_MS = 3000;
-
-  /** Among-Us-like full-screen role card: shows a few seconds, then fades. */
+  /** Among-Us-like full-screen role card: stays until the player taps it. */
   function showRoleOverlay(payload) {
     const overlay = $('role-overlay');
     const impostor = payload.role === 'IMPOSTOR';
     // Tap-Handler ZUERST registrieren — egal was danach knallt, der Spieler
-    // kommt beim Tappen auf jeden Fall weiter (IRL-Freeze-Fix).
+    // kommt beim Tappen auf jeden Fall weiter (IRL-Freeze-Fix). Divo
+    // (v19.13.7): KEIN Auto-Timeout mehr — der Screen bleibt, bis getippt
+    // wurde (Impostor-Info darf nicht untergehen).
     const dismiss = () => {
-      window.clearTimeout(showRoleOverlay._t);
       overlay.onclick = null;
       overlay.classList.add('hidden');
       beep(impostor ? 180 : 560);
     };
     overlay.onclick = dismiss;
-    window.clearTimeout(showRoleOverlay._t);
-    showRoleOverlay._t = window.setTimeout(dismiss, ROLE_OVERLAY_MS);
     try {
       overlay.classList.remove('hidden');
       $('role-card').className = impostor ? 'role-card impostor' : 'role-card crew';
@@ -1671,18 +1678,24 @@ const App = (() => {
     reportBtn.classList.toggle('ready', bodies.length > 0 && imAlive !== false);
     const killBtn = $('btn-kill');
     if (!killBtn.classList.contains('hidden')) {
-      const killLabel = killBtn.querySelector('.icon-label');
-      const targets = state.killTargets ?? [];
-      const cooldownLeft = Math.max(0, state.killReadyAt - Date.now());
-      if (cooldownLeft > 0) {
-        // Cooldown IMMER auf dem Knopf sichtbar (auch ohne Ziel in	range).
+      // Divo (v19.13.7): als (toter) Geist gibt es keinen Kill mehr.
+      if (imAlive === false) {
+        killBtn.classList.add('hidden');
         killBtn.disabled = true;
-        if (killLabel) killLabel.textContent = `${Math.ceil(cooldownLeft / 1000)}s`;
       } else {
-        killBtn.disabled = !targets.length;
-        if (killLabel) killLabel.textContent = 'Kill';
+        const killLabel = killBtn.querySelector('.icon-label');
+        const targets = state.killTargets ?? [];
+        const cooldownLeft = Math.max(0, state.killReadyAt - Date.now());
+        if (cooldownLeft > 0) {
+          // Cooldown IMMER auf dem Knopf sichtbar (auch ohne Ziel in	range).
+          killBtn.disabled = true;
+          if (killLabel) killLabel.textContent = `${Math.ceil(cooldownLeft / 1000)}s`;
+        } else {
+          killBtn.disabled = !targets.length;
+          if (killLabel) killLabel.textContent = 'Kill';
+        }
+        killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
       }
-      killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
     }
     updateUseButton();
     updateEmergencyPanel();
@@ -1703,10 +1716,9 @@ const App = (() => {
       showToast('Tasks gehen nur im Spiel.');
       return;
     }
-    if (state.room.players?.find((p) => p.id === state.playerId)?.isAlive === false) {
-      showToast('Geister k\u00f6nnen keine Tasks machen.');
-      return;
-    }
+    // Divo (v19.13.7): tote CREW darf als Geist weiter tasken (Among-Us-
+    // Regel, Server-Gate erlaubt CREWMATE). Kein Client-Block mehr — der
+    // Server sagt im Zweifel PLAYER_DEAD für tote Nebel-Tasks.
     if (task.completed) {
       showToast('Dieser Task ist schon fertig.');
       return;
@@ -1916,10 +1928,10 @@ const App = (() => {
     const action = useAction();
     if (useLabel) useLabel.textContent = action ? action.label : 'Use';
     const inMeeting = state.room?.status !== 'IN_GAME';
-    const dead = state.room?.players?.find((p) => p.id === state.playerId) ?.
-      isAlive === false;
-    useBtn.classList.toggle('hidden', !state.room || inMeeting || dead);
-    useBtn.disabled = !action || inMeeting || dead;
+    // Divo (v19.13.7): Tote Crew behält den Use-Button — Geister können
+    // ihre Tasks weiter vollenden (Among-Us-Regel, Server erlaubt das).
+    useBtn.classList.toggle('hidden', !state.room || inMeeting);
+    useBtn.disabled = !action || inMeeting;
     useBtn.classList.toggle('ready', !!action && !inMeeting);
     useBtn.dataset.kind = action?.kind ?? '';
   }
@@ -1928,8 +1940,9 @@ const App = (() => {
     const sabBtn = $('btn-sabotage');
     if (!sabBtn) return;
     const impostor = state.role?.role === 'IMPOSTOR';
-    sabBtn.classList.toggle('hidden', !impostor || state.room?.status !== 'IN_GAME' ||
-      state.room?.players?.find((p) => p.id === state.playerId)?.isAlive === false);
+    // Divo (v19.13.7): tote Impostoren sabotieren WEITER (Among Us) —
+    // nur der Kill-Button verschwindet mit dem Tod.
+    sabBtn.classList.toggle('hidden', !impostor || state.room?.status !== 'IN_GAME');
     if (!impostor) return;
     const sab = state.room?.sabotage;
     const sabLabel = sabBtn.querySelector('.icon-label');
@@ -2872,14 +2885,40 @@ const App = (() => {
     beep(next ? 520 : 380);
     drawGameMap();
   });
+
+  // Rundenabbruch (Host only, zweistufig bestätigt — kein Fehlklick).
+  document.addEventListener('click', (event) => {
+    const target = event.target.closest('#btn-abort');
+    if (!target) return;
+    if (state.abortArmed) {
+      state.abortArmed = false;
+      target.classList.remove('abort-armed');
+      sfx('notification', 0.4);
+      ensureSocket().emit('game:abort', { code: state.code });
+    } else {
+      state.abortArmed = true;
+      target.classList.add('abort-armed');
+      showToast('Nochmal dr\u00fccken: Runde WIRKLICH abbrechen? Alle zur\u00fcck in die Lobby.');
+      setTimeout(() => {
+        state.abortArmed = false;
+        target.classList.remove('abort-armed');
+      }, 4000);
+    }
+  });
   window.addEventListener('resize', () => drawGameMap());
   window.addEventListener('orientationchange', () => setTimeout(drawGameMap, 300));
 
   function renderPhaseHint(room) {
     if (!state.role) return;
     $('game-phase-hint').textContent = ''; // Lebenden-Count nur im Meeting
-    // Raumcode oben links (war "——" weil nie gesetzt).
-    $('game-code').textContent = state.code || '——';
+    // Divo (v19.13.7): kein Raumcode mehr im Spiel — der Code lebt nur in
+    // der Lobby (Beitreten mitten im Spiel ist eh verboten).
+    $('btn-abort')?.classList.toggle(
+      'hidden',
+      !(state.isHost && room?.status === 'IN_GAME'),
+    );
+    // Abort braucht Klick-Doppelbestätigung (armed-Flag, kein Fehlklick).
+    state.abortArmed = false;
   }
 
   function showToast(message) {

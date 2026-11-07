@@ -635,7 +635,10 @@ class RoomStore {
       throw new GameError('TASK_NOT_FOUND', 'Task not found for this player.');
     }
 
-    if (!isPlayerAlive(room, playerId)) {
+    // Among Us (Divo 4.11): dead CREWMATES keep completing their tasks as
+    // ghosts (progress count survives the kill). Impostors have fake tasks
+    // and stay blocked while dead.
+    if (!isPlayerAlive(room, playerId) && getPlayer(room, playerId)?.role !== ROLE_CREWMATE) {
       throw new GameError('PLAYER_DEAD', 'Dead players cannot complete tasks.');
     }
 
@@ -771,8 +774,10 @@ class RoomStore {
     assertKnownPlayer(room, playerId);
 
     const impostor = getPlayer(room, playerId);
-    if (!impostor || impostor.role !== ROLE_IMPOSTOR || !impostor.isAlive) {
-      throw new GameError('SABOTAGE_REJECTED', 'Only an alive impostor can sabotage.');
+    // Among Us (Divo 4.11): a dead impostor can STILL sabotage — the kill
+    // button is gone, but the map-pressure duty survives the death.
+    if (!impostor || impostor.role !== ROLE_IMPOSTOR) {
+      throw new GameError('SABOTAGE_REJECTED', 'Only an impostor can sabotage.');
     }
     const active = room.sabotage;
     const activeCritical = active?.deadline != null;
@@ -1330,6 +1335,46 @@ class RoomStore {
     this.#positions.delete(code);
     this.#clearBoundaryStrikes(code);
     this.revokeAllAdmin(code);
+
+    return this.toPublicRoom(room);
+  }
+
+  /**
+   * Host ABORTS the running round (Divo 4.11: "zu früh gestartet"). All
+   * players STAY in the room — the round crash-lands in the lobby with the
+   * map (and calibration) preserved, ready to start again.
+   */
+  abortRound(code) {
+    const room = this.getRequiredRoom(code);
+
+    if (room.status !== STATUS_IN_GAME) {
+      throw new GameError(
+        'INVALID_PHASE',
+        'Only a running game can be aborted.',
+      );
+    }
+
+    for (const player of room.players) {
+      player.role = ROLE_CREWMATE; // placeholder; fresh roles on start
+      player.isAlive = true;
+    }
+
+    delete room.winner;
+    delete room.meeting;
+    room.tasks = [];
+    room.ejectedPlayerIds = [];
+    room.lastKillAt = 0;
+    room.corpses = [];
+    delete room.sabotage;
+    room.sabotageCount = 0;
+    delete room.sabotageCooldownUntil;
+    room.emergencyUsed = {};
+    // A saved map + calibration survive the abort (same rule as rematch).
+    room.status = room.map ? STATUS_MAP_READY : STATUS_LOBBY;
+    room.updatedAt = new Date().toISOString();
+
+    this.#positions.delete(code);
+    this.#clearBoundaryStrikes(code);
 
     return this.toPublicRoom(room);
   }

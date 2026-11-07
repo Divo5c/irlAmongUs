@@ -1340,3 +1340,57 @@ test('map:update / saveMap PRESERVE stored calibration (field bug: wizard reques
   const saved = store.saveMap('ABC234', SAMPLE_MAP);
   assert.deepEqual(saved.map.cal, cal);
 });
+
+test('ghost crewmates finish tasks; ghost impostors recruit sabotage (Among Us)', () => {
+  const store = new RoomStore();
+  createRoomWithPlayers(store, 3);
+  const { assignments, tasksByPlayer } = beginGame(store);
+  const impostorIds = impostorsOf(assignments);
+  const crewmateIds = crewmatesOf(assignments);
+
+  // Kill the first crewmate (cooldown off for the test).
+  store.getRoom('ABC234').config = {
+    ...store.getRoom('ABC234').config,
+    killCooldownMs: 0,
+  };
+  placeNear(store, [impostorIds[0], crewmateIds[0]]);
+  store.killPlayer('ABC234', impostorIds[0], crewmateIds[0]);
+
+  // Ghost crew finishes ONE more task: progress must grow past the kill.
+  const before = store.toPublicRoom(store.getRoom('ABC234')).taskProgress.completed;
+  const ghostTask = tasksByPlayer[crewmateIds[0]].find((task) => !task.completed);
+  const done = store.completeTask('ABC234', crewmateIds[0], ghostTask.id, {
+    skipProximity: true,
+  });
+  assert.equal(done.completedTaskId, ghostTask.id, 'ghost completes its task');
+  assert.ok(done.progress.completed >= before + 1, 'ghost tasks count into the bar');
+
+  // Dead impostor: fake tasks stay blocked...
+  store.getRoom('ABC234').players.find((p) => p.id === impostorIds[0]).isAlive = false;
+  const impTask = (tasksByPlayer[impostorIds[0]] ?? [])[0];
+  if (impTask) {
+    assertGameError(
+      () => store.completeTask('ABC234', impostorIds[0], impTask.id, { skipProximity: true }),
+      'PLAYER_DEAD',
+    );
+  }
+
+  // ...but the sabotage DUTY survives death (Among Us). Sample rooms map
+  // carries REACTOR/O2 (no ELECTRICAL) — so REACTOR must be offered.
+  const sabotaged = store.startSabotage('ABC234', impostorIds[0], 'REACTOR');
+  assert.ok(sabotaged.type, 'ghost impostor can sabotage');
+});
+
+test('host aborts a running round: everyone stays, map+cal survive (Divo 4.11)', () => {
+  const store = new RoomStore();
+  createRoomWithPlayers(store, 3);
+  beginGame(store);
+  assert.equal(store.getRoom('ABC234').status, 'IN_GAME');
+
+  const aborted = store.abortRound('ABC234');
+  assert.equal(aborted.status, 'MAP_READY');
+  assert.ok(aborted.map.nodes.length > 0, 'abort keeps the saved map');
+  assert.equal(aborted.players.length, 3, 'nobody is ejected from the room');
+  assert.equal(store.getRoom('ABC234').tasks.length, 0, 'no leftover round tasks');
+  assert.equal(aborted.taskProgress.completed, 0);
+});
