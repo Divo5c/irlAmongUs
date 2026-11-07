@@ -251,6 +251,18 @@
         <button id="btn-emergency-close" class="secondary">Schlie&szlig;en</button>
       </div>
     </div>
+    <!-- Among-Us-Admin-Tisch (Divo 4.11): Use im ADMIN-Raum öffnet die
+         anonyme Raumbesetzung (graue Bohnen, keine Namen). -->
+    <div id="admin-table" class="hidden">
+      <div class="admin-tablet">
+        <div class="admin-tablet-head">
+          <span class="pixel-title" id="admin-table-title">ADMIN</span>
+          <button id="btn-admin-table-close" class="secondary">Schlie&szlig;en</button>
+        </div>
+        <canvas id="admin-table-canvas"></canvas>
+        <p id="admin-table-status"></p>
+      </div>
+    </div>
     <details id="taskbox">
       <summary>Deine Tasks (<span id="task-count">0</span>)</summary>
       <ul id="task-list" class="task-list"></ul>
@@ -362,9 +374,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.13.8"></script>
-  <script src="/js/mapEditor.js?v=19.13.8"></script>
-  <script src="/js/tasks.js?v=19.13.8"></script>
-  <script src="/js/app.js?v=19.13.8"></script>
+  <script src="/js/osm.js?v=19.13.9"></script>
+  <script src="/js/mapEditor.js?v=19.13.9"></script>
+  <script src="/js/tasks.js?v=19.13.9"></script>
+  <script src="/js/app.js?v=19.13.9"></script>
 </body>
 </html>

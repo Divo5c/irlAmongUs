@@ -81,7 +81,7 @@ const App = (() => {
       'map.warning': 'Warnung',
       'map.adminOut': 'ist so weit draußen:',
       'game.youKilled': 'Du wurdest eliminiert! Als Geist kannst du Tasks weiter machen und beobachten.',
-      'game.aborted': 'Runde abgebrochen 2014 alle sind zur00fcck in der Lobby.',
+      'game.aborted': 'Runde abgebrochen \u2014 alle sind zur\u00fcck in der Lobby.',
       'game.killLanded': 'Kill gelandet! Lauft weiter und haltet den Cooldown ein.',
       'game.someoneKilled': 'Jemand wurde eliminiert. Halte die Augen offen!',
       'game.alive': 'Lebende Spieler:',
@@ -154,7 +154,7 @@ const App = (() => {
       'map.warning': 'Warning',
       'map.adminOut': 'is this far outside:',
       'game.youKilled': 'You were eliminated! As a ghost you can still finish tasks and spectate.',
-      'game.aborted': 'Round aborted 2014 everyone is back in the lobby.',
+      'game.aborted': 'Round aborted \u2014 everyone is back in the lobby.',
       'game.killLanded': 'Kill landed! Keep moving and respect the cooldown.',
       'game.someoneKilled': 'Someone was eliminated. Keep your eyes open!',
       'game.alive': 'Players alive:',
@@ -737,12 +737,19 @@ const App = (() => {
         $('game-phase-hint').textContent = t('game.killLanded');
       }
     });
-    socket.on('game:meeting_started', (payload) => renderMeeting(payload));
+    // Admin table: server answers every poll with anonymous room counts.
+    socket.on('game:admin_table_state', ({ blocked, counts }) => {
+      if ($('admin-table')?.classList.contains('hidden')) return;
+      state.adminTableLast = { blocked, counts: counts ?? {} };
+      drawAdminTable();
+    });
+    socket.on('game:meeting_started', (payload) => { closeAdminTable(); renderMeeting(payload); });
     // Host rematch or round abort: land everyone in the lobby screen.
     socket.on('game:reset_done', ({ aborted }) => {
       if (!aborted) return;
       state.role = null;
       state.tasks = [];
+      closeAdminTable();
       show('lobby');
       showToast(t('game.aborted'));
     });
@@ -848,6 +855,7 @@ const App = (() => {
     });
     socket.on('game:over', ({ winner, players, reason }) => {
       stopGpsLoop();
+      closeAdminTable();
       sfx(winner === 'CREWMATE' ? 'victory_crew' : 'victory_impostor');
       $('boundary-banner').classList.add('hidden');
       $('gameover-overlay').classList.remove('hidden');
@@ -1778,6 +1786,11 @@ const App = (() => {
     const task = nearestIncompleteTask();
     if (task) {
       return { label: task.title, kind: 'TASK', task };
+    }
+    // Divo (4.11): Among-Us-Admin-Tisch — im ADMIN-Raum öffnet Use die
+    // anonyme Raumbesetzung (graue Bohnen, keine Namen/Positionen).
+    if (roomIdContains('ADMIN')) {
+      return { label: 'Admin-Map', kind: 'ADMIN_TABLE' };
     }
     // Divo (v19.12): in der Cafeteria öffnet Use IMMER den Meeting-Tisch —
     // der rote Knopf steckt im Feld, mit BLOCKIERT-Kappe wenn keine
@@ -2960,6 +2973,111 @@ const App = (() => {
     };
   }
 
+  /**
+   * Among-Us-Admin-Tisch (Divo 4.11): Overlay über der Spielkarte, zeichnet
+   * alle Räume mit anonymen grauen Bohnen-Anzahl-Indikatoren. Pollt alle
+   * 2s `game:admin_table` (Server-Gate: man muss IM Admin-Raum stehen).
+   */
+  function openAdminTable() {
+    const overlay = $('admin-table');
+    if (!overlay) return;
+    state.adminTableLast = null;
+    overlay.classList.remove('hidden');
+    $('btn-admin-table-close').onclick = closeAdminTable;
+    window.clearInterval(state.adminTableTimer);
+    requestAdminTableState();
+    state.adminTableTimer = window.setInterval(requestAdminTableState, 2000);
+  }
+
+  function closeAdminTable() {
+    window.clearInterval(state.adminTableTimer);
+    state.adminTableTimer = null;
+    $('admin-table')?.classList.add('hidden');
+  }
+
+  function requestAdminTableState() {
+    ensureSocket().emit('game:admin_table', { code: state.code });
+  }
+
+  function drawAdminTable() {
+    const canvas = $('admin-table-canvas');
+    const data = state.adminTableLast;
+    if (!canvas || !data) return;
+    const map = state.room?.map;
+    if (!map?.nodes?.length) return;
+    canvas.width = canvas.clientWidth * 2;
+    canvas.height = canvas.clientHeight * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+    const pad = 18;
+    const nodes = map.nodes;
+    const minX = Math.min(...nodes.map((n) => n.x));
+    const maxX = Math.max(...nodes.map((n) => n.x));
+    const minY = Math.min(...nodes.map((n) => n.y));
+    const maxY = Math.max(...nodes.map((n) => n.y));
+    const scale = Math.min(
+      (canvas.width / 2 - pad * 2) / (maxX - minX || 50),
+      (canvas.height / 2 - pad * 2) / (maxY - minY || 50),
+    );
+    const toPx = (x, y) => [pad + (x - minX) * scale, pad + (y - minY) * scale];
+
+    const status = $('admin-table-status');
+    if (data.blocked) {
+      // Comms-Sabotage: grauer Plan, keine Spielerdaten (Among-Us-Regel).
+      status.textContent = 'COMMS SABOTAGED';
+      status.style.color = '#9aa4b2';
+    } else {
+      const total = Object.values(data.counts).reduce((s, c) => s + c, 0);
+      status.textContent = total > 0
+        ? `R\u00e4ume mit sichtbaren Crews: ${total}/${
+          (state.room?.players ?? []).filter((p) => p.isAlive).length}`
+        : 'Kein Crew in erfassten R\u00e4umen \u2014 alle in G\u00e4ngen?';
+      status.style.color = '#dff7e6';
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = 2;
+    ctx.font = '600 11px system-ui';
+    ctx.textAlign = 'center';
+    for (const r of map.rooms ?? []) {
+      const poly = r.polygon ?? [];
+      if (poly.length < 3) continue;
+      ctx.beginPath();
+      poly.forEach((pt, idx) => {
+        const [px, py] = toPx(pt.x, pt.y);
+        if (idx === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fillStyle = r.type === 'ADMIN' && !data.blocked
+        ? 'rgba(74, 222, 128, 0.22)'
+        : 'rgba(74, 222, 128, 0.10)';
+      ctx.strokeStyle = 'rgba(134, 239, 172, 0.85)';
+      ctx.fill();
+      ctx.stroke();
+      const cx = poly.reduce((s, p) => s + p.x, 0) / poly.length;
+      const cy = poly.reduce((s, p) => s + p.y, 0) / poly.length;
+      const [sx, sy] = toPx(cx, cy);
+      ctx.fillStyle = 'rgba(220, 255, 230, 0.85)';
+      ctx.fillText(r.name, sx, sy - 8);
+      // Graue anonyme Bohnen (Among-Us-Tabellen-Optik): Anzahl als Punkte.
+      const count = data.blocked ? 0 : (data.counts[r.id] ?? 0);
+      const shown = Math.min(count, 6);
+      for (let b = 0; b < shown; b += 1) {
+        const beanX = sx - ((shown - 1) * 13) / 2 + b * 13;
+        ctx.beginPath();
+        ctx.arc(beanX, sy + 10, 5.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#b6bec9';
+        ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+        ctx.fill();
+        ctx.stroke();
+      }
+      if (count > 6) {
+        ctx.fillStyle = '#b6bec9';
+        ctx.fillText(`+${count - 6}`, sx, sy + 28);
+      }
+    }
+  }
+
   function showToast(message) {
     const toast = document.createElement('div');
     toast.textContent = message;
@@ -3009,6 +3127,9 @@ const App = (() => {
       openTask(action.task);
     } else if (action.kind === 'EMERGENCY') {
       showEmergencyPanel();
+      vibrate(60);
+    } else if (action.kind === 'ADMIN_TABLE') {
+      openAdminTable();
       vibrate(60);
     }
   });

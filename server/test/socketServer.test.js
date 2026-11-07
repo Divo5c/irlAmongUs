@@ -482,6 +482,30 @@ describe('socket flow security & gameplay', () => {
     }
   });
 
+  test('admin table over the wire: only from the ADMIN room', async () => {
+    const { host, player, code } = await createRoomWithTwoPlayers();
+    try {
+      const { hostAssignment } = await startGameFor({ host, player, code });
+      // Both players walk into the ADMIN polygon center first.
+      roomStore.updatePosition(code, 'host-1', { x: 83, y: 80, confidence: 1 });
+      const inAdmin = waitForEvent(host, 'game:admin_table_state');
+      host.emit('game:admin_table', { code });
+      const state = await inAdmin;
+      assert.equal(state.blocked, false);
+      assert.ok(Object.keys(state.counts).length >= 1, 'own presence in admin is visible');
+
+      // Someone stuck in a corridor gets rejected (no remote peeking).
+      roomStore.updatePosition(code, 'host-1', { x: 20, y: 50, confidence: 1 });
+      const rejected = waitForEvent(host, 'room:error');
+      host.emit('game:admin_table', { code });
+      const error = await rejected;
+      assert.equal(error.code, 'NOT_AT_ADMIN_TABLE');
+    } finally {
+      host.disconnect();
+      player.disconnect();
+    }
+  });
+
   test('crewmates cannot send kill events (server rejects)', async () => {
     const { host, player, code } = await createRoomWithTwoPlayers();
 

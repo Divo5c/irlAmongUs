@@ -1394,3 +1394,45 @@ test('host aborts a running round: everyone stays, map+cal survive (Divo 4.11)',
   assert.equal(store.getRoom('ABC234').tasks.length, 0, 'no leftover round tasks');
   assert.equal(aborted.taskProgress.completed, 0);
 });
+
+test('admin table: anonymous alive room counts; dead vanish; COMMS blocks', () => {
+  const store = new RoomStore();
+  createRoomWithPlayers(store, 3);
+  const { assignments } = beginGame(store);
+  const impostorIds = impostorsOf(assignments);
+  const crewmateIds = crewmatesOf(assignments);
+
+  // Role-agnostic positions: both crewmates INSIDE admin (83,80), the
+  // impostor lurks in the corridor (20,50) — invisible on the board.
+  const [crewA, crewB] = crewmateIds;
+  store.updatePosition('ABC234', crewA, { x: 83, y: 80, confidence: 1 });
+  store.updatePosition('ABC234', crewB, { x: 83, y: 80, confidence: 1 });
+  store.updatePosition('ABC234', impostorIds[0], { x: 20, y: 50, confidence: 1 });
+
+  const peeking = store.getAdminTableState('ABC234', crewA);
+  assert.equal(peeking.blocked, false);
+  assert.deepEqual(peeking.counts, { 'r-admin': 2 });
+
+  // Dead players fall off the table immediately.
+  store.getRoom('ABC234').players.find((p) => p.id === crewB).isAlive = false;
+  const afterDeath = store.getAdminTableState('ABC234', crewA);
+  assert.deepEqual(afterDeath.counts, { 'r-admin': 1 });
+
+  // Comms-Sabotage blocks the board entirely (Among Us rule).
+  store.getRoom('ABC234').sabotage = {
+    type: 'COMMS',
+    deadline: null,
+    panels: null,
+  };
+  const blocked = store.getAdminTableState('ABC234', 'host-1');
+  assert.equal(blocked.blocked, true);
+  assert.deepEqual(blocked.counts, {});
+  delete store.getRoom('ABC234').sabotage;
+
+  // Standing OUTSIDE admin: rejected (no remote peeking).
+  store.updatePosition('ABC234', 'host-1', { x: 20, y: 50, confidence: 1 });
+  assertGameError(
+    () => store.getAdminTableState('ABC234', 'host-1'),
+    'NOT_AT_ADMIN_TABLE',
+  );
+});

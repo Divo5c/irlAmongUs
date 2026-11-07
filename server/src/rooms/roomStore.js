@@ -1838,6 +1838,44 @@ class RoomStore {
     return result;
   }
 
+  /**
+   * The Among-Us-Admin-Tisch (Divo 4.11): anyone STANDING in the ADMIN
+   * room may look at the table. It shows anonymous ALIVE-player counts per
+   * room — NO names, NO colors, NO corridor positions, dead players
+   * vanish, Comms-Sabotage blocks the board.
+   */
+  getAdminTableState(code, playerId) {
+    const room = this.getRequiredRoom(code);
+    assertInGame(room);
+
+    const own = this.getPlayerPosition(code, playerId);
+    if (!own?.roomId || own.roomId !== this.#adminRoomId(room)) {
+      throw new GameError(
+        'NOT_AT_ADMIN_TABLE',
+        'Der Admin-Tisch ist nur im Admin-Raum nutzbar.',
+      );
+    }
+
+    const counts = {};
+    if (room.sabotage?.type === 'COMMS') {
+      // Blocked board: the client shows COMMS SABOTAGED instead of counts.
+      return { blocked: true, counts: {} };
+    }
+    const roomPositions = this.#positions.get(code) ?? new Map();
+    for (const [residentId, pos] of roomPositions) {
+      if (!pos.roomId) continue; // Gang = unsichtbar
+      const player = getPlayer(room, residentId);
+      if (!player?.isAlive) continue; // Tote fallen vom Tisch
+      counts[pos.roomId] = (counts[pos.roomId] ?? 0) + 1;
+    }
+    return { blocked: false, counts };
+  }
+
+  #adminRoomId(room) {
+    return (room.map?.rooms ?? []).find((candidate) => candidate.type === 'ADMIN')?.id
+      ?? null;
+  }
+
   // ----------------------------------------------------------- admin auth //
 
   /**

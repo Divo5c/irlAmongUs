@@ -610,6 +610,20 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
       }
     });
 
+    // ------------------------------------------------- admin table (AMUS) //
+    // Among-Us-Admin-Tisch: im Admin-Raum zeigt der Tisch anonyme Counts
+    // lebender Spieler pro Raum. Polling vom Client (2s) — kein Broadcast.
+    socket.on('game:admin_table', (payload) => {
+      try {
+        const { code } = payload ?? {};
+        assertSocketInRoom(socket, code);
+        const state = roomStore.getAdminTableState(code, socket.data.playerId);
+        socket.emit('game:admin_table_state', { code, ...state });
+      } catch (error) {
+        emitRoomError(socket, error);
+      }
+    });
+
     // ---------------------------------------------------- admin tracking //
 
     /**
