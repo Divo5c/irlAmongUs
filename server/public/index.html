@@ -208,6 +208,19 @@
         <div id="role-card-detail"></div>
       </div>
     </div>
+    <!-- Under-Sie-Moment (Among Us): NUR für das Opfer selbst sichtbar,
+         weil game:killed an Crew-Leute privat ist (v19.13.5). -->
+    <div id="kill-anim" class="hidden" aria-hidden="true">
+      <div class="kill-bg"></div>
+      <div class="kill-slash s1"></div>
+      <div class="kill-slash s2"></div>
+      <div class="kill-knife">&#128128;&#xFE0E;</div>
+      <div class="kill-beans">
+        <div class="kill-bean victim"><span></span></div>
+        <div class="kill-bean killer"><span></span></div>
+      </div>
+      <div class="kill-text pixel-title">GEKILLT</div>
+    </div>
     <div id="role-banner" class="role-crew hidden">DU BIST CREWMATE</div>
     <div id="teammates" class="hint hidden"></div>
     <div id="gps-status" class="gps-status hidden"></div>
@@ -349,9 +362,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.13.7"></script>
-  <script src="/js/mapEditor.js?v=19.13.7"></script>
-  <script src="/js/tasks.js?v=19.13.7"></script>
-  <script src="/js/app.js?v=19.13.7"></script>
+  <script src="/js/osm.js?v=19.13.8"></script>
+  <script src="/js/mapEditor.js?v=19.13.8"></script>
+  <script src="/js/tasks.js?v=19.13.8"></script>
+  <script src="/js/app.js?v=19.13.8"></script>
 </body>
 </html>

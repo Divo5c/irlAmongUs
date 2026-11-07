@@ -678,6 +678,63 @@ button.round {
   animation: abort-pulse 0.8s infinite; }
 @keyframes abort-pulse { 50% { box-shadow: 0 0 16px rgba(239, 68, 68, 0.8); } }
 
+/* ===== Kill-Animation (nur Opfer, Among-Us-Moment) ==================== */
+#kill-anim { position: fixed; inset: 0; z-index: 200; overflow: hidden;
+  background: #120a0e; border-radius: 0; }
+#kill-anim.hidden { display: none; }
+#kill-anim .kill-bg { position: absolute; inset: 0;
+  background:
+    linear-gradient(115deg, rgba(239,68,68,0.35) 0%, transparent 40%),
+    linear-gradient(-115deg, rgba(127,29,29,0.5) 0%, transparent 45%),
+    radial-gradient(circle at 50% 52%, rgba(255,235,235,0.22), transparent 55%),
+    #1a1013;
+  animation: kill-bg-flash 1.5s steps(2, end) infinite; }
+@keyframes kill-bg-flash { 0% { filter: brightness(1); } 50% { filter: brightness(1.5); } }
+
+/* Zwei rote Breath-Slashes, diagonal fegen über den Screen */
+#kill-anim .kill-slash { position: absolute; left: -18%; width: 136%; height: 34%;
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 45%, #fca5a5 100%);
+  border-radius: 12px; transform: skewY(-9deg) scaleX(0.2); opacity: 0; }
+#kill-anim .kill-slash.s1 { top: 24%; animation: kill-slash-sweep 0.42s cubic-bezier(.2,.9,.3,1) forwards; }
+#kill-anim .kill-slash.s2 { top: 62%; animation: kill-slash-sweep 0.42s cubic-bezier(.2,.9,.3,1) 0.12s forwards; }
+@keyframes kill-slash-sweep {
+  0% { transform: skewY(-9deg) scaleX(0.2); opacity: 0; }
+  55% { transform: skewY(-9deg) scaleX(1.04); opacity: 0.95; }
+  100% { transform: skewY(-9deg) scaleX(1); opacity: 0.9; } }
+
+#kill-anim .kill-knife { position: absolute; top: 34%; left: 56%;
+  font-size: clamp(64px, 24vw, 150px); transform: translate(-10%, -10%) rotate(18deg);
+  filter: drop-shadow(0 10px 22px rgba(0,0,0,.7));
+  animation: kill-knife-chop 0.38s cubic-bezier(.3,1.4,.4,1) 0.1s forwards;
+  opacity: 0; }
+@keyframes kill-knife-chop {
+  0% { transform: translate(-60%, -320%) rotate(-42deg); opacity: 0; }
+  70% { transform: translate(-10%, -10%) rotate(18deg); opacity: 1; }
+  100% { transform: translate(-8%, -6%) rotate(14deg); opacity: 1; } }
+
+/* Zwei Bohnen: OPFER (Deine Farbe) + KILLER (rot), Among-Us-Pose */
+#kill-anim .kill-beans { position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center; gap: 4vw;
+  animation: kill-bean-shake 0.5s 0.15s ease-in-out infinite; }
+@keyframes kill-bean-shake { 25% { transform: translateY(-6px); } 75% { transform: translateY(4px); } }
+#kill-anim .kill-bean { position: relative; width: 17vw; height: 22vw; max-width: 120px;
+  max-height: 170px; border-radius: 46% 46% 42% 42% / 58% 58% 44% 44%;
+  border: 4px solid rgba(0,0,0,0.85);
+  box-shadow: inset 0 -1.2vw 0 rgba(0,0,0,0.28); }
+#kill-anim .kill-bean span { position: absolute; top: 30%; left: 22%;
+  width: 44%; height: 26%; border-radius: 999px;
+  background: linear-gradient(180deg, #9ed7f0, #3fa7d6 70%);
+  border: 3px solid rgba(10, 14, 20, 0.9); }
+#kill-anim .kill-bean.killer { transform: rotate(14deg) translateY(-6%); }
+#kill-anim .kill-text { position: absolute; left: 0; right: 0; bottom: 7%;
+  text-align: center; color: #fff; font-size: clamp(18px, 7vw, 40px);
+  text-shadow: 0 3px 0 #7f1d1d, 0 0 18px rgba(239, 68, 68, 0.9);
+  animation: kill-text-pop 0.3s cubic-bezier(.3,1.6,.4,1) 0.25s both; }
+@keyframes kill-text-pop { from { transform: scale(0.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+#kill-anim.kill-anim-out { animation: kill-anim-fade 0.45s ease forwards; }
+@keyframes kill-anim-fade { to { opacity: 0; } }
+
 /* Setz-Punkt-Kalibrier-Minimap */
 #calib-map { width: 100%; height: 44dvh; border-radius: 12px;
   background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255,255,255,0.12);

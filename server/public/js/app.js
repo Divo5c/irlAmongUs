@@ -729,6 +729,9 @@ const App = (() => {
       sfx('kill');
       vibrate([200, 80, 200]);
       if (killedPlayerId === state.playerId) {
+        // Divo (4.11): das Opfer sieht den vollen Under-Sie-Moment —
+        // solo sichtbar, weil game:killed an Crew Leute privat ist.
+        showKillAnim();
         $('game-phase-hint').textContent = t('game.youKilled');
       } else {
         $('game-phase-hint').textContent = t('game.killLanded');
@@ -2919,6 +2922,42 @@ const App = (() => {
     );
     // Abort braucht Klick-Doppelbestätigung (armed-Flag, kein Fehlklick).
     state.abortArmed = false;
+  }
+
+  /**
+   * Among-Us-Kill-Moment (Divo 4.11): roter Slash + Messer + beide Bohnen.
+   * Nur das Opfer ruft das auf — game:killed ist für Crew privat. Tapping
+   * überspringt den Rest der Animation.
+   */
+  function showKillAnim() {
+    const overlay = $('kill-anim');
+    if (!overlay) return;
+    // Farben: OPFER = eigene Spielerfarbe; KILLER = klassisches Impostor-Rot.
+    const victim = overlay.querySelector('.kill-bean.victim');
+    const killer = overlay.querySelector('.kill-bean.killer');
+    if (victim) {
+      victim.style.background = colorChipHex(
+        state.room?.players?.find((p) => p.id === state.playerId)?.colorId,
+      );
+    }
+    if (killer) killer.style.background = '#C51111';
+
+    // Reset laufende Animationen (Re-Trigger beim zweiten Kill).
+    overlay.classList.remove('kill-anim-out', 'hidden');
+    window.clearTimeout(showKillAnim._t);
+
+    const fade = () => {
+      overlay.classList.add('kill-anim-out');
+      showKillAnim._t = window.setTimeout(() => {
+        overlay.classList.remove('kill-anim-out');
+        overlay.classList.add('hidden');
+      }, 450);
+    };
+    showKillAnim._t = window.setTimeout(fade, 1600);
+    overlay.onclick = () => {
+      window.clearTimeout(showKillAnim._t);
+      fade();
+    };
   }
 
   function showToast(message) {
