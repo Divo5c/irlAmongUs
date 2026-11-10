@@ -1418,13 +1418,15 @@ test('admin table: anonymous alive room counts; dead vanish; COMMS blocks', () =
   const afterDeath = store.getAdminTableState('ABC234', crewA);
   assert.deepEqual(afterDeath.counts, { 'r-admin': 1 });
 
-  // Comms-Sabotage blocks the board entirely (Among Us rule).
+  // Comms-Sabotage blocks the board entirely (Among Us rule). Checked from
+  // an IN-ADMIN standpoint: the gate throws first for anyone apart from
+  // the table (this bit a real drift bug: host-1 has no GPS yet).
   store.getRoom('ABC234').sabotage = {
     type: 'COMMS',
     deadline: null,
     panels: null,
   };
-  const blocked = store.getAdminTableState('ABC234', 'host-1');
+  const blocked = store.getAdminTableState('ABC234', crewA);
   assert.equal(blocked.blocked, true);
   assert.deepEqual(blocked.counts, {});
   delete store.getRoom('ABC234').sabotage;
@@ -1435,4 +1437,81 @@ test('admin table: anonymous alive room counts; dead vanish; COMMS blocks', () =
     () => store.getAdminTableState('ABC234', 'host-1'),
     'NOT_AT_ADMIN_TABLE',
   );
+});
+
+describe('Divo-Meeting-Upgrade: meeting kind + unfound deaths (v19.14)', () => {
+  test('emergency reveals unfound kills; reporting counts bodies as found', () => {
+    const store = new RoomStore();
+    createRoomWithPlayers(store, 4);
+    const room = store.getRoom('ABC234');
+    room.config = { ...room.config, killCooldownMs: 0 };
+    const { assignments } = beginGame(store);
+    const impostor = impostorsOf(assignments)[0];
+    const [victimAdmin, victimStreet, walker] = crewmatesOf(assignments);
+
+    // Impostor kills twice: once in the ADMIN room, once on street c1.
+    store.updatePosition('ABC234', impostor, { x: 83, y: 80, confidence: 1 });
+    store.updatePosition('ABC234', victimAdmin, { x: 83, y: 80, confidence: 1 });
+    store.killPlayer('ABC234', impostor, victimAdmin);
+    store.updatePosition('ABC234', impostor, { x: 20, y: 50, confidence: 1 });
+    store.updatePosition('ABC234', victimStreet, { x: 20, y: 50, confidence: 1 });
+    store.killPlayer('ABC234', impostor, victimStreet);
+
+    // Emergency meeting from the surviving crewmate in CAFETERIA:
+    store.updatePosition('ABC234', walker, { x: 21, y: 80, confidence: 1 });
+    const emergency = store.emergencyMeeting('ABC234', walker);
+    assert.equal(emergency.room.meetingKind, 'EMERGENCY');
+    assert.deepEqual(
+      emergency.room.unfoundDeaths.map((death) => death.id),
+      [victimAdmin, victimStreet],
+    );
+    assert.ok(emergency.room.unfoundDeaths.every((death) => !!death.name));
+
+    // Unanimous skips end the meeting; the list SURVIVES the result.
+    store.advanceMeeting('ABC234'); // DISCUSSION -> VOTING
+    store.castVote('ABC234', impostor, { skip: true });
+    const finalVote = store.castVote('ABC234', walker, { skip: true });
+    assert.equal(finalVote.everyoneVoted, true);
+    const ended = store.advanceMeeting('ABC234'); // VOTING -> RESULT
+    assert.equal(ended.type, 'RESULT');
+    assert.equal(store.getRoom('ABC234').status, 'IN_GAME');
+    assert.deepEqual(
+      store.toPublicRoom(store.getRoom('ABC234')).unfoundDeaths ?? [],
+      [],
+    );
+    assert.deepEqual(
+      store.getRoom('ABC234').undiscoveredDeaths,
+      [victimAdmin, victimStreet],
+    );
+
+    // Now the walker REPORTS the admin corpse: found victims drop off the
+    // reveal list, the street body stays unreported ("gestorben, ohne
+    // gefunden zu werden").
+    store.updatePosition('ABC234', walker, { x: 83, y: 80, confidence: 1 },
+      { skipPlausibilityCheck: true });
+    const reported = store.reportBody('ABC234', walker);
+    assert.equal(reported.room.meetingKind, 'REPORT');
+    assert.deepEqual(
+      reported.room.unfoundDeaths.map((death) => death.id),
+      [victimStreet],
+    );
+  });
+
+  test('abort wipes the death ledger: a fresh round starts clean (Divo 4.11)', () => {
+    const store = new RoomStore();
+    createRoomWithPlayers(store, 3);
+    const secondRoom = store.getRoom('ABC234');
+    secondRoom.config = { ...secondRoom.config, killCooldownMs: 0 };
+    const { assignments } = beginGame(store);
+    const impostor = impostorsOf(assignments)[0];
+    const victim = crewmatesOf(assignments)[0];
+    placeNear(store, [impostor, victim]);
+    store.killPlayer('ABC234', impostor, victim);
+    assert.equal(store.getRoom('ABC234').undiscoveredDeaths.length, 1);
+
+    store.abortRound('ABC234');
+    assert.deepEqual(store.getRoom('ABC234').undiscoveredDeaths, []);
+    beginGame(store);
+    assert.deepEqual(store.getRoom('ABC234').undiscoveredDeaths, []);
+  });
 });

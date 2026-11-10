@@ -495,7 +495,9 @@ describe('socket flow security & gameplay', () => {
       assert.ok(Object.keys(state.counts).length >= 1, 'own presence in admin is visible');
 
       // Someone stuck in a corridor gets rejected (no remote peeking).
-      roomStore.updatePosition(code, 'host-1', { x: 20, y: 50, confidence: 1 });
+      // skipPlausibilityCheck: the teleport is a TEST setup step, the
+      // speed gate must not reject the tester's own positionings.
+      roomStore.updatePosition(code, 'host-1', { x: 20, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
       const rejected = waitForEvent(host, 'room:error');
       host.emit('game:admin_table', { code });
       const error = await rejected;
@@ -1034,4 +1036,26 @@ describe('socket flow security & gameplay', () => {
 
     second.disconnect();
   });
+});
+
+test('Divo-Meeting-Intro: only the host confirms the cafeteria check', async () => {
+  const { host, player, code } = await createRoomWithTwoPlayers();
+
+  try {
+    // Host double-tap confirmation arrives as a broadcast for everyone.
+    const confirmSeen = waitForEvent(player, 'game:meeting_confirmed');
+    host.emit('game:meeting_confirm', { code });
+    const confirmed = await confirmSeen;
+    assert.equal(confirmed.code, code);
+
+    // Guests cannot self-confirm (the REAL anti-cheat: nobody fakes
+    // "alle sind da" without the admin).
+    const deniedSeen = waitForEvent(player, 'room:error');
+    player.emit('game:meeting_confirm', { code });
+    const denied = await deniedSeen;
+    assert.equal(denied.code, 'NOT_ROOM_HOST');
+  } finally {
+    host.disconnect();
+    player.disconnect();
+  }
 });

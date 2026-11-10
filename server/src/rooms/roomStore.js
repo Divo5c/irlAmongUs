@@ -348,6 +348,16 @@ class RoomStore {
     return {
       meetingPhase: room.meeting.phase,
       reporterId: room.meeting.reporterId,
+      // Divo-Meeting-Upgrade: Intro braucht Ausloeser-Typ + Leichen-Bilanz.
+      meetingKind: room.meeting.emergency ? 'EMERGENCY' : 'REPORT',
+      ...(room.undiscoveredDeaths?.length
+        ? {
+            unfoundDeaths: room.undiscoveredDeaths
+              .map((id) => getPlayer(room, id))
+              .filter(Boolean)
+              .map((player) => ({ id: player.id, name: player.name })),
+          }
+        : {}),
       ...(room.meeting.discussionEndsAt
         ? { discussionDeadline: room.meeting.discussionEndsAt }
         : {}),
@@ -588,6 +598,8 @@ class RoomStore {
     room.ejectedPlayerIds = [];
     room.lastKillAt = 0;
     room.corpses = [];
+    // Neue Runde = neue Leichen-Bilanz (Divo-Meeting-Upgrade).
+    room.undiscoveredDeaths = [];
     delete room.sabotage;
     room.sabotageCount = 0;
     delete room.sabotageCooldownUntil;
@@ -1019,6 +1031,13 @@ class RoomStore {
       votingEndsAt: null,
       votes: {},
     };
+    // Die gemeldeten Leichen counten als GEFUNDEN — sie tauchen nicht mehr
+    // im "gestorben, ohne gefunden"-Reveal des Meeting-Intros auf.
+    const foundIds = new Set(visible.map((corpse) => corpse.playerId));
+    room.undiscoveredDeaths ??= [];
+    room.undiscoveredDeaths = room.undiscoveredDeaths.filter(
+      (id) => !foundIds.has(id),
+    );
     delete room.sabotage; // a meeting resets soft sabotages (Among Us rule)
     room.status = getEnumValue(RoomStatus, 'MEETING');
     room.updatedAt = new Date().toISOString();
@@ -1246,6 +1265,13 @@ class RoomStore {
       throw new GameError('INVALID_TARGET', 'The impostor cannot kill themselves.');
     }
 
+    // Divo-Meeting-Upgrade: Kills ohne gefundene Leiche tauchen im
+    // Meeting-Intro auf ("gestorben, ohne gefunden zu werden").
+    room.undiscoveredDeaths ??= [];
+    if (!room.undiscoveredDeaths.includes(target.id)) {
+      room.undiscoveredDeaths.push(target.id);
+    }
+
     // Real-life kill: the impostor must PHYSICALLY be at the target
     // (both GPS positions verified by the server, radius configurable).
     const killPositions = this.#positions.get(code);
@@ -1323,6 +1349,8 @@ class RoomStore {
     room.ejectedPlayerIds = [];
     room.lastKillAt = 0;
     room.corpses = [];
+    // Neue Runde = neue Leichen-Bilanz (Divo-Meeting-Upgrade).
+    room.undiscoveredDeaths = [];
     delete room.sabotage;
     room.sabotageCount = 0;
     delete room.sabotageCooldownUntil;
@@ -1365,6 +1393,8 @@ class RoomStore {
     room.ejectedPlayerIds = [];
     room.lastKillAt = 0;
     room.corpses = [];
+    // Neue Runde = neue Leichen-Bilanz (Divo-Meeting-Upgrade).
+    room.undiscoveredDeaths = [];
     delete room.sabotage;
     room.sabotageCount = 0;
     delete room.sabotageCooldownUntil;

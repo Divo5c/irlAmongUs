@@ -743,19 +743,23 @@ const App = (() => {
       state.adminTableLast = { blocked, counts: counts ?? {} };
       drawAdminTable();
     });
-    socket.on('game:meeting_started', (payload) => { closeAdminTable(); renderMeeting(payload); });
+    socket.on('game:meeting_started', (payload) => closeAdminTable() || startMeetingIntro(payload));
     // Host rematch or round abort: land everyone in the lobby screen.
     socket.on('game:reset_done', ({ aborted }) => {
       if (!aborted) return;
       state.role = null;
       state.tasks = [];
       closeAdminTable();
+      endMeetingIntro();
       show('lobby');
       showToast(t('game.aborted'));
     });
     socket.on('game:voting_started', ({ votingDeadline }) => {
       state.votingDeadline = votingDeadline ?? 0;
       startVoteCountdown(state.votingDeadline);
+      // Divo-Intro läuft noch (Host-Check dauert)? Voting ist da -> Intro
+      // überspringen und sofort zur Abstimmung.
+      if (meetingIntroActive) finalizeMeetingForVoting();
       $('meeting-title').textContent = t('meeting.voteTitle');
       $('meeting-title').classList.add('pixel-title');
       if (!state.voted) $('meeting-hint').textContent = deadlineText(votingDeadline);
@@ -856,6 +860,7 @@ const App = (() => {
     socket.on('game:over', ({ winner, players, reason }) => {
       stopGpsLoop();
       closeAdminTable();
+      endMeetingIntro();
       sfx(winner === 'CREWMATE' ? 'victory_crew' : 'victory_impostor');
       $('boundary-banner').classList.add('hidden');
       $('gameover-overlay').classList.remove('hidden');
@@ -3734,14 +3739,213 @@ const App = (() => {
 
   // ------------------------------------------------------------- meeting //
 
+
+  // ---------------------------------------------- Divo-Meeting-Upgrade //
+
+  const MEETING_INTRO_TIMERS = [];
+  let meetingIntroActive = false;
+  let meetingRevealStarted = false;
+  let meetingIntroWatcher = null;
+  let meetingConfirmHandler = null;
+
+  function clearMeetingIntroTimers() {
+    window.clearInterval(meetingIntroWatcher);
+    meetingIntroWatcher = null;
+    while (MEETING_INTRO_TIMERS.length) {
+      window.clearTimeout(MEETING_INTRO_TIMERS.pop());
+    }
+  }
+
+  function endMeetingIntro() {
+    if (!meetingIntroActive) return;
+    meetingIntroActive = false;
+    clearMeetingIntroTimers();
+    if (meetingConfirmHandler) {
+      ensureSocket().off('game:meeting_confirmed', meetingConfirmHandler);
+      meetingConfirmHandler = null;
+    }
+    $('meeting-intro').classList.add('hidden');
+  }
+
+  function meetingIntroShow(condition) {
+    meetingIntroActive = true;
+    $('meeting-intro').classList.remove('hidden');
+    $('meeting-intro-card').className =
+      condition === 'EMERGENCY' ? 'meeting-intro-emergency'
+        : condition === 'REPORT' ? 'meeting-intro-report'
+          : condition === 'AWAIT' ? 'meeting-intro-await'
+            : 'meeting-intro-reveal';
+  }
+
+  function startMeetingIntro(payload) {
+    clearMeetingIntroTimers();
+    endMeetingIntro();
+    meetingIntroActive = true;
+    meetingRevealStarted = false;
+    state.stashedMeeting = payload;
+    state.meetingIntroDone = false;
+    const kind = payload?.emergency === true ? 'EMERGENCY' : 'REPORT';
+    // Joue STING frueher im Ablauf: lieber zweimal als gar nicht.
+    sfx(kind === 'EMERGENCY' ? 'emergency_alarm' : 'report_body');
+    meetingConfirmHandler = () => runMeetingReveal();
+    ensureSocket().once('game:meeting_confirmed', meetingConfirmHandler);
+    meetingIntroShow(kind);
+    $('meeting-intro-content').innerHTML = kind === 'EMERGENCY'
+      ? '<div class="intro-card-inner"><div class="intro-icon">\ud83d\udce3</div>'
+        + '<div class="intro-big">NOTFALL-MEETING</div>'
+        + '<div class="intro-sub">DER NOTFALLKNOPF WURDE GEDR\u00dcCKT</div>'
+        + '<div class="intro-wait-dots"><span></span><span></span><span></span></div></div>'
+      : '<div class="intro-card-inner"><div class="intro-icon">\u2620</div>'
+        + '<div class="intro-big">LEICHE GEFUNDEN</div>'
+        + '<div class="intro-sub">JEDER IN DIE CAFETERIA</div>'
+        + '<div class="intro-wait-dots"><span></span><span></span><span></span></div></div>';
+    MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingAwait, 1600));
+  }
+
+  function stepMeetingAwait() {
+    if (!meetingIntroActive) return;
+    meetingIntroShow('AWAIT');
+    renderMeetingAwaitContent();
+    // 0.8s-Poll: unterwegs <-> cafeteria wechselt live beim Rennen.
+    meetingIntroWatcher = window.setInterval(renderMeetingAwaitContent, 800);
+    // Failsafe: 20s nach Start laeuft das Meeting auch ohne Host-Check.
+    MEETING_INTRO_TIMERS.push(window.setTimeout(() => runMeetingReveal(), 20000));
+  }
+
+  function renderMeetingAwaitContent() {
+    if (!meetingIntroActive || meetingRevealStarted) return;
+    const self = (state.room?.players ?? []).find((p) => p.id === state.playerId);
+    const alive = self?.isAlive !== false;
+    const isHost = self?.isHost === true;
+    const inCafe = roomIdContains('CAFETERIA');
+    if (!inCafe && alive) {
+      $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
+        + '<div class="intro-kicker">DA GEHTS LANG</div>'
+        + '<div class="intro-icon intro-walk">\ud83d\udeb6</div>'
+        + '<div class="intro-big">BEGIB DICH ZUR CAFETERIA</div></div>';
+      return;
+    }
+    if (isHost) {
+      $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
+        + '<div class="intro-kicker">SITZUNG EINBERUFEN</div>'
+        + '<div class="intro-big">ALLE IN DER CAFETERIA?</div>'
+        + '<button id="meeting-admin-confirm" class="intro-confirm-btn">'
+        + 'BEST\u00c4TIGEN</button></div>';
+      setupMeetingAdminConfirm();
+      return;
+    }
+    $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
+      + '<div class="intro-kicker">MEETING</div>'
+      + '<div class="intro-big">WARTEN AUF BEST\u00c4TIGUNG VON ADMIN</div>'
+      + '<div class="intro-wait-dots"><span></span><span></span><span></span></div>'
+      + '<div class="intro-scanner"></div></div>';
+  }
+
+  function setupMeetingAdminConfirm() {
+    const btn = document.getElementById('meeting-admin-confirm');
+    if (!btn) return;
+    let armed = false;
+    btn.addEventListener('click', () => {
+      if (!meetingIntroActive || meetingRevealStarted) return;
+      if (!armed) {
+        armed = true;
+        btn.classList.add('abort-armed');
+        btn.textContent = 'WIRKLICH ALLE DA? NOCHMAL TIPPEN';
+        window.setTimeout(() => {
+          armed = false;
+          if (!btn.isConnected) return;
+          btn.classList.remove('abort-armed');
+          btn.textContent = 'BEST\u00c4TIGEN';
+        }, 1600);
+        return;
+      }
+      sfx('ui_select');
+      ensureSocket().emit('game:meeting_confirm', { code: state.code });
+      btn.disabled = true;
+      btn.textContent = 'BEST\u00c4TIGT \u2014 LOS';
+    });
+  }
+
+  function runMeetingReveal() {
+    if (!meetingIntroActive || meetingRevealStarted) return;
+    meetingRevealStarted = true;
+    clearMeetingIntroTimers();
+    meetingIntroShow('REVEAL');
+    const payload = state.stashedMeeting ?? {};
+    const kind = payload.emergency === true ? 'EMERGENCY' : 'REPORT';
+    const players = payload.players ?? state.room?.players ?? [];
+    const reporterName = players.find((p) => p.id === payload.reporterId)?.name
+      ?? 'Jemand';
+    sfx('ui_select');
+    $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
+      + '<div class="intro-kicker">DAS MEETING BEGINNT</div>'
+      + '<div class="intro-icon">\ud83d\udce3</div>'
+      + `<div class="intro-big">${escapeHtml(reporterName)}</div>`
+      + '<div class="intro-sub">'
+      + (kind === 'EMERGENCY'
+        ? 'HAT DEN NOTFALLKNOPF GEDR\u00dcCKT'
+        : 'HAT DIE LEICHE ENTDECKT')
+      + '</div></div>';
+    MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingUnfound, 2400));
+  }
+
+  function stepMeetingUnfound() {
+    if (!meetingIntroActive) return;
+    const unfound = state.room?.unfoundDeaths ?? [];
+    if (unfound.length) {
+      const players = state.stashedMeeting?.players ?? state.room?.players ?? [];
+      const names = unfound
+        .map((death) => players.find((p) => p.id === death.id)?.name ?? death.name)
+        .map((name) => escapeHtml(name))
+        .join(' \u2022 ');
+      sfx('notification');
+      $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
+        + '<div class="intro-kicker">\u2020</div>'
+        + '<div class="intro-icon">\u2620</div>'
+        + '<div class="intro-big">GESTORBEN \u2014 NICHT GEFUNDEN</div>'
+        + `<div class="intro-sub">${names}</div></div>`;
+      MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingReporterFirst, 2600));
+    } else {
+      stepMeetingReporterFirst();
+    }
+  }
+
+  function stepMeetingReporterFirst() {
+    if (!meetingIntroActive) return;
+    $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
+      + '<div class="intro-kicker">DISKUSSION</div>'
+      + '<div class="intro-icon">\ud83d\udce3</div>'
+      + '<div class="intro-big">REPORTER DARF ZUERST REDEN</div>'
+      + '<div class="intro-sub">DANN DISKUTIERT ALLE ZUSAMMEN</div></div>';
+    MEETING_INTRO_TIMERS.push(window.setTimeout(finishMeetingIntro, 2200));
+  }
+
+  function finishMeetingIntro() {
+    if (!meetingIntroActive) return;
+    endMeetingIntro();
+    state.meetingIntroDone = true;
+    renderMeeting(state.stashedMeeting);
+    state.stashedMeeting = null;
+  }
+
+  function finalizeMeetingForVoting() {
+    endMeetingIntro();
+    state.meetingIntroDone = true;
+    renderMeeting({ phase: 'VOTING' });
+    state.stashedMeeting = null;
+  }
+
+  // ------------------------------------------------------ meeting UI //
+
   function renderMeeting({ phase, reporterId, discussionDeadline }) {
-    // Report -> Todes-Entdeckungs-Sting; Notknopf -> berühmte Hupe.
-    if (reporterId != null) sfx('report_body');
-    else sfx('emergency_alarm');
+    // Sting/Notfall-Hupe spielt das Meeting-INTRO (startMeetingIntro);
+    // dieser Screen baut nur die Konferenz-Tafel.
     $('gameover-overlay').classList.add('hidden');
     $('eject-overlay').classList.add('hidden');
     $('meeting-overlay').classList.remove('hidden');
+    endMeetingIntro();
     state.voted = false;
+    state.myVoteTargetId = null;
     $('vote-reveal-bar').classList.add('hidden');
     $('vote-countdown').textContent = '';
     $('meeting-title').textContent = phase === 'DISCUSSION' ? t('meeting.title') : t('meeting.voteTitle');
@@ -3759,15 +3963,38 @@ const App = (() => {
     }
     openVoteList(
       players,
-      (targetId) => {
-        ensureSocket().emit('game:vote_cast', { code: state.code, targetId });
-        state.voted = true;
-        state.myVoteAt = Date.now();
-        sfx('vote_locked');
-        setVotedHint();
-      },
+      (targetId) => voteFor(targetId),
       'Auf wen abstimmst du?',
     );
+  }
+
+  /** Vote schicken + sofort locken (Apart: zurueckziehen ist serverseitig
+      verboten \u2014 ALREADY_VOTED) und die Tafel auf "abgegeben" schalten. */
+  function voteFor(targetId) {
+    ensureSocket().emit('game:vote_cast', { code: state.code, targetId });
+    state.voted = true;
+    state.myVoteTargetId = targetId;
+    state.myVoteAt = Date.now();
+    sfx('vote_locked');
+    setVotedHint();
+    $('btn-skipvote').classList.add('hidden');
+    $('vote-list').querySelectorAll('.vote-card').forEach((card) => {
+      card.classList.remove('pickable', 'selected');
+      card.querySelector('.vote-confirm')?.remove();
+    });
+    markMyVoteChip();
+  }
+
+  function markMyVoteChip() {
+    if (!state.myVoteTargetId) return;
+    const row = $('vote-list')
+      .querySelector(`[data-player-id="${state.myVoteTargetId}"]`);
+    if (row && !row.querySelector('.vote-done-chip')) {
+      const chip = document.createElement('span');
+      chip.className = 'vote-done-chip';
+      chip.textContent = '\u2714';
+      row.appendChild(chip);
+    }
   }
 
   function setVotedHint() {
@@ -3788,17 +4015,20 @@ const App = (() => {
     voteCountdownTimer = window.setInterval(tick, 500);
   }
 
-  /** Tablet-Karten (Farbchips) + optionaler Skip über das Bild im Header. */
+  /** Tablet-Karten (Farbchips) + Among-Us-Flow: Karte waehlen -> gruen/rot
+      bestaetigen -> Vote gelockt.Reporter kriegt das Megafon-Piktogramm. */
   function openVoteList(candidates, onPick, title = 'Auf wen abstimmst du?') {
     const list = $('vote-list');
     list.innerHTML = '';
     $('meeting-hint').textContent = title;
     $('btn-skipvote').classList.toggle('hidden', !onPick || state.voted);
+    const reporterId = state.room?.reporterId ?? null;
     for (const player of candidates) {
       const isMate = (state.teammates ?? []).some((m) => m.id === player.id);
       const isSelf = player.id === state.playerId;
       const li = document.createElement('li');
       li.className = 'vote-card';
+      li.dataset.playerId = player.id;
       const dead = player.isAlive === false;
       if (dead) li.classList.add('dead');
       const chip = document.createElement('span');
@@ -3809,11 +4039,50 @@ const App = (() => {
       nameSpan.className = `vote-name${isMate ? ' imp-name' : ''}`;
       nameSpan.textContent = `${player.name}${isSelf ? ' (you)' : ''}`;
       li.appendChild(nameSpan);
+      if (player.id === reporterId && !dead) {
+        const mega = document.createElement('span');
+        mega.className = 'vote-megaphone';
+        mega.textContent = '\ud83d\udce3';
+        li.appendChild(mega);
+      }
+      if (state.voted) {
+        markMyVoteChip();
+      }
       if (onPick && !dead && !state.voted) {
         li.classList.add('pickable');
-        li.addEventListener('click', () => {
-          onPick(player.id);
-          list.querySelectorAll('.vote-card').forEach((c) => c.classList.remove('pickable'));
+        li.addEventListener('click', (event) => {
+          if (event.target.closest('.vote-confirm')) return;
+          list.querySelectorAll('.vote-card').forEach((card) => {
+            if (card === li) return;
+            card.classList.remove('selected');
+            card.querySelector('.vote-confirm')?.remove();
+          });
+          li.classList.add('selected');
+          let confirmBar = li.querySelector('.vote-confirm');
+          if (!confirmBar) {
+            confirmBar = document.createElement('span');
+            confirmBar.className = 'vote-confirm';
+            const yes = document.createElement('button');
+            yes.className = 'yes';
+            yes.textContent = '\u2714';
+            const no = document.createElement('button');
+            no.className = 'no';
+            no.textContent = '\u2716';
+            yes.addEventListener('click', (confirmEvent) => {
+              confirmEvent.stopPropagation();
+              voteFor(player.id);
+              li.classList.remove('selected');
+            });
+            no.addEventListener('click', (confirmEvent) => {
+              confirmEvent.stopPropagation();
+              li.classList.remove('selected');
+              confirmBar.remove();
+            });
+            confirmBar.appendChild(yes);
+            confirmBar.appendChild(no);
+            li.appendChild(confirmBar);
+            sfx('ui_select');
+          }
         });
       }
       list.appendChild(li);
@@ -3830,7 +4099,6 @@ const App = (() => {
     $('btn-skipvote').classList.add('hidden');
     setVotedHint();
   });
-
   // ------------------------------------------------------------ bootstrap //
 
   // Service-Worker for offline install (only on secure origins).

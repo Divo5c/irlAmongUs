@@ -267,9 +267,21 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
       }
     });
 
-    /** Host-only rematch: resets a finished game back into the lobby. */
-    socket.on('game:reset', (payload) => {
+    // Divo-Meeting-Intro: der Host (Admin) bestaetigt per Doppelklick, dass
+    // alle physisch in der Cafeteria sind — erst dann startet das Reveal.
+    socket.on('game:meeting_confirm', (payload) => {
       try {
+        const { code } = payload ?? {};
+        assertSocketInRoom(socket, code);
+        assertHost(socket, code);
+        io.to(code).emit('game:meeting_confirmed', { code });
+      } catch (error) {
+        emitRoomError(socket, error);
+      }
+    });
+
+    /** Host-only rematch: resets a finished game back into the lobby. */
+    socket.on('game:reset', (payload) => {      try {
         const { code } = payload ?? {};
         assertSocketInRoom(socket, code);
         assertHost(socket, code);
