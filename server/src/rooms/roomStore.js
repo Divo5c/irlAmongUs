@@ -1210,6 +1210,10 @@ class RoomStore {
 
     const winner = evaluateVictory(room);
     delete room.meeting;
+    // Among-Us-Regel (Divo-Pruefung): nach JEDEM Meeting sind alle Leichen
+    // weg — alte Bodies aus der Runde davor duerfen nach dem Meeting nicht
+    // wieder reportbar sein. undiscoveredDeaths bleibt (nur Reveal-Info).
+    room.corpses = [];
     room.status = getEnumValue(RoomStatus, 'IN_GAME');
     room.updatedAt = new Date().toISOString();
 

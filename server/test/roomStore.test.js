@@ -1440,8 +1440,10 @@ test('admin table: anonymous alive room counts; dead vanish; COMMS blocks', () =
   assert.deepEqual(blocked.counts, {});
   delete store.getRoom('ABC234').sabotage;
 
-  // Standing OUTSIDE admin: rejected (no remote peeking).
-  store.updatePosition('ABC234', 'host-1', { x: 20, y: 50, confidence: 1 });
+  // Standing OUTSIDE admin: rejected (no remote peeking). skipPlausibility:
+  // host may BE crewA (random roles) — admin->corridor teleport in 0ms
+  // trips the speed gate and the GATE is what we test here.
+  store.updatePosition('ABC234', 'host-1', { x: 20, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
   assertGameError(
     () => store.getAdminTableState('ABC234', 'host-1'),
     'NOT_AT_ADMIN_TABLE',
@@ -1451,18 +1453,20 @@ test('admin table: anonymous alive room counts; dead vanish; COMMS blocks', () =
 describe('Divo-Meeting-Upgrade: meeting kind + unfound deaths (v19.14)', () => {
   test('emergency reveals unfound kills; reporting counts bodies as found', () => {
     const store = new RoomStore();
-    createRoomWithPlayers(store, 4);
+    createRoomWithPlayers(store, 5);
     const room = store.getRoom('ABC234');
     room.config = { ...room.config, killCooldownMs: 0 };
     const { assignments } = beginGame(store);
     const impostor = impostorsOf(assignments)[0];
-    const [victimAdmin, victimStreet, walker] = crewmatesOf(assignments);
+    const [victimAdmin, victimStreet, walker, extra] = crewmatesOf(assignments);
 
     // Impostor kills twice: once in the ADMIN room, once on street c1.
     store.updatePosition('ABC234', impostor, { x: 83, y: 80, confidence: 1 });
     store.updatePosition('ABC234', victimAdmin, { x: 83, y: 80, confidence: 1 });
     store.killPlayer('ABC234', impostor, victimAdmin);
-    store.updatePosition('ABC234', impostor, { x: 20, y: 50, confidence: 1 });
+    // Test teleport (admin -> street): plausibility off — the walk is not
+    // the subject; ms-apart updates otherwise trip the speed gate.
+    store.updatePosition('ABC234', impostor, { x: 20, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
     store.updatePosition('ABC234', victimStreet, { x: 20, y: 50, confidence: 1 });
     store.killPlayer('ABC234', impostor, victimStreet);
 
@@ -1479,6 +1483,7 @@ describe('Divo-Meeting-Upgrade: meeting kind + unfound deaths (v19.14)', () => {
     // Unanimous skips end the meeting; the list SURVIVES the result.
     store.advanceMeeting('ABC234'); // DISCUSSION -> VOTING
     store.castVote('ABC234', impostor, { skip: true });
+    store.castVote('ABC234', extra, { skip: true });
     const finalVote = store.castVote('ABC234', walker, { skip: true });
     assert.equal(finalVote.everyoneVoted, true);
     const ended = store.advanceMeeting('ABC234'); // VOTING -> RESULT
@@ -1493,16 +1498,24 @@ describe('Divo-Meeting-Upgrade: meeting kind + unfound deaths (v19.14)', () => {
       [victimAdmin, victimStreet],
     );
 
-    // Now the walker REPORTS the admin corpse: found victims drop off the
-    // reveal list, the street body stays unreported ("gestorben, ohne
-    // gefunden zu werden").
-    store.updatePosition('ABC234', walker, { x: 83, y: 80, confidence: 1 },
-      { skipPlausibilityCheck: true });
-    const reported = store.reportBody('ABC234', walker);
-    assert.equal(reported.room.meetingKind, 'REPORT');
+    // v19.14.2 corpse rule: the meeting CLEANED UP both bodies — nobody
+    // can re-report them (the gap Divo asked to verify).
+    assert.deepEqual(store.getRoom('ABC234').corpses, []);
+
+    // Fresh kill after the meeting: impostor kills the THIRD crewmate on
+    // the same street. Walker (still on c1) reports it — the found victim
+    // drops off the reveal list, the admin + street bodies from BEFORE the
+    // meeting stay "gestorben, ohne gefunden zu werden".
+    store.updatePosition('ABC234', impostor, { x: 20, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
+    store.updatePosition('ABC234', extra, { x: 20, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
+    store.killPlayer('ABC234', impostor, extra);
+    // Walker joins the street (cafeteria -> c1) and reports the fresh kill.
+    store.updatePosition('ABC234', walker, { x: 21, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
+    store.reportBody('ABC234', walker);
     assert.deepEqual(
-      reported.room.unfoundDeaths.map((death) => death.id),
-      [victimStreet],
+      store.toPublicRoom(store.getRoom('ABC234')).unfoundDeaths
+        .map((death) => death.id),
+      [victimAdmin, victimStreet],
     );
   });
 
@@ -1522,5 +1535,81 @@ describe('Divo-Meeting-Upgrade: meeting kind + unfound deaths (v19.14)', () => {
     assert.deepEqual(store.getRoom('ABC234').undiscoveredDeaths, []);
     beginGame(store);
     assert.deepEqual(store.getRoom('ABC234').undiscoveredDeaths, []);
+  });
+});
+
+describe('Divo-Pruefung: Leichen sterben mit dem Meeting (kein Re-Report)', () => {
+  function meetingGame() {
+    const store = new RoomStore();
+    createRoomWithPlayers(store, 5);
+    const room = store.getRoom('ABC234');
+    room.config = { ...room.config, killCooldownMs: 0 };
+    const { assignments } = beginGame(store);
+    return {
+      store,
+      impostor: impostorsOf(assignments)[0],
+      crew: crewmatesOf(assignments),
+    };
+  }
+
+  function skipMeeting(store) {
+    store.advanceMeeting('ABC234'); // DISCUSSION -> VOTING
+    for (const id of ['host-1']) {
+      void id;
+    }
+    const room = store.getRoom('ABC234');
+    for (const player of room.players) {
+      if (player.isAlive) store.castVote('ABC234', player.id, { skip: true });
+    }
+    store.advanceMeeting('ABC234'); // VOTING -> RESULT
+    assert.equal(store.getRoom('ABC234').status, 'IN_GAME');
+  }
+
+  test('after a REPORT meeting the corpse is gone: same-street re-report fails', () => {
+    const { store, impostor, crew } = meetingGame();
+    const [victim, walker, extra] = crew;
+
+    // Impostor kills the victim on street c1 — the corpse lies there.
+    placeNear(store, [impostor, victim]);
+    store.killPlayer('ABC234', impostor, victim);
+
+    // Walker stands on the SAME street and reports it (works once).
+    store.updatePosition('ABC234', walker, { x: 21, y: 50, confidence: 1 });
+    store.reportBody('ABC234', walker);
+    skipMeeting(store);
+
+    // THE GAP Divo asked about: the meeting happened in between — the old
+    // corpse must NOT be reportable again from the same street.
+    store.updatePosition('ABC234', walker, { x: 21, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
+    assert.deepEqual(store.getRoom('ABC234').corpses, []);
+    assertGameError(
+      () => store.reportBody('ABC234', walker),
+      'NO_BODY_NEARBY',
+    );
+    void extra;
+  });
+
+  test('after an EMERGENCY meeting all corpses are cleared too', () => {
+    const { store, impostor, crew } = meetingGame();
+    const [victim, walker, , extra] = crew;
+
+    placeNear(store, [impostor, victim]);
+    store.killPlayer('ABC234', impostor, victim);
+
+    // Emergency from the cafeteria (no body involved at all):
+    store.updatePosition('ABC234', walker, { x: 21, y: 80, confidence: 1 }, { skipPlausibilityCheck: true });
+    store.emergencyMeeting('ABC234', walker);
+    skipMeeting(store);
+
+    // The victim's street corpse did not survive the meeting either.
+    store.updatePosition('ABC234', walker, { x: 21, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
+    assert.deepEqual(store.getRoom('ABC234').corpses, []);
+    assertGameError(
+      () => store.reportBody('ABC234', walker),
+      'NO_BODY_NEARBY',
+    );
+    // ...but the death stays in the reveal ledger (v19.14 intro info) —
+    // NOTE: the internal ledger stores plain ids (public adds names).
+    assert.deepEqual(store.getRoom('ABC234').undiscoveredDeaths, [victim]);
   });
 });
