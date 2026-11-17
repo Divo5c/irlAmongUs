@@ -154,9 +154,21 @@ function createBotEngine(roomStore, {
     }
 
     if (room.status === 'MEETING' && room.meeting?.phase === 'VOTING') {
+      // Divo-Log 18: Bots voteten IM SEKUNDENTAKT -> das Meeting war vorbei,
+      // bevor ein Mensch die Tafel lesen konnte. Jeder Bot wartet jetzt
+      // 2-6s (zusaetzlich zur Diskussion) — das gibt dem Host Zeit zu voten.
+      const meetingStamp = room.meeting.discussionEndsAt ?? 'x';
+      const now = Date.now();
       for (const bot of bots) {
+        const key = `${code}:${meetingStamp}:${bot.id}`;
+        if (!voteDelays.has(key)) {
+          voteDelays.set(key, now + botVoteDelayMs());
+        } else if (now < voteDelays.get(key)) {
+          continue; // dieser Bot tut noch "nachdenken"
+        }
         try {
           castBotVote(code, room, bot.id, aliveIds(room));
+          voteDelays.delete(key);
         } catch (error) {
           // Not our turn / phase changed: ignore this tick.
         }
@@ -506,12 +518,33 @@ function botCrewFixSabotage(code, room, bots) {
     return timers.has(code);
   }
 
+  // Divo-Log 18: Vote-Verzoegerung pro Bot (Tests setzen sie auf 0).
+  let botVoteDelayOverrideMs = null;
+  function botVoteDelayMs() {
+    if (botVoteDelayOverrideMs != null) return botVoteDelayOverrideMs;
+    return 2000 + Math.random() * 4000;
+  }
+  const voteDelays = new Map(); // `${code}:${meeting}:${botId}` -> readyAt
+
   /** Test hook: run one tick synchronously. */
   function tickNow(code) {
     tick(code);
   }
 
-  return { addBots, removeLastBot, ensureRunning, stop, isRunning, tickNow };
+  /** Test hook: pin the random vote delay (0 = bots vote immediately). */
+  function setVoteDelayForTest(ms) {
+    botVoteDelayOverrideMs = ms;
+  }
+
+  return {
+    addBots,
+    removeLastBot,
+    ensureRunning,
+    stop,
+    isRunning,
+    tickNow,
+    setVoteDelayForTest,
+  };
 }
 
 module.exports = { createBotEngine, MOVE_INTERVAL_MS, TASK_TICKS, MAX_BOTS };

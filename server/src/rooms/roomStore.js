@@ -350,6 +350,10 @@ class RoomStore {
       reporterId: room.meeting.reporterId,
       // Divo-Meeting-Upgrade: Intro braucht Ausloeser-Typ + Leichen-Bilanz.
       meetingKind: room.meeting.emergency ? 'EMERGENCY' : 'REPORT',
+      // Divo-Log 18: "ich hab nicht gesehen wen die bots gevotet haben" —
+      // Among Us zeigt pro Spieler OEFFENTLICH, DASS gevoted wurde (grauer
+      // Hacken), nur das Ziel bleibt anonym. Wer, nicht wofuer.
+      votedIds: Object.keys(room.meeting.votes),
       ...(room.undiscoveredDeaths?.length
         ? {
             unfoundDeaths: room.undiscoveredDeaths
@@ -596,7 +600,10 @@ class RoomStore {
     room.tasks = createTasks(room.players, room.config.tasksPerCrewmate, room.map);
     delete room.winner;
     room.ejectedPlayerIds = [];
-    room.lastKillAt = 0;
+    // Divo-Log 18: ein Kill SEKUNDEN nach Rundenstart wirkt wie ein Bug
+    // ("instant umgebracht"). Among-Us-Regel: die Kill-Cooldown laeuft
+    // ab Rundenstart -> lastKillAt = Start, nicht 0 (kill-ready).
+    room.lastKillAt = Date.now();
     room.corpses = [];
     // Neue Runde = neue Leichen-Bilanz (Divo-Meeting-Upgrade).
     room.undiscoveredDeaths = [];

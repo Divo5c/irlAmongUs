@@ -152,6 +152,14 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
         io.to(code).emit('game:started', publicRoom);
 
         // Each player privately receives role, tasks and impostor teammates.
+        // v19.14 (Divo log 18): the round-start kill cooldown runs from
+        // game start — the impostor's button must show the REAL ready time
+        // (killReadyAt used to be hardcoded 0 while the store rejected).
+        const startedRoom = roomStore.getRequiredRoom(code);
+        const startCooldownMs = startedRoom.config.killCooldownMs;
+        const startKillReadyAt = startCooldownMs > 0
+          ? (startedRoom.lastKillAt ?? 0) + startCooldownMs
+          : 0;
         for (const [playerId, role] of Object.entries(assignments)) {
           emitToPlayer(code, playerId, 'game:role_assigned', {
             code,
@@ -159,7 +167,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
             role,
             teammates: teammatesByPlayer[playerId] ?? [],
             tasks: tasksByPlayer[playerId] ?? [],
-            killReadyAt: 0,
+            killReadyAt: startKillReadyAt,
           });
         }
       } catch (error) {

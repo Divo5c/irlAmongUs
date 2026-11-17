@@ -439,6 +439,8 @@ describe('kill & cooldown', () => {
     const { store, impostorIds, crewmateIds } = startedGame(6, { impostorCount: 2 });
     placeNear(store, [impostorIds[0], crewmateIds[0], impostorIds[1], crewmateIds[1]]);
 
+    // v19.14 round-start cooldown is active — simulate elapsed cooldown.
+    store.getRoom('ABC234').lastKillAt = 0;
     const result = store.killPlayer('ABC234', impostorIds[0], crewmateIds[0]);
     assert.equal(result.killedPlayerId, crewmateIds[0]);
     const victim = result.room.players.find((m) => m.id === crewmateIds[0]);
@@ -477,6 +479,9 @@ describe('kill & cooldown', () => {
     const { store, impostorIds, crewmateIds } = startedGame(4, { killCooldownMs: 60 });
     placeNear(store, [impostorIds[0], crewmateIds[0], crewmateIds[1]]);
 
+    // v19.14 round-start cooldown is active — simulate elapsed cooldown so
+    // the FIRST kill lands (the second is the actual cooldown assertion).
+    store.getRoom('ABC234').lastKillAt = 0;
     store.killPlayer('ABC234', impostorIds[0], crewmateIds[0]);
 
     try {
@@ -508,9 +513,13 @@ describe('kill & cooldown', () => {
     const { store, impostorIds, crewmateIds } = startedGame(3, { killCooldownMs: 5000 });
     placeNear(store, [impostorIds[0], crewmateIds[0], crewmateIds[1]]);
 
+    // v19.14: the cooldown runs from ROUND START (Divo log 18) — the
+    // impostor is NOT instantly ready, the gate counts down from start.
     let before = store.toPublicRoom(store.getRoom('ABC234')).killReadyAt;
-    assert.equal(before, 0); // ready at start
+    assert.ok(before > Date.now(), 'killReadyAt active right after start');
 
+    // Simulate elapsed cooldown for the actual kill flow:
+    store.getRoom('ABC234').lastKillAt = 0;
     store.killPlayer('ABC234', impostorIds[0], crewmateIds[0]);
     const during = store.toPublicRoom(store.getRoom('ABC234')).killReadyAt;
     assert.ok(during > Date.now());

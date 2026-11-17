@@ -462,6 +462,8 @@ const App = (() => {
       }
       renderLobbyPlayers(room);
       renderPhaseHint(room);
+      // Meeting-Tafel live: "hat gevotet"-Hacken (Divo-Log 18).
+      patchVotedBadges();
       // Regelkarte (nur Host) + Impostoren-Optionen aktuell halten.
       $('lobby-rules')?.classList.toggle('hidden', !(state.isHost
         && (room.status === 'LOBBY' || room.status === 'MAP_READY')));
@@ -728,6 +730,14 @@ const App = (() => {
     socket.on('game:killed', ({ killedPlayerId }) => {
       sfx('kill');
       vibrate([200, 80, 200]);
+      // Kill-Privacy (v19.13.5): room:updated kommt beim Kill NICHT mehr —
+      // also setzt jedes empfangende Geraet das Opfer lokal auf tot,
+      // sonst bleibt der Report-Button aktiv -> PLAYER_DEAD-Spam (Log 18).
+      const victim = (state.room?.players ?? []).find(
+        (player) => player.id === killedPlayerId,
+      );
+      if (victim) victim.isAlive = false;
+      renderGameHud();
       if (killedPlayerId === state.playerId) {
         // Divo (4.11): das Opfer sieht den vollen Under-Sie-Moment —
         // solo sichtbar, weil game:killed an Crew Leute privat ist.
@@ -756,16 +766,20 @@ const App = (() => {
     });
     socket.on('game:voting_started', ({ votingDeadline }) => {
       state.votingDeadline = votingDeadline ?? 0;
-      startVoteCountdown(state.votingDeadline);
+      startVoteCountdown(state.votingDeadline, 'Voting endet in');
       // Divo-Intro läuft noch (Host-Check dauert)? Voting ist da -> Intro
       // überspringen und sofort zur Abstimmung.
       if (meetingIntroActive) finalizeMeetingForVoting();
       $('meeting-title').textContent = t('meeting.voteTitle');
       $('meeting-title').classList.add('pixel-title');
       if (!state.voted) $('meeting-hint').textContent = deadlineText(votingDeadline);
-      // 10s-Bedenkklackern wie im Original (arbeitsspeicherfreundlich: 1 Timer).
+      // 10s-Bedenkklackern wie im Original (arbeitsspeicherfreundlich: 1
+      // Timer). ISO-String parsen — string minus Zahl war NaN (Log 18).
       window.clearTimeout(state.votingWarnTimer);
-      const warnIn = (votingDeadline ?? 0) - 10000 - Date.now();
+      const votingEndsAtMs = typeof votingDeadline === 'string'
+        ? new Date(votingDeadline).getTime()
+        : votingDeadline;
+      const warnIn = (votingEndsAtMs ?? 0) - 10000 - Date.now();
       if (state.room?.meeting?.phase === 'VOTING' && warnIn > 0 && state.voted !== true) {
         state.votingWarnTimer = window.setTimeout(() => sfx('vote_timer'), warnIn);
       }
@@ -795,7 +809,25 @@ const App = (() => {
       // Eigene Stimme hat schon vote_locked -> nur für fremde klingeln.
       if (Date.now() - (state.myVoteAt ?? 0) > 1500) sfx('vote_cast', 0.6);
       $('meeting-hint').textContent = `${t('meeting.count')} ${votedCount}/${totalVoters}`;
+      patchVotedBadges();
     });
+    // Divo-Log 18: "ich hab nicht gesehen wen die bots gevotet haben" —
+    // Among Us zeigt pro Spieler OEFFENTLICH, DASS er gevoted hat (grauer
+    // Hacken an der Bohnenkarte). Ziel bleibt anonym (Server votedIds).
+    function patchVotedBadges() {
+      if ($('meeting-overlay').classList.contains('hidden')) return;
+      const votedIds = state.room?.votedIds ?? [];
+      if (!votedIds.length) return;
+      for (const id of votedIds) {
+        const card = $('vote-list').querySelector(`[data-player-id="${id}"]`);
+        if (!card || card.querySelector('.voted-chip')) continue;
+        const chip = document.createElement('span');
+        chip.className = 'voted-chip';
+        chip.textContent = '\u2714';
+        card.appendChild(chip);
+      }
+    }
+
     /** Nach der Eject-Show: Hinweise + GPS je nach Rundenstatus. */
     function applyEjectAftermath(ejectedPlayerId, ejectedPlayerName, status) {
       if (ejectedPlayerId === state.playerId) {
@@ -3099,6 +3131,13 @@ const App = (() => {
 
   $('btn-report').addEventListener('click', () => {
     if (state.room?.status === 'MEETING') return;
+    // Divo-Log 18: tote Spieler produzieren nur PLAYER_DEAD-Spam —
+    // Ghosts melden nicht (Among Us), der Button ist eh disabled.
+    const self = (state.room?.players ?? []).find((p) => p.id === state.playerId);
+    if (self?.isAlive === false) {
+      showToast('Geister k\u00f6nnen nicht melden.');
+      return;
+    }
     ensureSocket().emit('game:report', { code: state.code });
     vibrate([80]);
   });
@@ -3782,6 +3821,7 @@ const App = (() => {
     endMeetingIntro();
     meetingIntroActive = true;
     meetingRevealStarted = false;
+    meetingAwaitKey = null;
     state.stashedMeeting = payload;
     state.meetingIntroDone = false;
     const kind = payload?.emergency === true ? 'EMERGENCY' : 'REPORT';
@@ -3812,12 +3852,19 @@ const App = (() => {
     MEETING_INTRO_TIMERS.push(window.setTimeout(() => runMeetingReveal(), 20000));
   }
 
-  function renderMeetingAwaitContent() {
+  let meetingAwaitKey = null;
+  function renderMeetingAwaitContent(force = false) {
     if (!meetingIntroActive || meetingRevealStarted) return;
     const self = (state.room?.players ?? []).find((p) => p.id === state.playerId);
     const alive = self?.isAlive !== false;
     const isHost = self?.isHost === true;
     const inCafe = roomIdContains('CAFETERIA');
+    // 0.8s-Watcher: NUR bei echtem Zustandswechsel neu zeichnen — sonst
+    // zerschießt der Rebuild den armierten Doppel-Tap des Hosts (Log 18:
+    // "Ich als host konnte gar nicht bestätigen").
+    const key = `${inCafe ? 'c' : 'w'}${alive ? 'a' : 'd'}${isHost ? 'h' : 'g'}`;
+    if (!force && key === meetingAwaitKey) return;
+    meetingAwaitKey = key;
     if (!inCafe && alive) {
       $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
         + '<div class="intro-kicker">DA GEHTS LANG</div>'
@@ -3856,7 +3903,7 @@ const App = (() => {
           if (!btn.isConnected) return;
           btn.classList.remove('abort-armed');
           btn.textContent = 'BEST\u00c4TIGEN';
-        }, 1600);
+        }, 3200);
         return;
       }
       sfx('ui_select');
@@ -3947,18 +3994,26 @@ const App = (() => {
     state.voted = false;
     state.myVoteTargetId = null;
     $('vote-reveal-bar').classList.add('hidden');
-    $('vote-countdown').textContent = '';
     $('meeting-title').textContent = phase === 'DISCUSSION' ? t('meeting.title') : t('meeting.voteTitle');
     const players0 = state.room?.players ?? [];
     const stillAlive0 = players0.filter((p) => p.isAlive).length;
-    const reportText = reporterId === state.playerId
-      ? 'Du hast gemeldet!'
-      : `Jemand hat gemeldet \u2014 ${deadlineText(discussionDeadline)}`;
+    const reportText = reporterId === state.playerId ? 'Du hast gemeldet!' : 'Jemand hat gemeldet';
     $('meeting-hint').textContent = `${reportText} \u2014 ${t('game.alive')} ${stillAlive0}`;
+    // Divo-Log 18: KEINE absolute Uhrzeit mehr — der Tisch tickt sekundengenau.
+    if (phase === 'DISCUSSION' && discussionDeadline) {
+      startVoteCountdown(new Date(discussionDeadline).getTime(), 'Diskussion endet in');
+    }
     const players = state.room?.players ?? [];
+    const selfNow = players.find((p) => p.id === state.playerId);
+    const ghostWatches = selfNow?.isAlive === false;
     // Diskussion: Warten, NICHT voten (sonst VOTING_NOT_OPEN-Log-Flood).
     if (phase === 'DISCUSSION') {
       openVoteList(players, null, 'Diskussion \u2014 Voting startet gleich\u2026');
+      return;
+    }
+    // Geister schauen zu (Among Us): kein Vote, kein Skip, kein Fehler-Spam.
+    if (ghostWatches) {
+      openVoteList(players, null, 'Geister schauen zu \u2014 nur Lebende voten.');
       return;
     }
     openVoteList(
@@ -4002,13 +4057,20 @@ const App = (() => {
   }
 
   let voteCountdownTimer = null;
-  function startVoteCountdown(deadline) {
+  // Divo-Log 18: "es gibt keinen countdown sondern es wird nur angezeigt
+  // bis welche minute und stunde" — Meetings ticken jetzt SEKUNDENGENAU.
+  // Der Server schickt ISO-Strings; 'ISO' - Date.now() war NaN -> der
+  // Countdown zeigte "NaNs" (deswegen sah Divo GAR KEINEN Countdown).
+  function startVoteCountdown(deadline, label = 'Ends in') {
     window.clearInterval(voteCountdownTimer);
     const el = $('vote-countdown');
-    if (!deadline) { el.textContent = ''; return; }
+    const endsAt = typeof deadline === 'string'
+      ? new Date(deadline).getTime()
+      : deadline;
+    if (!endsAt || Number.isNaN(endsAt)) { el.textContent = ''; return; }
     const tick = () => {
-      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-      el.textContent = `Ends in: ${left}s`;
+      const left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      el.textContent = `${label}: ${left}s`;
       if (left <= 0) window.clearInterval(voteCountdownTimer);
     };
     tick();
@@ -4087,6 +4149,8 @@ const App = (() => {
       }
       list.appendChild(li);
     }
+    // Karten frisch gebaut -> vorhandene Votes sofort markieren.
+    patchVotedBadges();
     if (!onPick) return; // Diskussion: kein Skip-Vote vor der Abstimmung.
   }
 

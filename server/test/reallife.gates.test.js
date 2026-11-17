@@ -38,6 +38,9 @@ async function setup() {
 
 test('kill outside the configured radius is rejected (real-life distance)', async () => {
   const store = await setup();
+  // v19.14 round-start cooldown (Divo log 18): not the subject here —
+  // simulate elapsed cooldown so ONLY the radius gate is tested.
+  store.getRoom('TESTAB').lastKillAt = 0;
   // Killer at x=0, target at x=10 (10 m apart > 2 m)
   await store.updatePosition('TESTAB', 'impo-1', { x: 10, y: 0, confidence: 1 });
   await sleep(1400);

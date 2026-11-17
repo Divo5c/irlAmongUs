@@ -291,7 +291,7 @@ describe('socket flow security & gameplay', () => {
       assert.match(imp.assignment.tasks[0].id, /-fake$/);
       assert.ok(crew.assignment.tasks.length > 0);
       assert.equal(typeof crew.assignment.tasks[0].type, 'string');
-      assert.equal(imp.assignment.killReadyAt, 0); // ready at game start
+      assert.equal(imp.assignment.killReadyAt > Date.now(), true); // round-start cooldown (Divo log 18)
     } finally {
       host.disconnect();
       player.disconnect();
@@ -401,6 +401,9 @@ describe('socket flow security & gameplay', () => {
 
       const victimSeen = waitForEvent(clients[victimIndex], 'game:killed', 8000);
       const killerSeen = waitForEvent(clients[killerIndex], 'game:killed', 8000);
+      // v19.14 round-start cooldown — simulate elapsed cooldown for the
+      // wire test (the gate itself is covered in roomStore tests).
+      roomStore.getRoom(code).lastKillAt = 0;
       clients[killerIndex].emit('game:kill', { code, targetPlayerId: victimId });
       const victimKill = await victimSeen;
       const killerKill = await killerSeen;
@@ -430,6 +433,9 @@ describe('socket flow security & gameplay', () => {
       const impostorId = impostorIsHost ? 'host-1' : 'player-2';
 
       placePlayersTogether(code, impostorId, victimId);
+      // v19.14 round-start cooldown (Divo log 18): simulate elapsed time so
+      // the kill lands; the cooldown event still fires with a fresh timer.
+      roomStore.getRoom(code).lastKillAt = 0;
 
       let crewCooldownEvents = 0;
       crewmate.on('game:kill_cooldown', () => {
@@ -717,6 +723,8 @@ describe('socket flow security & gameplay', () => {
 
       // Finish the round (1v1 kill -> impostor win):
       placePlayersTogether(code, impostorIsHost ? 'host-1' : 'player-2', victimId);
+      // v19.14 round-start cooldown (Divo log 18): simulate elapsed time.
+      roomStore.getRoom(code).lastKillAt = 0;
       impostor.emit('game:kill', { code, targetPlayerId: victimId });
       await waitForEvent(player, 'game:over');
 

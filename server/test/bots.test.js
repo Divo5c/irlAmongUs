@@ -125,6 +125,8 @@ test('bots vote in meetings so games advance without humans', async () => {
   store.reportBody(code, hostId);
   store.advanceMeeting(code); // DISCUSSION -> VOTING
 
+  // Divo-Log 18: live bots think 2-6s before voting; the test hook pins 0.
+  bots.setVoteDelayForTest(0);
   bots.tickNow(code);
   bots.tickNow(code);
 
@@ -160,6 +162,10 @@ test('impostor bots kill nearby crewmates through the real store gates (v19.13.4
   store.startMapSetup(room.code);
   store.saveMap(room.code, validMap());
   store.startGame(room.code);
+  // v19.14: the round-start kill cooldown (Divo log 18) would block the
+  // bot kill for 20s — the test simulates an elapsed cooldown instead.
+  store.getRoom(room.code).lastKillAt = 0;
+
 
   const internal = store.getRoom(room.code);
   const botImp = internal.players.find((player) => player.isBot);
@@ -168,8 +174,7 @@ test('impostor bots kill nearby crewmates through the real store gates (v19.13.4
     if (player.id !== botImp.id) player.role = 'CREWMATE';
   }
 
-  botsEngine.tickNow(room.code); // place the bot walker
-  events.length = 0;
+  botsEngine.tickNow(room.code); // place the bot walker  events.length = 0;
   // Real tick pacing: back-to-back script ticks make the plausibility gate
   // reject every bot move (0.2 m in ~0 ms => >8 m/s), freezing stored
   // positions while the walker drifts on. Real cadence = accepted moves.

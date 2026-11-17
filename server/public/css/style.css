@@ -1039,6 +1039,8 @@ button.round {
 .vote-confirm .yes { background: linear-gradient(180deg, #4ade80, #16a34a); }
 .vote-confirm .no { background: linear-gradient(180deg, #f87171, #b91c1c); }
 .vote-card .vote-done-chip { margin-left: auto; font-size: 15px; }
+/* Divo-Log 18: oeffentlicher "hat gevotet"-Hacken (Ziel bleibt anonym). */
+.vote-card .voted-chip { margin-left: auto; font-size: 15px; opacity: 0.55; filter: grayscale(1); }
 .vote-reveal-bar { border-top: 2px dashed #7f9dbd; }
 .vote-reveal-line { color: #23425f; }
 
