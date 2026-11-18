@@ -528,6 +528,23 @@ const App = (() => {
       if (room.status === 'GAME_OVER' || room.status === 'IN_GAME' || room.status === 'MEETING') {
         if (active !== 'screen-game') show('game');
       }
+      // v19.15.1: Reconnect/Reload während eines laufenden Meetings —
+      // game:meeting_started kommt nicht nochmal, also den Intro-Zustand
+      // aus room:updated rekonstruieren. Alle landen im selben Schritt.
+      if (room.status === 'MEETING' && !meetingIntroActive && !meetingIntroSynced) {
+        meetingIntroSynced = true;
+        if (room.meetingConfirmed === true || room.meetingPhase === 'VOTING') {
+          // Bereits bestätigt oder schon im Voting -> direkt zur Tafel.
+          renderMeeting({
+            phase: room.meetingPhase,
+            reporterId: room.reporterId ?? null,
+            discussionDeadline: room.discussionDeadline ?? null,
+          });
+        } else {
+          // Im Await (Host hat noch nicht bestätigt) -> Await-Schritt zeigen.
+          startMeetingIntroLate();
+        }
+      }
       // GPS-Sender nur während des echten Spiels (Kill-Gates brauchen Positionen).
       if (room.status === 'IN_GAME') ensureGpsLoop();
       else stopGpsLoop();
@@ -809,6 +826,7 @@ const App = (() => {
       state.tasks = [];
       closeAdminTable();
       endMeetingIntro();
+      state.meetingIntroSynced = false; // v19.15.1: Meeting beendet, nächster Sync moeglich
       show('lobby');
       showToast(t('game.aborted'));
     });
@@ -941,6 +959,7 @@ const App = (() => {
       stopGpsLoop();
       closeAdminTable();
       endMeetingIntro();
+      state.meetingIntroSynced = false; // v19.15.1: Meeting beendet, nächster Sync moeglich
       sfx(winner === 'CREWMATE' ? 'victory_crew' : 'victory_impostor');
       $('boundary-banner').classList.add('hidden');
       $('gameover-overlay').classList.remove('hidden');
@@ -3875,6 +3894,7 @@ const App = (() => {
   let meetingRevealStarted = false;
   let meetingIntroWatcher = null;
   let meetingConfirmHandler = null;
+  let meetingIntroSynced = false; // v19.15.1: Reconnect waehrend Meeting synchronisiert
 
   function clearMeetingIntroTimers() {
     window.clearInterval(meetingIntroWatcher);
@@ -3918,6 +3938,7 @@ const App = (() => {
     state.stashedMeeting = payload;
     state.meetingIntroDone = false;
     state.meetingAwaitActive = true; // Map-Beacon + HUD-Sperre aktiv
+    state.meetingIntroSynced = true; // v19.15.1: Intro läuft, kein Reconnect-Sync nötig
     const kind = payload?.emergency === true ? 'EMERGENCY' : 'REPORT';
     const isReport = kind === 'REPORT';
     sfx(isReport ? 'report_body' : 'emergency_alarm');
@@ -3947,6 +3968,25 @@ const App = (() => {
     renderGameHud();
     drawGameMap();
     MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingAwait, 1600));
+  }
+
+  /** v19.15.1: Spätes Joinen während des Meeting-Await (Reconnect/Reload).
+   * Springt direkt zum Await-Schritt — der Flash ist bei spätestem Einstieg
+   * ohnehin schon vorbei. Alle sehen denselben Zähler und denselben Screen. */
+  function startMeetingIntroLate() {
+    clearMeetingIntroTimers();
+    endMeetingIntro();
+    meetingIntroActive = true;
+    meetingRevealStarted = false;
+    meetingAwaitKey = null;
+    state.meetingIntroSynced = true;
+    state.meetingAwaitActive = true;
+    meetingIntroShow('AWAIT');
+    renderMeetingAwaitContent(true);
+    meetingIntroWatcher = window.setInterval(renderMeetingAwaitContent, 1000);
+    MEETING_INTRO_TIMERS.push(window.setTimeout(() => runMeetingReveal(), 20000));
+    renderGameHud();
+    drawGameMap();
   }
 
   function stepMeetingAwait() {

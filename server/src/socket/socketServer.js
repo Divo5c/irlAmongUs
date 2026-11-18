@@ -282,6 +282,8 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
         const { code } = payload ?? {};
         assertSocketInRoom(socket, code);
         assertHost(socket, code);
+        const room = roomStore.getRequiredRoom(code);
+        if (room.meeting) room.meeting.confirmed = true; // v19.15.1: Reconnect-Schutz
         io.to(code).emit('game:meeting_confirmed', { code });
       } catch (error) {
         emitRoomError(socket, error);

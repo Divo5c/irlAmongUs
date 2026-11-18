@@ -368,6 +368,7 @@ class RoomStore {
       ...(room.meeting.votingEndsAt ? { votingDeadline: room.meeting.votingEndsAt } : {}),
       votedCount: Object.keys(room.meeting.votes).length,
       ...(room.meeting.emergency === undefined ? {} : { meetingAdminCount: room.meeting.meetingAdminCount ?? 0 }),
+      meetingConfirmed: room.meeting.confirmed ?? false,
     };
   }
 
@@ -1009,6 +1010,7 @@ class RoomStore {
       votingEndsAt: null,
       votes: {},
       emergency: true,
+      confirmed: false, // v19.15.1: Host-Bestaetigung (Reconnect-Schutz fuer alle)
       meetingAdminCount: this.#meetingAdminCount(room),
     };
     delete room.sabotage; // a meeting resets soft sabotages (Among Us rule)
