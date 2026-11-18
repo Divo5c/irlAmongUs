@@ -531,8 +531,8 @@ const App = (() => {
       // v19.15.1: Reconnect/Reload während eines laufenden Meetings —
       // game:meeting_started kommt nicht nochmal, also den Intro-Zustand
       // aus room:updated rekonstruieren. Alle landen im selben Schritt.
-      if (room.status === 'MEETING' && !meetingIntroActive && !meetingIntroSynced) {
-        meetingIntroSynced = true;
+      if (room.status === 'MEETING' && !meetingIntroActive && !state.meetingIntroSynced) {
+        state.meetingIntroSynced = true;
         if (room.meetingConfirmed === true || room.meetingPhase === 'VOTING') {
           // Bereits bestätigt oder schon im Voting -> direkt zur Tafel.
           renderMeeting({
@@ -3894,7 +3894,6 @@ const App = (() => {
   let meetingRevealStarted = false;
   let meetingIntroWatcher = null;
   let meetingConfirmHandler = null;
-  let meetingIntroSynced = false; // v19.15.1: Reconnect waehrend Meeting synchronisiert
 
   function clearMeetingIntroTimers() {
     window.clearInterval(meetingIntroWatcher);
@@ -3915,6 +3914,7 @@ const App = (() => {
     $('meeting-intro').classList.add('hidden');
     // Map-Beacon ausmachen, HUD wieder freigeben.
     state.meetingAwaitActive = false;
+    state.meetingIntroSynced = false; // v19.15.1: nächstes Meeting kann erneut syncen
     drawGameMap();
     renderGameHud();
   }
@@ -3984,6 +3984,9 @@ const App = (() => {
     meetingIntroShow('AWAIT');
     renderMeetingAwaitContent(true);
     meetingIntroWatcher = window.setInterval(renderMeetingAwaitContent, 1000);
+    // Bestätigung des Hosts auch für späte Joiner sichtbar machen.
+    meetingConfirmHandler = () => runMeetingReveal();
+    ensureSocket().once('game:meeting_confirmed', meetingConfirmHandler);
     MEETING_INTRO_TIMERS.push(window.setTimeout(() => runMeetingReveal(), 20000));
     renderGameHud();
     drawGameMap();
@@ -4159,6 +4162,12 @@ const App = (() => {
     // Divo-Log 18: KEINE absolute Uhrzeit mehr — der Tisch tickt sekundengenau.
     if (phase === 'DISCUSSION' && discussionDeadline) {
       startVoteCountdown(new Date(discussionDeadline).getTime(), 'Diskussion endet in');
+    }
+    if (phase === 'VOTING') {
+      // Voting-Countdown für alle (auch späte Joiner, die game:voting_started
+      // verpasst haben). startVoteCountdown cleart alte Timer selbst.
+      const votingEndsAt = state.room?.votingDeadline;
+      if (votingEndsAt) startVoteCountdown(votingEndsAt, 'Voting endet in');
     }
     const players = state.room?.players ?? [];
     const selfNow = players.find((p) => p.id === state.playerId);
