@@ -624,6 +624,19 @@ button.round {
   50% { box-shadow: 0 8px 26px rgba(255, 92, 105, 0.55); }
 }
 
+/* v19.15: Meeting-Await Meldung auf dem Spielbildschirm (statt Knöpfe). */
+.meeting-hud-msg {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.85); color: #ffe066; padding: 12px 20px;
+  border-radius: 10px; border: 2px solid #ffd600; z-index: 200;
+  font-family: 'Press Start 2P','Courier New',monospace; font-size: 13px;
+  text-align: center; white-space: nowrap; box-shadow: 0 0 20px rgba(255,214,0,0.4);
+  animation: meeting-hud-pulse 1.6s ease-in-out infinite; }
+.meeting-hud-msg.hidden { display: none; }
+@keyframes meeting-hud-pulse {
+  0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
+  50% { opacity: 0.85; transform: translateX(-50%) scale(1.03); } }
+
 /* Crewmate-Hochkant: Karte dominiert den Screen, Aktionen unten */
 #screen-game.active #live-map-wrap { height: 48dvh; }
 
@@ -994,6 +1007,8 @@ button.round {
   animation: intro-icon-pop 0.6s cubic-bezier(.3,1.6,.4,1) both; }
 @keyframes intro-icon-pop { from { transform: scale(0.2) rotate(-16deg); opacity: 0; } }
 .intro-card-inner .intro-sub { font-size: 9px; line-height: 2; opacity: 0.9; }
+.intro-card-inner .intro-action { font-size: 10px; line-height: 2; opacity: 1;
+  font-weight: 700; color: #ffd600; margin-top: 6px; text-transform: uppercase; }
 .intro-wait-dots { display: inline-flex; gap: 6px; margin-top: 10px; }
 .intro-wait-dots span { width: 12px; height: 12px; border-radius: 99px;
   background: #4ade80; display: inline-block;

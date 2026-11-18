@@ -613,6 +613,13 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
         const killTargets = roomStore.getKillTargetsFor(code, socket.data.playerId);
         socket.emit('game:kill_targets', { code, targets: killTargets });
 
+        // v19.15: live Cafeteria-Zaehler waehrend des Meeting-Await — der
+        // Host sieht den Stand der Anwesenden, ohne selbst im Admin-Raum
+        // stehen zu muessen.
+        if (roomStore.getRequiredRoom(code).status === 'MEETING') {
+          io.to(code).emit('room:updated', roomStore.toPublicRoom(roomStore.getRequiredRoom(code)));
+        }
+
         // Broadcast to admin room if any admin is tracking
         if (roomStore.isAdmin(code, socket.data.playerId) || io.sockets.adapter.rooms.has(`admin:${code}`)) {
           const positions = roomStore.getAdminPositions(code);

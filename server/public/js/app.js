@@ -62,6 +62,30 @@ const App = (() => {
       'meeting.vote': 'Auf wen stimmst du?',
       'meeting.skip': 'Überspringen',
       'meeting.count': 'Abstimmen:',
+      // v19.15 Meeting-Intro (Divo)
+      'meeting.flash.report': 'LEICHE GEFUNDEN',
+      'meeting.flash.report_body': 'Eine Leiche wurde gefunden.',
+      'meeting.flash.report_action': 'Begib dich umgehend zur Cafeteria.',
+      'meeting.flash.emergency': 'NOTFALL-MEETING',
+      'meeting.flash.emergency_body': 'Der Notfallknopf wurde betätigt.',
+      'meeting.flash.emergency_action': 'Begib dich umgehend zur Cafeteria.',
+      'meeting.await.title': 'Sitzung einberufen',
+      'meeting.await.waiting': 'Warten auf Bestätigung von Admin…',
+      'meeting.await.walk': 'Begib dich zur Cafeteria.',
+      'meeting.await.host': 'ALLE IN DER CAFETERIA?',
+      'meeting.await.confirm': 'BESTÄTIGEN',
+      'meeting.await.confirm_armed': 'WIRKLICH ALLE DA? NOCHMAL TIPPEN',
+      'meeting.await.confirmed': 'Bestätigt — los',
+      'meeting.reveal.reporter': 'hat die Leiche entdeckt',
+      'meeting.reveal.reporter_emergency': 'hat den NOTFALLKNOPF gedrückt',
+      'meeting.reveal.reporter_you': 'Du hast die Leiche entdeckt',
+      'meeting.reveal.reporter_you_emergency': 'Du hast den NOTFALLKNOPF gedrückt',
+      'meeting.reveal.unfound': 'GESTORBEN — NICHT GEFUNDEN',
+      'meeting.reveal.first': 'REPORTER DARF ZUERST REDEN',
+      'meeting.reveal.first_sub': 'Dann diskutiert alle zusammen',
+      'meeting.counts.living': 'in der Cafeteria',
+      'meeting.counts.ghosts': 'Geister',
+      'meeting.beacon': 'CAFETERIA',
       // Gameover
       'over.title': 'Spiel vorbei',
       // Toasts
@@ -137,6 +161,30 @@ const App = (() => {
       'meeting.vote': 'Who do you vote for?',
       'meeting.skip': 'Skip vote',
       'meeting.count': 'Voting:',
+      // v19.15 Meeting-Intro (Divo)
+      'meeting.flash.report': 'BODY FOUND',
+      'meeting.flash.report_body': 'A body has been reported.',
+      'meeting.flash.report_action': 'Head to the Cafeteria immediately.',
+      'meeting.flash.emergency': 'EMERGENCY MEETING',
+      'meeting.flash.emergency_body': 'The emergency button was pressed.',
+      'meeting.flash.emergency_action': 'Head to the Cafeteria immediately.',
+      'meeting.await.title': 'Meeting called',
+      'meeting.await.waiting': 'Waiting for Admin confirmation…',
+      'meeting.await.walk': 'Head to the Cafeteria.',
+      'meeting.await.host': 'EVERYONE IN THE CAFETERIA?',
+      'meeting.await.confirm': 'CONFIRM',
+      'meeting.await.confirm_armed': 'REALLY ALL THERE? TAP AGAIN',
+      'meeting.await.confirmed': 'Confirmed — go',
+      'meeting.reveal.reporter': 'found the body',
+      'meeting.reveal.reporter_emergency': 'pressed the EMERGENCY BUTTON',
+      'meeting.reveal.reporter_you': 'You found the body',
+      'meeting.reveal.reporter_you_emergency': 'You pressed the EMERGENCY BUTTON',
+      'meeting.reveal.unfound': 'DIED — NOT FOUND',
+      'meeting.reveal.first': 'REPORTER SPEAKS FIRST',
+      'meeting.reveal.first_sub': 'Then discuss all together',
+      'meeting.counts.living': 'in the Cafeteria',
+      'meeting.counts.ghosts': 'Ghosts',
+      'meeting.beacon': 'CAFETERIA',
       'over.title': 'Game over',
       'toast.outside': 'You are outside the play area! Come back or the round will not count.',
       'toast.taskdone': 'Task completed!',
@@ -1709,7 +1757,24 @@ const App = (() => {
   /** Report/Kill-Buttons je nach Nähe (Kill nur mit echten Zielen). */
   function renderGameHud() {
     const room = state.room;
-    if (!room || room.status !== 'IN_GAME') return;
+    if (!room) return;
+    // v19.15: Meeting-Await — Action-Knöpfe weg, stattdessen Meldung
+    // "Begib dich zur Cafeteria" (nur Host sieht den Bestätigen-Button im
+    // Meeting-Intro-Overlay, nicht im HUD).
+    if (room.status === 'MEETING' && state.meetingAwaitActive) {
+      $('btn-report')?.classList.add('hidden');
+      $('btn-use')?.classList.add('hidden');
+      $('btn-kill')?.classList.add('hidden');
+      const msg = $('meeting-hud-msg');
+      if (msg) {
+        msg.classList.remove('hidden');
+        msg.textContent = t('meeting.await.walk');
+      }
+      return;
+    }
+    const meetingMsg = $('meeting-hud-msg');
+    if (meetingMsg) meetingMsg.classList.add('hidden');
+    if (room.status !== 'IN_GAME') return;
     const imAlive = room.players.find((p) => p.id === state.playerId)?.isAlive;
     const commsDown = room.sabotage?.type === 'COMMS';
     const notImpostor = state.role?.role !== 'IMPOSTOR';
@@ -2752,6 +2817,30 @@ const App = (() => {
       ctx.textAlign = 'center';
       ctx.fillText('\u{1F6E0}\uFE0F', fx, fy + 5);
       ctx.textAlign = 'left';
+    }
+
+    // v19.15: Cafeteria-Beacon waehrend Meeting-Await — roter, dauerhaft
+    // aufblinkender Punkt am Meetings-Tisch, damit alle wissen wohin.
+    if (state.meetingAwaitActive) {
+      const table = cafeteriaTableOf(map);
+      if (table) {
+        const [bx, by] = toPx(table.x, table.y);
+        const pulse = 0.4 + 0.6 * Math.abs(Math.sin(Date.now() / 180));
+        ctx.fillStyle = `rgba(239,68,68,${pulse})`;
+        ctx.beginPath();
+        ctx.arc(bx, by, table.r * scale * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(bx, by, table.r * scale * 0.9, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(t('meeting.beacon'), bx, by + table.r * scale * 0.35);
+        ctx.textAlign = 'left';
+      }
     }
 
     // task markers: echte Server-Koordinaten (roomId/roomName/x/y);
@@ -3804,6 +3893,10 @@ const App = (() => {
       meetingConfirmHandler = null;
     }
     $('meeting-intro').classList.add('hidden');
+    // Map-Beacon ausmachen, HUD wieder freigeben.
+    state.meetingAwaitActive = false;
+    drawGameMap();
+    renderGameHud();
   }
 
   function meetingIntroShow(condition) {
@@ -3824,30 +3917,44 @@ const App = (() => {
     meetingAwaitKey = null;
     state.stashedMeeting = payload;
     state.meetingIntroDone = false;
+    state.meetingAwaitActive = true; // Map-Beacon + HUD-Sperre aktiv
     const kind = payload?.emergency === true ? 'EMERGENCY' : 'REPORT';
-    // Joue STING frueher im Ablauf: lieber zweimal als gar nicht.
-    sfx(kind === 'EMERGENCY' ? 'emergency_alarm' : 'report_body');
+    const isReport = kind === 'REPORT';
+    sfx(isReport ? 'report_body' : 'emergency_alarm');
     meetingConfirmHandler = () => runMeetingReveal();
     ensureSocket().once('game:meeting_confirmed', meetingConfirmHandler);
     meetingIntroShow(kind);
-    $('meeting-intro-content').innerHTML = kind === 'EMERGENCY'
-      ? '<div class="intro-card-inner"><div class="intro-icon">\ud83d\udce3</div>'
-        + '<div class="intro-big">NOTFALL-MEETING</div>'
-        + '<div class="intro-sub">DER NOTFALLKNOPF WURDE GEDR\u00dcCKT</div>'
-        + '<div class="intro-wait-dots"><span></span><span></span><span></span></div></div>'
-      : '<div class="intro-card-inner"><div class="intro-icon">\u2620</div>'
-        + '<div class="intro-big">LEICHE GEFUNDEN</div>'
-        + '<div class="intro-sub">JEDER IN DIE CAFETERIA</div>'
-        + '<div class="intro-wait-dots"><span></span><span></span><span></span></div></div>';
+    const reporterName = (payload?.players ?? state.room?.players ?? [])
+      .find((p) => p.id === payload?.reporterId)?.name ?? '';
+    const me = state.playerId === payload?.reporterId;
+    const big = isReport
+      ? (me ? t('meeting.flash.report_you') : t('meeting.flash.report'))
+      : (me ? t('meeting.flash.reporter_you_emergency') : t('meeting.flash.emergency'));
+    const sub = isReport
+      ? t('meeting.flash.report_body')
+      : t('meeting.flash.emergency_body');
+    const action = t(isReport ? 'meeting.flash.report_action' : 'meeting.flash.emergency_action');
+    const icon = isReport ? '\u2620' : '\ud83d\udce3';
+    $('meeting-intro-content').innerHTML =
+      '<div class="intro-card-inner">'
+      + `<div class="intro-icon">${icon}</div>`
+      + `<div class="intro-big">${escapeHtml(big)}</div>`
+      + `<div class="intro-sub">${escapeHtml(sub)}</div>`
+      + `<div class="intro-sub intro-action">${escapeHtml(action)}</div>`
+      + '<div class="intro-wait-dots"><span></span><span></span><span></span></div>'
+      + '</div>';
+    // HUD-Sperre sofort: Knöpfe weg, Meldung auf der Map.
+    renderGameHud();
+    drawGameMap();
     MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingAwait, 1600));
   }
 
   function stepMeetingAwait() {
     if (!meetingIntroActive) return;
     meetingIntroShow('AWAIT');
-    renderMeetingAwaitContent();
-    // 0.8s-Poll: unterwegs <-> cafeteria wechselt live beim Rennen.
-    meetingIntroWatcher = window.setInterval(renderMeetingAwaitContent, 800);
+    renderMeetingAwaitContent(true);
+    // 1s-Poll: Zaehler aktualisieren waehrend Spieler in die Cafeteria rennen.
+    meetingIntroWatcher = window.setInterval(renderMeetingAwaitContent, 1000);
     // Failsafe: 20s nach Start laeuft das Meeting auch ohne Host-Check.
     MEETING_INTRO_TIMERS.push(window.setTimeout(() => runMeetingReveal(), 20000));
   }
@@ -3859,31 +3966,42 @@ const App = (() => {
     const alive = self?.isAlive !== false;
     const isHost = self?.isHost === true;
     const inCafe = roomIdContains('CAFETERIA');
-    // 0.8s-Watcher: NUR bei echtem Zustandswechsel neu zeichnen — sonst
-    // zerschießt der Rebuild den armierten Doppel-Tap des Hosts (Log 18:
-    // "Ich als host konnte gar nicht bestätigen").
-    const key = `${inCafe ? 'c' : 'w'}${alive ? 'a' : 'd'}${isHost ? 'h' : 'g'}`;
+    const counts = state.room?.meeting?.meetingAdminCount ?? 0;
+    const totalAlive = (state.room?.players ?? []).filter((p) => p.isAlive !== false).length;
+    const ghosts = (state.room?.players ?? []).filter((p) => p.isAlive === false).length;
+    // 1s-Watcher: NUR bei echtem Zustandswechsel neu zeichnen — sonst
+    // zerschießt der Rebuild den armierten Doppel-Tap des Hosts (Log 18).
+    const key = `${inCafe ? 'c' : 'w'}${alive ? 'a' : 'd'}${isHost ? 'h' : 'g'}${counts}`;
     if (!force && key === meetingAwaitKey) return;
     meetingAwaitKey = key;
+
     if (!inCafe && alive) {
+      // Nicht-Host, nicht in Cafeteria -> keine Popup, nur Meldung + Walk-Icon.
       $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
-        + '<div class="intro-kicker">DA GEHTS LANG</div>'
+        + '<div class="intro-kicker">' + escapeHtml(t('meeting.beacon')) + '</div>'
         + '<div class="intro-icon intro-walk">\ud83d\udeb6</div>'
-        + '<div class="intro-big">BEGIB DICH ZUR CAFETERIA</div></div>';
+        + `<div class="intro-big">${escapeHtml(t('meeting.await.walk'))}</div>`
+        + `<div class="intro-sub">${escapeHtml(t('meeting.counts.living'))}: ${counts}/${totalAlive}`
+        + ` \u2022 ${escapeHtml(t('meeting.counts.ghosts'))}: ${ghosts}</div></div>`;
       return;
     }
     if (isHost) {
       $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
-        + '<div class="intro-kicker">SITZUNG EINBERUFEN</div>'
-        + '<div class="intro-big">ALLE IN DER CAFETERIA?</div>'
-        + '<button id="meeting-admin-confirm" class="intro-confirm-btn">'
-        + 'BEST\u00c4TIGEN</button></div>';
+        + '<div class="intro-kicker">' + escapeHtml(t('meeting.await.title')) + '</div>'
+        + `<div class="intro-big">${escapeHtml(t('meeting.await.waiting'))}</div>`
+        + `<div class="intro-sub">${escapeHtml(t('meeting.counts.living'))}: ${counts}/${totalAlive}`
+        + ` \u2022 ${escapeHtml(t('meeting.counts.ghosts'))}: ${ghosts}</div>`
+        + `<button id="meeting-admin-confirm" class="intro-confirm-btn">`
+        + escapeHtml(t('meeting.await.confirm')) + '</button></div>';
       setupMeetingAdminConfirm();
       return;
     }
+    // Nicht-Host, in Cafeteria oder tot -> warten auf Admin.
     $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
-      + '<div class="intro-kicker">MEETING</div>'
-      + '<div class="intro-big">WARTEN AUF BEST\u00c4TIGUNG VON ADMIN</div>'
+      + '<div class="intro-kicker">' + escapeHtml(t('meeting.beacon')) + '</div>'
+      + `<div class="intro-big">${escapeHtml(t('meeting.await.waiting'))}</div>`
+      + `<div class="intro-sub">${escapeHtml(t('meeting.counts.living'))}: ${counts}/${totalAlive}`
+      + ` \u2022 ${escapeHtml(t('meeting.counts.ghosts'))}: ${ghosts}</div>`
       + '<div class="intro-wait-dots"><span></span><span></span><span></span></div>'
       + '<div class="intro-scanner"></div></div>';
   }
@@ -3897,19 +4015,19 @@ const App = (() => {
       if (!armed) {
         armed = true;
         btn.classList.add('abort-armed');
-        btn.textContent = 'WIRKLICH ALLE DA? NOCHMAL TIPPEN';
+        btn.textContent = t('meeting.await.confirm_armed');
         window.setTimeout(() => {
           armed = false;
           if (!btn.isConnected) return;
           btn.classList.remove('abort-armed');
-          btn.textContent = 'BEST\u00c4TIGEN';
+          btn.textContent = t('meeting.await.confirm');
         }, 3200);
         return;
       }
       sfx('ui_select');
       ensureSocket().emit('game:meeting_confirm', { code: state.code });
       btn.disabled = true;
-      btn.textContent = 'BEST\u00c4TIGT \u2014 LOS';
+      btn.textContent = t('meeting.await.confirmed');
     });
   }
 
@@ -3923,16 +4041,15 @@ const App = (() => {
     const players = payload.players ?? state.room?.players ?? [];
     const reporterName = players.find((p) => p.id === payload.reporterId)?.name
       ?? 'Jemand';
+    const me = state.playerId === payload.reporterId;
     sfx('ui_select');
     $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
       + '<div class="intro-kicker">DAS MEETING BEGINNT</div>'
       + '<div class="intro-icon">\ud83d\udce3</div>'
-      + `<div class="intro-big">${escapeHtml(reporterName)}</div>`
-      + '<div class="intro-sub">'
-      + (kind === 'EMERGENCY'
-        ? 'HAT DEN NOTFALLKNOPF GEDR\u00dcCKT'
-        : 'HAT DIE LEICHE ENTDECKT')
-      + '</div></div>';
+      + `<div class="intro-big">${escapeHtml(me ? t('meeting.reveal.reporter_you') : reporterName)}</div>`
+      + `<div class="intro-sub">${escapeHtml(me
+        ? (kind === 'EMERGENCY' ? t('meeting.reveal.reporter_you_emergency') : t('meeting.reveal.reporter_you'))
+        : (kind === 'EMERGENCY' ? t('meeting.reveal.reporter_emergency') : t('meeting.reveal.reporter')))}</div></div>`;
     MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingUnfound, 2400));
   }
 
@@ -3949,7 +4066,7 @@ const App = (() => {
       $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
         + '<div class="intro-kicker">\u2020</div>'
         + '<div class="intro-icon">\u2620</div>'
-        + '<div class="intro-big">GESTORBEN \u2014 NICHT GEFUNDEN</div>'
+        + `<div class="intro-big">${escapeHtml(t('meeting.reveal.unfound'))}</div>`
         + `<div class="intro-sub">${names}</div></div>`;
       MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingReporterFirst, 2600));
     } else {
@@ -3962,8 +4079,8 @@ const App = (() => {
     $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
       + '<div class="intro-kicker">DISKUSSION</div>'
       + '<div class="intro-icon">\ud83d\udce3</div>'
-      + '<div class="intro-big">REPORTER DARF ZUERST REDEN</div>'
-      + '<div class="intro-sub">DANN DISKUTIERT ALLE ZUSAMMEN</div></div>';
+      + `<div class="intro-big">${escapeHtml(t('meeting.reveal.first'))}</div>`
+      + `<div class="intro-sub">${escapeHtml(t('meeting.reveal.first_sub'))}</div></div>`;
     MEETING_INTRO_TIMERS.push(window.setTimeout(finishMeetingIntro, 2200));
   }
 

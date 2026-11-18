@@ -367,7 +367,18 @@ class RoomStore {
         : {}),
       ...(room.meeting.votingEndsAt ? { votingDeadline: room.meeting.votingEndsAt } : {}),
       votedCount: Object.keys(room.meeting.votes).length,
+      ...(room.meeting.emergency === undefined ? {} : { meetingAdminCount: room.meeting.meetingAdminCount ?? 0 }),
     };
+  }
+
+  /** v19.15: lebende Spieler aktuell im Cafeteria-Raum (Admin-Zaehler). */
+  #meetingAdminCount(room) {
+    const positions = this.#positions.get(room.code) ?? new Map();
+    let count = 0;
+    for (const [residentId] of positions) {
+      if (this.#playerRoomIdByType(room.code, residentId, 'CAFETERIA')) count += 1;
+    }
+    return count;
   }
 
   #publicKillInfo(room) {
@@ -998,6 +1009,7 @@ class RoomStore {
       votingEndsAt: null,
       votes: {},
       emergency: true,
+      meetingAdminCount: this.#meetingAdminCount(room),
     };
     delete room.sabotage; // a meeting resets soft sabotages (Among Us rule)
     room.status = getEnumValue(RoomStatus, 'MEETING');
@@ -1037,6 +1049,7 @@ class RoomStore {
       discussionEndsAt: new Date(now + room.config.discussionDurationMs).toISOString(),
       votingEndsAt: null,
       votes: {},
+      meetingAdminCount: this.#meetingAdminCount(room),
     };
     // Die gemeldeten Leichen counten als GEFUNDEN — sie tauchen nicht mehr
     // im "gestorben, ohne gefunden"-Reveal des Meeting-Intros auf.

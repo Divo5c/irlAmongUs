@@ -1613,3 +1613,55 @@ describe('Divo-Pruefung: Leichen sterben mit dem Meeting (kein Re-Report)', () =
     assert.deepEqual(store.getRoom('ABC234').undiscoveredDeaths, [victim]);
   });
 });
+
+describe('v19.15: meetingAdminCount — Cafeteria-Zaehler fuer Admin-Bestaetigung', () => {
+  test('zaehlt lebende + Geister im Cafeteria-Raum, Korridore nicht', () => {
+    const store = new RoomStore();
+    createRoomWithPlayers(store, 5);
+    const room = store.getRoom('ABC234');
+    room.config = { ...room.config, killCooldownMs: 0 };
+    const { assignments } = beginGame(store);
+    const impostor = impostorsOf(assignments)[0];
+    const crew = crewmatesOf(assignments);
+    const [c1, c2, c3, ghost] = crew;
+
+    // Cafeteria-Raum-ID aus der Map ermitteln.
+    const cafeId = (room.map?.rooms ?? []).find((r) => r.type === 'CAFETERIA')?.id;
+    assert.ok(cafeId, 'CAFETERIA-Raum in der Map');
+
+    // Alle 5 auf den Cafeteria-Punkt setzen (Centre etwa 21, 80) — VOR dem
+    // Meeting, denn waehrend des Meetings sind Position-Updates gesperrt.
+    for (const id of [impostor, c1, c2, c3, ghost]) {
+      store.updatePosition('ABC234', id, { x: 21, y: 80, confidence: 1 }, { skipPlausibilityCheck: true });
+    }
+    // Einer davon tot machen -> Geister zaehlen trotzdem (Divo-Wunsch).
+    store.getRoom('ABC234').players.find((p) => p.id === ghost).isAlive = false;
+
+    // Emergency-Meeting starten -> meetingAdminCount muss 5 sein (4 lebend + 1 Geist).
+    const emergency = store.emergencyMeeting('ABC234', c1);
+    assert.equal(emergency.room.meetingAdminCount, 5, 'alle 5 im Cafeteria-Raum (inkl. Geist)');
+
+    // Einer raus aus dem Raum auf Korridor -> 4. Meeting zuruecksetzen,
+    // Positionen neu setzen, neues Meeting.
+    store.getRoom('ABC234').status = 'IN_GAME';
+    delete store.getRoom('ABC234').meeting;
+    store.getRoom('ABC234').emergencyUsed = {};
+    store.updatePosition('ABC234', c2, { x: 20, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
+    // c1 bleibt in der Cafeteria und ruft das naechste Meeting.
+    store.emergencyMeeting('ABC234', c1);
+    const after = store.getRoom('ABC234').meeting?.meetingAdminCount;
+    assert.equal(after, 4, 'einer raus -> 4');
+
+    // Nur einer im Raum -> 1. Alle ausser c2 raus aus der Cafeteria.
+    store.getRoom('ABC234').status = 'IN_GAME';
+    delete store.getRoom('ABC234').meeting;
+    store.getRoom('ABC234').emergencyUsed = {};
+    for (const id of [impostor, c1, c3, ghost]) {
+      store.updatePosition('ABC234', id, { x: 20, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
+    }
+    // c2 ist jetzt in der Cafeteria und ruft das Meeting.
+    store.updatePosition('ABC234', c2, { x: 21, y: 80, confidence: 1 }, { skipPlausibilityCheck: true });
+    store.emergencyMeeting('ABC234', c2);
+    assert.equal(store.getRoom('ABC234').meeting?.meetingAdminCount, 1, 'nur einer im Raum');
+  });
+});
