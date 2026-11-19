@@ -1,11 +1,13 @@
 const { readServerConfig } = require('./config/serverConfig');
+const { createHostAccess } = require('./config/hostAccess');
 const { createHttpServer } = require('./httpServer');
 const { RoomStore } = require('./rooms/roomStore');
 const { createSocketServer } = require('./socket/socketServer');
 
 const roomStore = new RoomStore();
-const server = createHttpServer(roomStore);
-const io = createSocketServer(server, roomStore);
+const hostAccess = createHostAccess(process.env.RLAUS_HOST_DEVICE_HASH);
+const server = createHttpServer(roomStore, { hostAccess });
+const io = createSocketServer(server, roomStore, { hostAccess });
 const { serverPort, serverHost } = readServerConfig();
 
 server.listen(serverPort, serverHost, () => {

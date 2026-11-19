@@ -3,7 +3,7 @@ const { Server } = require('socket.io');
 const { RoomStoreError, groupTasksByPlayer } = require('../rooms/roomStore');
 const { createBotEngine } = require('../game/bots');
 
-function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 } = {}) {
+function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000, hostAccess } = {}) {
   const io = new Server(httpServer);
   // Hooks for the bot engine: game over + sabotage need the socket-layer
   // chains (broadcastGameOver / deadline timer are defined below).
@@ -64,6 +64,9 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000 
 
     socket.on('room:create', (payload) => {
       try {
+        if (hostAccess && !hostAccess.allowed(socket.request)) {
+          throw new RoomStoreError('HOST_DEVICE_REQUIRED', 'Only an approved device can create rooms.');
+        }
         const room = roomStore.createRoom(payload ?? {});
         bindSocketToPlayer(socket, room.code, room.hostId);
         socket.emit('room:created', roomStore.toPublicRoom(room));

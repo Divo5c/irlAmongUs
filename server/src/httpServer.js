@@ -10,7 +10,7 @@ const {
   checkRejoin,
 } = require('./api/roomsController');
 const { getStreets } = require('./api/osmStreetsController');
-const { sendJson } = require('./utils/http');
+const { readJsonBody, sendJson } = require('./utils/http');
 
 /** Static assets for the PWA are served from public/ (same origin, no CORS). */
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -61,12 +61,29 @@ function serveStaticFile(response, relativePath) {
   });
 }
 
-function createHttpServer(roomStore) {
+function createHttpServer(roomStore, { hostAccess } = {}) {
   return http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, 'http://localhost');
       if (request.method === 'GET' && url.pathname === '/health') {
         sendJson(response, 200, { status: 'ok' });
+        return;
+      }
+
+      if (url.pathname === '/host-access' && request.method === 'GET') {
+        response.setHeader('Cache-Control', 'no-store');
+        sendJson(response, 200, { canHost: hostAccess?.allowed(request) ?? true });
+        return;
+      }
+      if (url.pathname === '/host-access' && request.method === 'POST') {
+        response.setHeader('Cache-Control', 'no-store');
+        const body = await readJsonBody(request);
+        const cookie = hostAccess?.activate(body?.token);
+        if (!cookie) {
+          sendJson(response, 403, { error: 'Device activation denied.' });
+          return;
+        }
+        response.writeHead(204, { 'Set-Cookie': cookie }).end();
         return;
       }
 
@@ -100,6 +117,10 @@ function createHttpServer(roomStore) {
       }
 
       if (request.method === 'POST' && url.pathname === '/rooms') {
+        if (hostAccess && !hostAccess.allowed(request)) {
+          sendJson(response, 403, { error: 'Only an approved device can create rooms.' });
+          return;
+        }
         await createRoom(request, response, roomStore);
         return;
       }

@@ -274,6 +274,7 @@ const App = (() => {
 
   const state = {
     socket: null,
+    canHost: false,
     name: '',
     playerId: '',
     token: '',
@@ -670,6 +671,12 @@ const App = (() => {
     socket.on('room:error', ({ code: errorCode, message, details }) => {
       // Server meldet teils englische Fachtexte — unten deutsche Klartexte.
       logAppError('server', `${errorCode}: ${message ?? ''}`);
+      if (errorCode === 'HOST_DEVICE_REQUIRED') {
+        state.canHost = false;
+        $('btn-host').hidden = true;
+        errorHome('Dieser Browser ist fürs Erstellen von Lobbys noch nicht freigeschaltet.');
+        return;
+      }
       if (errorCode === 'AUTH_FAILED') {
         // Session abgelaufen (z. B. Server-Restart): sauber raus statt
         // Position-Spam; GPS aus, Lobby zeigen.
@@ -1188,7 +1195,34 @@ const App = (() => {
 
   // ---------------------------------------------------------------- home //
 
+  async function refreshHostAccess() {
+    const url = new URL(location.href);
+    const activation = new URLSearchParams(url.hash.slice(1));
+    const token = activation.get('host');
+    if (activation.has('host')) {
+      activation.delete('host');
+      url.hash = activation.toString();
+      history.replaceState(null, '', url);
+    }
+    try {
+      if (token) {
+        const response = await fetch('/host-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+        if (response.status !== 204) errorHome('Dieser Freischaltlink ist ungültig.');
+      }
+      const response = await fetch('/host-access', { cache: 'no-store' });
+      state.canHost = response.ok && (await response.json()).canHost === true;
+      $('btn-host').hidden = !state.canHost;
+    } catch {
+      if (token) errorHome('Die Freischaltung ist gerade nicht erreichbar. Öffne den Link erneut, sobald du online bist.');
+    }
+  }
+
   async function joinRoom({ asHost }) {
+    if (asHost && !state.canHost) return;
     const name = $('player-name').value.trim() || 'Spieler';
     state.name = name;
     localStorage.setItem('rlaus_name', name);
@@ -4483,6 +4517,9 @@ const App = (() => {
   });
 
   // ------------------------------------------------------------ bootstrap //
+
+  void refreshHostAccess();
+  window.addEventListener('online', refreshHostAccess);
 
   // Service-Worker for offline install (only on secure origins).
   if ('serviceWorker' in navigator) {
