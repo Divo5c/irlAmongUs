@@ -3,7 +3,7 @@
  * All server interaction runs through Socket.IO with the same event
  * protocol as the Flutter client. UI language: German.
  */
-import { avatar, element, icon } from './ui.js';
+import { avatar, buttonArt, element, icon } from './ui.js';
 
 const App = (() => {
   const $ = (id) => document.getElementById(id);
@@ -945,10 +945,8 @@ const App = (() => {
       for (const id of votedIds) {
         const card = [...$('vote-list').children].find((row) => row.dataset.playerId === id);
         if (!card || card.querySelector('.voted-chip')) continue;
-        const chip = icon('check', 'voted-chip');
-        chip.removeAttribute('aria-hidden');
-        chip.setAttribute('role', 'img');
-        chip.setAttribute('aria-label', 'Hat abgestimmt');
+        const chip = buttonArt('voted', 'Hat abgestimmt');
+        chip.classList.add('voted-chip');
         card.appendChild(chip);
       }
     }
@@ -2179,6 +2177,7 @@ const App = (() => {
       const btn = document.createElement('button');
       btn.className = 'task-tap-btn sabotage-choice';
       btn.append(
+        buttonArt('sabotage-' + type.toLowerCase()),
         element('strong', '', meta[type]?.label ?? type),
         element('small', '', meta[type]?.hint ?? ''),
       );
@@ -4275,10 +4274,8 @@ const App = (() => {
   function markMyVoteChip() {
     const row = [...$('vote-list').children].find((card) => card.dataset.playerId === state.playerId);
     if (row && !row.querySelector('.voted-chip')) {
-      const chip = icon('check', 'voted-chip');
-      chip.removeAttribute('aria-hidden');
-      chip.setAttribute('role', 'img');
-      chip.setAttribute('aria-label', 'Hat abgestimmt');
+      const chip = buttonArt('voted', 'Hat abgestimmt');
+      chip.classList.add('voted-chip');
       row.appendChild(chip);
     }
   }

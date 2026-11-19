@@ -1,7 +1,7 @@
 /* App shell: install (add to home screen). Network-first so deploys land
    immediately; cache only as offline fallback. */
-const CACHE = 'rlaus-shell-v73';
-const VERSION = '19.17.0';
+const CACHE = 'rlaus-shell-v74';
+const VERSION = '19.17.1';
 const ASSETS = [
   '/',
   '/css/style.css',
@@ -22,6 +22,23 @@ const ASSETS = [
   '/manifest.webmanifest',
   '/icons/terminal.svg',
   '/img/terminal.svg',
+  '/img/among-us/btn-use.png',
+  '/img/among-us/btn-kill.png',
+  '/img/among-us/btn-report.png',
+  '/img/among-us/btn-sabotage.png',
+  '/img/among-us/btn-admin.png',
+  '/img/among-us/btn-map.png',
+  '/img/among-us/btn-settings.png',
+  '/img/among-us/btn-close.png',
+  '/img/among-us/btn-skip-vote.png',
+  '/img/among-us/badge-voted.png',
+  '/img/among-us/sabotage-reactor.png',
+  '/img/among-us/sabotage-oxygen.png',
+  '/img/among-us/sabotage-lights.png',
+  '/img/among-us/btn-start.png',
+  '/img/among-us/btn-proceed.png',
+  '/img/among-us/btn-play-again.png',
+  '/img/among-us/btn-quit.png',
 ];
 
 self.addEventListener('install', (event) => {

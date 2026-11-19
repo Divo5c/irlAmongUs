@@ -171,6 +171,13 @@
     color: var(--text-primary); background: var(--panel-fill); box-shadow: var(--shadow-1);
   }
   .round-btn.icon-btn:disabled { opacity: 1; color: var(--text-secondary); border-color: var(--panel-border-dim); box-shadow: none; }
+  .round-btn.icon-btn .ui-art {
+    --ui-art-width: var(--ui-art-action-size);
+    --ui-art-height: var(--ui-art-action-size);
+  }
+  .gear-btn:active:enabled, .btn-map-zoom:active:enabled, .task-close:active:enabled {
+    transform: translateY(var(--line-3));
+  }
   .round-btn.icon-btn.on-cooldown {
     border-color: transparent;
     background: linear-gradient(var(--panel-fill), var(--panel-fill)) padding-box,
@@ -287,7 +294,9 @@
   .vote-card .crew-avatar, .vote-results-item .crew-avatar { width: var(--avatar-s); height: var(--avatar-s); }
   .vote-card .vote-name { color: var(--meeting-ink); }
   .vote-card .vote-megaphone { color: var(--timer-ink); width: var(--space-4); }
-  .vote-card .voted-chip { position: static; color: var(--meeting-ink); width: var(--space-4); height: var(--space-4); }
+  .vote-card .voted-chip {
+    position: static; width: var(--ui-art-badge-size); height: var(--ui-art-badge-size);
+  }
   .vote-card .vote-confirm { grid-column: 1 / -1; margin: 0; display: flex; gap: var(--space-1); }
   .vote-card .vote-confirm button { flex: 1; color: var(--text-primary); min-width: var(--touch-target); min-height: var(--touch-target); }
   .vote-card .vote-confirm .yes { background: var(--space-700); }

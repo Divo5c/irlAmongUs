@@ -191,8 +191,11 @@
 
 /* Sabotage-Auswahl (Impostor) */
 .task-card.sabotage-select { display: flex; flex-direction: column; gap: var(--size-10px); padding: var(--size-16px); }
-.sabotage-choice { display: flex; flex-direction: column; gap: var(--size-3px); padding: var(--size-12px);
+.sabotage-choice { display: grid; grid-template-columns: auto minmax(0, 1fr);
+  align-items: center; column-gap: var(--space-3); row-gap: var(--space-1); padding: var(--size-12px);
   background: var(--tone-124-58-237-0p25); border: var(--size-1px) solid var(--tone-216-180-254-0p4);
   color: var(--tone-f5f3ff); text-align: left; border-radius: var(--size-12px); cursor: pointer; }
 .sabotage-choice small { font-weight: 400; opacity: 0.75; }
+.sabotage-choice .ui-art { grid-row: 1 / span 2; }
+.sabotage-choice:active:enabled { transform: translateY(var(--line-3)); }
 }

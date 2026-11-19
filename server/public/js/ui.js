@@ -17,6 +17,17 @@ export function icon(name, className = 'icon') {
   return svg;
 }
 
+export function buttonArt(name, label) {
+  const art = element('span', `ui-art ui-art--${name}`);
+  if (label) {
+    art.setAttribute('role', 'img');
+    art.setAttribute('aria-label', label);
+  } else {
+    art.setAttribute('aria-hidden', 'true');
+  }
+  return art;
+}
+
 export function avatar(colorId, dead = false) {
   const svg = icon(dead ? 'ghost' : 'crew', 'crew-avatar');
   svg.dataset.crewColor = colorId ?? 'gray';

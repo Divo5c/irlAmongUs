@@ -38,7 +38,7 @@
         <div class="topbar">
       <span class="room-code" id="lobby-code">&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;</span>
       <button class="ghost small" id="btn-share">Code kopieren</button>
-      <button id="btn-lobby-settings" class="gear-btn" aria-label="Haupt-Einstellungen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#settings"></use></svg></button>
+      <button id="btn-lobby-settings" class="gear-btn" aria-label="Haupt-Einstellungen"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
     </div>
     <h2>Lobby</h2>
     <ul id="lobby-players" class="player-list"></ul>
@@ -132,10 +132,10 @@
     </div>
     <button id="btn-load-cached-lobby" class="secondary big hidden"></button>
     <button id="btn-edit-map" class="primary big">Karte bearbeiten / neue Stra&szlig;en laden</button>
-    <button id="btn-start-game" class="primary big btn-start-game">Spiel starten</button>
+    <button id="btn-start-game" class="primary big btn-start-game button-art ui-art--start">Spiel starten</button>
   </div>
     <p id="lobby-waiting" class="hint">Warte auf den Host.</p>
-    <button class="ghost" id="btn-leave">Lobby verlassen</button>
+    <button class="ghost button-art ui-art--quit" id="btn-leave">Lobby verlassen</button>
   </section>
 
   <!-- ============================ MAP EDITOR ============================ -->
@@ -169,7 +169,7 @@
           <button data-room-type="WEAPONS">Weapons</button>
         </div>
       </div>
-      <button id="btn-map-settings" class="gear-btn" aria-label="Haupt-Einstellungen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#settings"></use></svg></button>
+      <button id="btn-map-settings" class="gear-btn" aria-label="Haupt-Einstellungen"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
     </div>
     <div class="map-frame">
       <canvas class="map-canvas" id="map-canvas"></canvas>
@@ -194,7 +194,7 @@
     <div class="topbar">
       <span class="hint game-phase-hint" id="game-phase-hint"></span>
       <button id="btn-abort" class="gear-btn hidden btn-abort" aria-label="Runde abbrechen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#flag"></use></svg></button>
-      <button id="btn-settings" class="gear-btn btn-settings" aria-label="Haupt-Einstellungen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#settings"></use></svg></button>
+      <button id="btn-settings" class="gear-btn btn-settings" aria-label="Haupt-Einstellungen"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
     </div>
     <div class="task-progress-strip" id="task-progress-strip" role="progressbar" aria-label="Teamaufgaben" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
       <div class="task-progress-fill" id="task-progress-fill"></div>
@@ -207,7 +207,7 @@
       <div id="role-card" class="role-card crew">
         <div class="role-card-title" id="role-card-title">CREWMATE</div>
         <div class="role-card-detail" id="role-card-detail"></div>
-        <button id="role-continue" class="role-continue primary">Weiter</button>
+        <button id="role-continue" class="role-continue primary button-art ui-art--proceed">Weiter</button>
       </div>
     </div>
     <!-- Under-Sie-Moment (Among Us): NUR für das Opfer selbst sichtbar,
@@ -229,7 +229,7 @@
     <div class="sabotage-banner-line" id="sabotage-banner-line"><div id="sabotage-banner" class="hidden sabotage-banner"></div></div>
     <div class="live-map-wrap" id="live-map-wrap">
       <canvas class="game-map" id="game-map"></canvas>
-      <button class="btn-map-zoom" id="btn-map-zoom" aria-label="Karten-Zoom">&#x2922;&#xFE0E;</button>
+      <button class="btn-map-zoom" id="btn-map-zoom" aria-label="Karten-Zoom"><span class="ui-art ui-art--map" aria-hidden="true"></span></button>
       <div id="boundary-banner" class="hidden boundary-banner">Geh zur&uuml;ck ins Spielfeld!</div>
     </div>
     <div class="game-dock">
@@ -239,19 +239,19 @@
       </details>
       <div class="game-actions">
         <button id="btn-report" class="round-btn icon-btn" disabled>
-          <svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#report"></use></svg>
+          <span class="ui-art ui-art--report" aria-hidden="true"></span>
           <span class="icon-label" data-i18n="btn.report">Melden</span>
         </button>
         <button id="btn-use" class="round-btn icon-btn hidden" disabled>
-          <svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#use"></use></svg>
+          <span class="ui-art ui-art--use" aria-hidden="true"></span>
           <span class="icon-label" data-i18n="btn.use">Benutzen</span>
         </button>
         <button id="btn-sabotage" class="round-btn icon-btn hidden" disabled>
-          <svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#sabotage"></use></svg>
+          <span class="ui-art ui-art--sabotage" aria-hidden="true"></span>
           <span class="icon-label" data-i18n="btn.sabotage">Sabotage</span>
         </button>
         <button id="btn-kill" class="round-btn icon-btn hidden">
-          <svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#kill"></use></svg>
+          <span class="ui-art ui-art--kill" aria-hidden="true"></span>
           <span class="icon-label" data-i18n="btn.kill">Kill</span>
         </button>
       </div>
@@ -287,7 +287,7 @@
         <div class="vote-tablet-head">
           <h3 id="meeting-title" class="pixel-title">Who Is The Impostor?</h3>
           <div id="vote-countdown" class="vote-countdown vote-countdown"></div>
-          <button type="button" id="btn-skipvote" class="skip-vote-btn hidden">Überspringen</button>
+          <button type="button" id="btn-skipvote" class="skip-vote-btn hidden button-art ui-art--skip-vote">Überspringen</button>
         </div>
         <svg class="meeting-table" viewBox="0 0 160 32" aria-hidden="true"><ellipse cx="80" cy="16" rx="77" ry="13" fill="currentColor"/><ellipse cx="80" cy="13" rx="68" ry="8" fill="none" stroke="white" stroke-opacity=".65"/></svg>
         <p id="meeting-hint" class="hint meeting-hint"></p>
@@ -320,7 +320,7 @@
         <h3 class="gameover-title" id="gameover-title">Spiel vorbei</h3>
         <p id="gameover-detail" class="hint"></p>
         <ul id="gameover-roster" class="gameover-roster player-list"></ul>
-        <button id="btn-rematch" class="primary big hidden">Zurück zur Lobby</button>
+        <button id="btn-rematch" class="primary big hidden button-art ui-art--play-again">Zurück zur Lobby</button>
         <button id="btn-gameover-lobby" class="secondary big hidden">Zurück zur Lobby</button>
       </div>
     </div>
@@ -330,7 +330,7 @@
       <div class="task-card settings-card">
         <div class="task-head">
           <div class="task-title" data-i18n="settings.title">Haupt-Einstellungen</div>
-          <button id="btn-settings-close" class="task-close" aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#close"></use></svg></button>
+          <button id="btn-settings-close" class="task-close" aria-label="Schließen"><span class="ui-art ui-art--close" aria-hidden="true"></span></button>
         </div>
         <div class="settings-body">
           <label class="settings-toggle">
@@ -358,7 +358,7 @@
           </label>
           <button id="btn-set-anchor" class="primary big hidden"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Karte kalibrieren</button>
           <p class="hint hidden" id="anchor-hint">Kalibriere ein Mal: 2 klare Punkte (z. B. Stra&#223;enecken) abgehen, die App merkt sich das f&#252;r immer.</p>
-          <button id="btn-leave-from-menu" class="danger-big" data-i18n="btn.leave">Verlassen</button>
+          <button id="btn-leave-from-menu" class="danger-big button-art ui-art--quit" data-i18n="btn.leave">Verlassen</button>
           <p class="hint" id="settings-note" data-i18n="settings.note">Verlassen beendet die Verbindung. Die Lobby läuft weiter.</p>
           <div id="dev-errorbox" class="hidden">
             <div class="task-title">Fehler-Log</div>
@@ -376,7 +376,7 @@
       <div class="task-card settings-card">
         <div class="task-head">
           <div class="task-title"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Setz-Punkt kalibrieren</div>
-          <button id="btn-calib-close" class="task-close" aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#close"></use></svg></button>
+          <button id="btn-calib-close" class="task-close" aria-label="Schließen"><span class="ui-art ui-art--close" aria-hidden="true"></span></button>
         </div>
         <p class="hint">1) Stell dich &#252;berall da hin (z.B. Cafeteria), wo du GENAU jenen Ort auf der Karte antippst. 2) W&#228;hle den Raum auf der Mini-Karte. 3) &quot;Ich stehe hier&quot;.</p>
         <canvas class="calib-map" id="calib-map"></canvas>
@@ -388,7 +388,7 @@
       <div class="task-card settings-card">
         <div class="task-head">
           <div class="task-title"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Karte kalibrieren</div>
-          <button id="btn-cal2-close" class="task-close" aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#close"></use></svg></button>
+          <button id="btn-cal2-close" class="task-close" aria-label="Schließen"><span class="ui-art ui-art--close" aria-hidden="true"></span></button>
         </div>
         <p class="hint" id="cal2-steps">Gehe zu 2 klaren Punkten (z. B. Stra&#223;enecken, weit auseinander). Einmal machen — f&#252;r immer gespeichert.</p>
         <canvas id="cal2-map" class="cal2-canvas cal2-map"></canvas>
@@ -407,9 +407,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.17.0"></script>
-  <script src="/js/mapEditor.js?v=19.17.0"></script>
-  <script type="module" src="/js/tasks.js?v=19.17.0"></script>
-  <script type="module" src="/js/app.js?v=19.17.0"></script>
+  <script src="/js/osm.js?v=19.17.1"></script>
+  <script src="/js/mapEditor.js?v=19.17.1"></script>
+  <script type="module" src="/js/tasks.js?v=19.17.1"></script>
+  <script type="module" src="/js/app.js?v=19.17.1"></script>
 </body>
 </html>

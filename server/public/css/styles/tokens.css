@@ -9,6 +9,29 @@
 }
 
 :root {
+  /* Supplied button art. Keep paths centralized. */
+  --icon-use: url("/img/among-us/btn-use.png");
+  --icon-kill: url("/img/among-us/btn-kill.png");
+  --icon-report: url("/img/among-us/btn-report.png");
+  --icon-sabotage: url("/img/among-us/btn-sabotage.png");
+  --icon-admin: url("/img/among-us/btn-admin.png");
+  --icon-map: url("/img/among-us/btn-map.png");
+  --icon-settings: url("/img/among-us/btn-settings.png");
+  --icon-close: url("/img/among-us/btn-close.png");
+  --icon-skip-vote: url("/img/among-us/btn-skip-vote.png");
+  --icon-voted: url("/img/among-us/badge-voted.png");
+  --icon-sabotage-reactor: url("/img/among-us/sabotage-reactor.png");
+  --icon-sabotage-oxygen: url("/img/among-us/sabotage-oxygen.png");
+  --icon-sabotage-lights: url("/img/among-us/sabotage-lights.png");
+  --icon-start: url("/img/among-us/btn-start.png");
+  --icon-proceed: url("/img/among-us/btn-proceed.png");
+  --icon-play-again: url("/img/among-us/btn-play-again.png");
+  --icon-quit: url("/img/among-us/btn-quit.png");
+  --ui-art-action-size: 36px;
+  --ui-art-control-size: 24px;
+  --ui-art-wide-size: 52px;
+  --ui-art-badge-size: 16px;
+
   --space-950: #070a14;
   --space-900: #0b1020;
   --space-800: #111a30;

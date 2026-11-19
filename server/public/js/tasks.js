@@ -11,7 +11,7 @@
  *   RlausTasks.isActive()                          \u2014 a game is open
  *   RlausTasks.close()                             \u2014 force-close
  */
-import { avatar, icon } from './ui.js';
+import { avatar, buttonArt, icon } from './ui.js';
 
 (() => {
   let current = null; // { task, cleanup }
@@ -46,7 +46,7 @@ import { avatar, icon } from './ui.js';
     const title = el('div', 'task-title', titleText);
     const closeBtn = el('button', 'task-close');
     closeBtn.setAttribute('aria-label', 'Aufgabe schließen');
-    closeBtn.append(icon('close'));
+    closeBtn.append(buttonArt('close'));
     header.append(title, closeBtn);
     const body = el('div', 'task-body');
     card.append(header, body);

@@ -1,4 +1,46 @@
 @layer components {
+.ui-art, .button-art::before {
+  display: inline-block;
+  flex: none;
+  width: var(--ui-art-width, var(--ui-art-control-size));
+  height: var(--ui-art-height, var(--ui-art-control-size));
+  background: var(--ui-art-image) center / contain no-repeat;
+  image-rendering: auto;
+}
+
+.button-art {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.button-art::before { content: ""; }
+.button-art:active:enabled { transform: translateY(var(--line-3)); }
+button:disabled .ui-art, .button-art:disabled::before { filter: grayscale(1); }
+
+.ui-art--use { --ui-art-image: var(--icon-use); }
+[data-kind="ADMIN_TABLE"] .ui-art--use { --ui-art-image: var(--icon-admin); }
+.ui-art--kill { --ui-art-image: var(--icon-kill); }
+.ui-art--report { --ui-art-image: var(--icon-report); }
+.ui-art--sabotage, .ui-art--sabotage-comms { --ui-art-image: var(--icon-sabotage); }
+.ui-art--map { --ui-art-image: var(--icon-map); }
+.ui-art--settings { --ui-art-image: var(--icon-settings); }
+.ui-art--close { --ui-art-image: var(--icon-close); }
+.ui-art--skip-vote { --ui-art-image: var(--icon-skip-vote); }
+.ui-art--voted { --ui-art-image: var(--icon-voted); }
+.ui-art--sabotage-reactor { --ui-art-image: var(--icon-sabotage-reactor); }
+.ui-art--sabotage-o2 { --ui-art-image: var(--icon-sabotage-oxygen); }
+.ui-art--sabotage-lights { --ui-art-image: var(--icon-sabotage-lights); }
+.ui-art--start { --ui-art-image: var(--icon-start); }
+.ui-art--proceed { --ui-art-image: var(--icon-proceed); }
+.ui-art--play-again { --ui-art-image: var(--icon-play-again); }
+.ui-art--quit { --ui-art-image: var(--icon-quit); }
+
+.ui-art--start, .ui-art--proceed, .ui-art--skip-vote {
+  --ui-art-width: var(--ui-art-wide-size);
+}
+
 /* Glas-Karte (Rezept 5.4) */
 .card {
   background: var(--card);
