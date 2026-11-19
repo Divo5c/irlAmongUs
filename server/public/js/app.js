@@ -2891,26 +2891,50 @@ const App = (() => {
         const minX = Math.min(...poly.map((p) => p.x));
         const maxX = Math.max(...poly.map((p) => p.x));
         const minY = Math.min(...poly.map((p) => p.y));
-        // Label außerhalb des Polygons (oben drüber) mit Pfeil zur Box.
-        const lx = (minX + maxX) / 2;
-        const ly = minY - 5; // 5m oberhalb der Raum-Box
+        // Label außerhalb des Polygons mit Pfeil zum Raum (Name -> Raum).
+        // Individuelle Offsets pro Raum für bessere Platzierung.
+        let offsetX = 0;
+        let offsetY = -5; // standard: 5m oberhalb
+        const name = r.name.toLowerCase();
+        if (name === 'admin') { offsetX = +8; offsetY = -2; }   // Admin etwas nach rechts
+        if (name === 'medbay') { offsetX = 0; offsetY = +6; }   // Medbay nach unten
+        if (name === 'electrical') { offsetX = -6; offsetY = -4; }
+        if (name === 'weapons') { offsetX = -2; offsetY = -6; }
+        if (name === 'security') { offsetX = -2; offsetY = -6; }
+        if (name === 'o2') { offsetX = -6; offsetY = -6; }
+        if (name === 'reactor') { offsetX = 0; offsetY = -6; }
+        if (name === 'nav') { offsetX = -6; offsetY = -4; }
+        if (name === 'shields') { offsetX = +6; offsetY = -4; }
+        if (name === 'comms') { offsetX = +6; offsetY = -4; }
+        if (name === 'storage') { offsetX = 0; offsetY = -6; }
+
+        const lx = (minX + maxX) / 2 + offsetX;
+        const ly = minY + offsetY;
         const [plx, ply] = toPx(lx, ly);
         const [pcx, pcy] = toPx(cx, cy);
-        // Dünner Pfeil vom Label zum Polygon-Zentrum.
-        ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-        ctx.lineWidth = 1.2;
+        // Pfeil vom Namen zum Raum (Pfeilspitze am Raum).
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(plx, ply + 6);
+        ctx.moveTo(plx, ply);
         ctx.lineTo(pcx, pcy);
         ctx.stroke();
-        // Pfeilspitze.
+        // Pfeilspitze am Raumzentrum.
+        const dx = pcx - plx;
+        const dy = pcy - ply;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        const headLen = 8;
         ctx.beginPath();
-        ctx.moveTo(plx - 2, ply + 8);
-        ctx.lineTo(plx, ply + 6);
-        ctx.lineTo(plx + 2, ply + 8);
-        ctx.stroke();
+        ctx.moveTo(pcx, pcy);
+        ctx.lineTo(pcx - ux * headLen + uy * 4, pcy - uy * headLen - ux * 4);
+        ctx.lineTo(pcx - ux * headLen - uy * 4, pcy - uy * headLen + ux * 4);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.fill();
         // Label-Text außerhalb des Polygons.
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
         ctx.font = '600 11px system-ui';
         ctx.textAlign = 'center';
         ctx.fillText(r.name, plx, ply);
