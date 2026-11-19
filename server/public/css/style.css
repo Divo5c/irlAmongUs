@@ -618,6 +618,14 @@ button.round {
 .round-btn.report { background: radial-gradient(circle at 35% 30%, #7fd4ff, #1787c9); }
 .round-btn.use { background: radial-gradient(circle at 35% 30%, #ffe08a, #d99b1a); }
 .round-btn.sabotage { background: radial-gradient(circle at 35% 30%, #d8b4fe, #7c3aed); }
+.round-btn.sabotage.sabotage-active {
+  opacity: 1 !important; filter: none !important;
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.6);
+  animation: sabotage-pulse 1.2s ease-in-out infinite; }
+@keyframes sabotage-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(124, 58, 237, 0.6); }
+  50% { box-shadow: 0 0 35px rgba(124, 58, 237, 0.9); }
+}
 .round-btn.kill { background: radial-gradient(circle at 35% 30%, #ff8a94, #d32733); }
 @keyframes pulse {
   0%, 100% { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45); }
@@ -1045,6 +1053,7 @@ button.round {
   box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.55); }
 .vote-name { color: #0c2b4e; }
 .vote-card.dead { background: #9aa7bd; border-color: #7c89a0; }
+.vote-card.discussion { opacity: 0.5; filter: grayscale(0.8); pointer-events: none; }
 .vote-card .vote-megaphone { margin-left: auto; font-size: 18px; }
 .vote-dead-x { margin-left: auto; font-size: 16px; color: #b91c1c;
   font-weight: 800; text-shadow: 0 1px 0 #fff; }
@@ -1055,7 +1064,8 @@ button.round {
 .vote-confirm .no { background: linear-gradient(180deg, #f87171, #b91c1c); }
 .vote-card .vote-done-chip { margin-left: auto; font-size: 15px; }
 /* Divo-Log 18: oeffentlicher "hat gevotet"-Hacken (Ziel bleibt anonym). */
-.vote-card .voted-chip { margin-left: auto; font-size: 15px; opacity: 0.55; filter: grayscale(1); }
+.vote-card .voted-chip { margin-left: auto; width: 24px; height: 24px; opacity: 0.9; }
+.vote-card .voted-chip img { width: 100%; height: 100%; object-fit: contain; }
 .vote-reveal-bar { border-top: 2px dashed #7f9dbd; }
 .vote-reveal-line { color: #23425f; }
 
@@ -1089,6 +1099,30 @@ button.round {
 .eject-text { position: absolute; bottom: 22%; left: 0; right: 0; text-align: center;
   font-size: 14px; color: #fff; text-shadow: 0 0 8px rgba(160,200,255,0.9);
   padding: 0 16px; line-height: 1.9; }
+
+/* --- Voting Results Overlay (v19.16: Among Us Stil) --- */
+.vote-results-overlay { position: fixed; inset: 0; z-index: 230; background: #04060f;
+  display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.vote-results-card { width: min(92vw, 460px); max-height: 85vh;
+  background: #b9d7f5; border: 6px solid #9db9cf; border-radius: 18px;
+  padding: 20px 16px 16px; box-shadow: 0 0 40px rgba(0,0,0,0.6);
+  font-family: 'Press Start 2P','Courier New',monospace; }
+#vote-results-title { color: #2c3e50; margin: 0 0 12px; font-size: 20px;
+  text-align: center; text-shadow: 0 1px 0 #fff; }
+.vote-results-list { list-style: none; margin: 0; padding: 0; overflow-y: auto;
+  max-height: 45vh; }
+.vote-results-item { display: flex; align-items: center; gap: 10px;
+  background: #e8f0fb; border: 2px solid #fff; border-radius: 10px;
+  padding: 8px 10px; margin-bottom: 8px; font-size: 14px; color: #2c3e50;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+.vote-results-item .chip { width: 26px; height: 26px; border-radius: 50%;
+  flex-shrink: 0; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+.vote-results-item .name { flex: 1; font-weight: 700; }
+.vote-results-item .target { color: #5a6b7c; }
+.vote-results-item.skip .target { color: #c0392b; font-weight: 800; }
+.vote-results-item.anonymous .chip { background: #95a5a6; }
+.vote-results-proceeding { margin-top: 12px; text-align: center;
+  font-size: 15px; color: #c0392b; font-weight: 800; text-shadow: 0 1px 0 #fff; }
 
 /* Raum-Typ-Grid (v19.10.5): ein Tap setzt den Typ, Raum wird geschlossen
    -> sofort angelegt. Aktiver Typ markiert. */

@@ -86,6 +86,16 @@ const App = (() => {
       'meeting.counts.living': 'in der Cafeteria',
       'meeting.counts.ghosts': 'Geister',
       'meeting.beacon': 'CAFETERIA',
+      // v19.16: Voting Results (Among Us Stil)
+      'meeting.results.title': 'Stimmenauszählung',
+      'meeting.results.title_en': 'Voting Results',
+      'meeting.results.proceeding': 'Weiter in',
+      'meeting.results.skipped': 'Übersprungen',
+      'meeting.results.skipped_en': 'Skipped',
+      'meeting.results.voted': 'hat gevotet',
+      'meeting.results.voted_en': 'voted',
+      'meeting.results.anonymous': 'Anonyme Stimmen:',
+      'meeting.results.anonymous_en': 'Anonymous votes:',
       // Gameover
       'over.title': 'Spiel vorbei',
       // Toasts
@@ -185,6 +195,17 @@ const App = (() => {
       'meeting.counts.living': 'in the Cafeteria',
       'meeting.counts.ghosts': 'Ghosts',
       'meeting.beacon': 'CAFETERIA',
+      // v19.16: Voting Results (Among Us Stil)
+      'meeting.results.title': 'Stimmenauszählung',
+      'meeting.results.title_en': 'Voting Results',
+      'meeting.results.proceeding': 'Weiter in',
+      'meeting.results.proceeding_en': 'Proceeding in',
+      'meeting.results.skipped': 'Übersprungen',
+      'meeting.results.skipped_en': 'Skipped',
+      'meeting.results.voted': 'hat gevotet',
+      'meeting.results.voted_en': 'voted',
+      'meeting.results.anonymous': 'Anonyme Stimmen:',
+      'meeting.results.anonymous_en': 'Anonymous votes:',
       'over.title': 'Game over',
       'toast.outside': 'You are outside the play area! Come back or the round will not count.',
       'toast.taskdone': 'Task completed!',
@@ -219,7 +240,13 @@ const App = (() => {
   }
   /** Übersetzung: fehlt ein Key, fällt EN auf DE zurück (nie leeres UI). */
   function t(key) {
-    return I18N[langActive()][key] ?? I18N.de[key] ?? key;
+    const lang = langActive();
+    // Bei EN: erst den normalen Key, dann den _en Suffix (für Keys die als
+    // de/en-Paar definiert sind), dann auf de zurückfallen.
+    if (lang === 'en') {
+      return I18N.en[key] ?? I18N.en[key + '_en'] ?? I18N.de[key] ?? key;
+    }
+    return I18N.de[key] ?? I18N.en[key] ?? key;
   }
   /** Statische Texte im HTML tauschen (data-i18n Attribute). */
   function applyStaticI18n() {
@@ -850,26 +877,81 @@ const App = (() => {
         state.votingWarnTimer = window.setTimeout(() => sfx('vote_timer'), warnIn);
       }
     });
-    socket.on('game:vote_reveal', ({ votes }) => {
+    socket.on('game:vote_reveal', ({ votes, anonymous }) => {
       sfx('panel_close');
-      const bar = $('vote-reveal-bar');
-      bar.classList.remove('hidden');
-      bar.innerHTML = '';
-      if (!votes?.length) {
-        bar.innerHTML = '<div class="vote-reveal-line">Stimmen bleiben geheim.</div>';
-        return;
+      // v19.16: Voting Results Overlay statt nur der kleinen Bar.
+      const overlay = $('vote-results-overlay');
+      const title = $('vote-results-title');
+      const list = $('vote-results-list');
+      const proceeding = $('vote-results-proceeding');
+      const isAnon = anonymous === true;
+      const lang = langActive();
+      title.textContent = lang === 'en'
+        ? t('meeting.results.title_en')
+        : t('meeting.results.title');
+      proceeding.textContent = '';
+      list.innerHTML = '';
+      overlay.classList.remove('hidden');
+      $('meeting-overlay').classList.add('hidden');
+      // Nicht-anonym: zeige wer wogegen gevotet hat. Anonym: nur Anzahl.
+      if (!votes || !votes.length) {
+        // Keine Votes oder anonym ohne Einzel-Details.
+        const votedCount = state.room?.votedIds?.length ?? 0;
+        const li = document.createElement('li');
+        li.className = 'vote-results-item anonymous';
+        if (isAnon) {
+          const anonText = lang === 'en' ? t('meeting.results.anonymous_en') : t('meeting.results.anonymous');
+          li.innerHTML = `<span class="chip anonymous"></span>`
+            + `<span class="name">${anonText}</span>`
+            + `<span class="target">${votedCount}</span>`;
+        } else {
+          li.innerHTML = `<span class="chip anonymous"></span>`
+            + `<span class="name">${lang === 'en' ? t('meeting.results.skipped_en') : t('meeting.results.skipped')}</span>`
+            + `<span class="target">${votedCount}</span>`;
+        }
+        list.appendChild(li);
+      } else {
+        const nameOf = new Map((state.room?.players ?? []).map((p) => [p.id, p]));
+        for (const v of votes) {
+          const li = document.createElement('li');
+          li.className = 'vote-results-item';
+          const skipped = v.targetId == null || v.targetId === 'skip';
+          if (skipped) li.classList.add('skip');
+          const voterChip = `<span class="chip" style="background:${colorChipHex(v.voterColorId)}"></span>`;
+          const voterName = escapeHtml(String(v.voterName ?? '?'));
+          if (isAnon) {
+            li.innerHTML = `${voterChip}`
+              + `<span class="name" style="color:#5a6b7c">?</span>`
+              + `<span class="target">${skipped
+                ? (lang === 'en' ? t('meeting.results.skipped_en') : t('meeting.results.skipped'))
+                : escapeHtml(String(v.targetName ?? '?'))}</span>`;
+          } else {
+            const target = skipped
+              ? (lang === 'en' ? t('meeting.results.skipped_en') : t('meeting.results.skipped'))
+              : escapeHtml(String(v.targetName ?? '?'));
+            const votedText = lang === 'en' ? t('meeting.results.voted_en') : t('meeting.results.voted');
+            li.innerHTML = `${voterChip}`
+              + `<span class="name">${voterName}</span>`
+              + `<span class="target">${skipped ? target : votedText + ' ' + target}</span>`;
+          }
+          list.appendChild(li);
+        }
       }
-      const nameOf = new Map((state.room?.players ?? []).map((p) => [p.id, p]));
-      for (const v of votes) {
-        const line = document.createElement('div');
-        line.className = 'vote-reveal-line';
-        const voterChip = `<span class="mini-chip" style="background:${colorChipHex(v.voterColorId)}"></span>`;
-        const target = v.targetId == null || v.targetId === 'skip'
-          ? 'Skip'
-          : String(nameOf.get(v.targetId)?.name ?? '?');
-        line.innerHTML = `${voterChip} <strong>${escapeHtml(String(v.voterName ?? '?'))}</strong> \u2192 ${escapeHtml(target)}`;
-        bar.appendChild(line);
-      }
+      // Countdown 4.5s dann ausblenden.
+      let remaining = 4500;
+      const tick = () => {
+        remaining -= 100;
+        if (remaining <= 0) {
+          window.clearInterval(voteResultsTimer);
+          overlay.classList.add('hidden');
+          proceeding.textContent = '';
+        } else {
+          proceeding.textContent = `${lang === 'en' ? t('meeting.results.proceeding_en') : t('meeting.results.proceeding')}: ${Math.ceil(remaining / 1000)}s`;
+        }
+      };
+      tick();
+      window.clearInterval(voteResultsTimer);
+      voteResultsTimer = window.setInterval(tick, 100);
     });
     socket.on('game:vote_progress', ({ votedCount, totalVoters }) => {
       // Eigene Stimme hat schon vote_locked -> nur für fremde klingeln.
@@ -887,9 +969,10 @@ const App = (() => {
       for (const id of votedIds) {
         const card = $('vote-list').querySelector(`[data-player-id="${id}"]`);
         if (!card || card.querySelector('.voted-chip')) continue;
-        const chip = document.createElement('span');
+        const chip = document.createElement('img');
         chip.className = 'voted-chip';
-        chip.textContent = '\u2714';
+        chip.src = '/img/ui/Button_Pic/Voted.png';
+        chip.alt = 'voted';
         card.appendChild(chip);
       }
     }
@@ -910,6 +993,9 @@ const App = (() => {
 
   socket.on('game:meeting_result',
       ({ ejectedPlayerId, ejectedPlayerName, ejectedRole, impostorsRemaining, status }) => {
+      // v19.16: Voting Results Overlay ausblenden falls noch laufend.
+      $('vote-results-overlay').classList.add('hidden');
+      window.clearInterval(voteResultsTimer);
       state.voted = false;
       const confirmEjects = state.room?.config?.confirmEjects !== false;
       // Eject-Sequenz: Weltraum + Bean im Spielerfarbton + Result-Text.
@@ -1859,6 +1945,12 @@ const App = (() => {
       showToast('Kein Netz \u2014 Communications sind sabotiert!');
       return;
     }
+    // Impostoren erledigen keine Tasks (nur anzeigen, nicht interaktiv).
+    if (state.role?.role === 'IMPOSTOR') {
+      showToast(langActive() === 'en' ? 'Impostors cannot do tasks.' : 'Impostoren erledigen keine Tasks.');
+      beep(220);
+      return;
+    }
     if (!taskNear(task)) {
       showToast(task.roomName
         ? `Zu weit weg \u2014 geh nach ${task.roomName}.`
@@ -2087,14 +2179,15 @@ const App = (() => {
       if (sabLabel) sabLabel.textContent = text;
     };
     if (sab) {
-      // Aktive Sabotage: Restzeit mit auf den Knopf statt vages "Laeuft".
+      // Aktive Sabotage: Knopf bleibt bedienbar (hell), Label zeigt Restzeit.
       if (sab.deadline) {
         const left = Math.max(0, Math.ceil((Date.parse(sab.deadline) - Date.now()) / 1000));
         setSabLabel(`${sab.type} ${left}s`);
       } else {
         setSabLabel('L\u00e4uft');
       }
-      sabBtn.disabled = true;
+      sabBtn.disabled = false;
+      sabBtn.classList.add('sabotage-active');
       return;
     }
     // Cooldown bis zur naechsten Sabotage als Countdown auf dem Knopf.
@@ -4093,7 +4186,7 @@ const App = (() => {
       + `<div class="intro-sub">${escapeHtml(me
         ? (kind === 'EMERGENCY' ? t('meeting.reveal.reporter_you_emergency') : t('meeting.reveal.reporter_you'))
         : (kind === 'EMERGENCY' ? t('meeting.reveal.reporter_emergency') : t('meeting.reveal.reporter')))}</div></div>`;
-    MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingUnfound, 2400));
+    MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingUnfound, 2000));
   }
 
   function stepMeetingUnfound() {
@@ -4111,20 +4204,10 @@ const App = (() => {
         + '<div class="intro-icon">\u2620</div>'
         + `<div class="intro-big">${escapeHtml(t('meeting.reveal.unfound'))}</div>`
         + `<div class="intro-sub">${names}</div></div>`;
-      MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingReporterFirst, 2600));
+      MEETING_INTRO_TIMERS.push(window.setTimeout(finishMeetingIntro, 2000));
     } else {
-      stepMeetingReporterFirst();
+      finishMeetingIntro();
     }
-  }
-
-  function stepMeetingReporterFirst() {
-    if (!meetingIntroActive) return;
-    $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
-      + '<div class="intro-kicker">DISKUSSION</div>'
-      + '<div class="intro-icon">\ud83d\udce3</div>'
-      + `<div class="intro-big">${escapeHtml(t('meeting.reveal.first'))}</div>`
-      + `<div class="intro-sub">${escapeHtml(t('meeting.reveal.first_sub'))}</div></div>`;
-    MEETING_INTRO_TIMERS.push(window.setTimeout(finishMeetingIntro, 2200));
   }
 
   function finishMeetingIntro() {
@@ -4174,12 +4257,12 @@ const App = (() => {
     const ghostWatches = selfNow?.isAlive === false;
     // Diskussion: Warten, NICHT voten (sonst VOTING_NOT_OPEN-Log-Flood).
     if (phase === 'DISCUSSION') {
-      openVoteList(players, null, 'Diskussion \u2014 Voting startet gleich\u2026');
+      openVoteList(players, null, 'Diskussion \u2014 Voting startet gleich\u2026', true);
       return;
     }
     // Geister schauen zu (Among Us): kein Vote, kein Skip, kein Fehler-Spam.
     if (ghostWatches) {
-      openVoteList(players, null, 'Geister schauen zu \u2014 nur Lebende voten.');
+      openVoteList(players, null, 'Geister schauen zu \u2014 nur Lebende voten.', true);
       return;
     }
     openVoteList(
@@ -4210,10 +4293,11 @@ const App = (() => {
     if (!state.myVoteTargetId) return;
     const row = $('vote-list')
       .querySelector(`[data-player-id="${state.myVoteTargetId}"]`);
-    if (row && !row.querySelector('.vote-done-chip')) {
-      const chip = document.createElement('span');
-      chip.className = 'vote-done-chip';
-      chip.textContent = '\u2714';
+    if (row && !row.querySelector('.voted-chip')) {
+      const chip = document.createElement('img');
+      chip.className = 'voted-chip';
+      chip.src = '/img/ui/Button_Pic/Voted.png';
+      chip.alt = 'voted';
       row.appendChild(chip);
     }
   }
@@ -4223,6 +4307,7 @@ const App = (() => {
   }
 
   let voteCountdownTimer = null;
+  let voteResultsTimer = null;
   // Divo-Log 18: "es gibt keinen countdown sondern es wird nur angezeigt
   // bis welche minute und stunde" — Meetings ticken jetzt SEKUNDENGENAU.
   // Der Server schickt ISO-Strings; 'ISO' - Date.now() war NaN -> der
@@ -4244,8 +4329,9 @@ const App = (() => {
   }
 
   /** Tablet-Karten (Farbchips) + Among-Us-Flow: Karte waehlen -> gruen/rot
-      bestaetigen -> Vote gelockt.Reporter kriegt das Megafon-Piktogramm. */
-  function openVoteList(candidates, onPick, title = 'Auf wen abstimmst du?') {
+      bestaetigen -> Vote gelockt.Reporter kriegt das Megafon-Piktogramm.
+      isDiscussion: Karte ausgegraut (kein Vote moeglich). */
+  function openVoteList(candidates, onPick, title = 'Auf wen abstimmst du?', isDiscussion = false) {
     const list = $('vote-list');
     list.innerHTML = '';
     $('meeting-hint').textContent = title;
@@ -4259,6 +4345,7 @@ const App = (() => {
       li.dataset.playerId = player.id;
       const dead = player.isAlive === false;
       if (dead) li.classList.add('dead');
+      if (isDiscussion) li.classList.add('discussion');
       const chip = document.createElement('span');
       chip.className = 'vote-chip';
       chip.style.background = colorChipHex(player.colorId);
