@@ -7,6 +7,7 @@ const {
   createRoom,
   getRoom,
   joinRoom,
+  checkRejoin,
 } = require('./api/roomsController');
 const { getStreets } = require('./api/osmStreetsController');
 const { sendJson } = require('./utils/http');
@@ -90,6 +91,7 @@ function createHttpServer(roomStore) {
 
       const roomMatch = url.pathname.match(/^\/rooms\/([A-Z2-9]+)$/);
       const joinRoomMatch = url.pathname.match(/^\/rooms\/([A-Z2-9]+)\/join$/);
+      const rejoinCheckMatch = url.pathname.match(/^\/rooms\/([A-Z2-9]{6})\/rejoin-check$/);
 
       // OSM street proxy for the PWA map editor.
       if (url.pathname === '/osm/streets' && request.method === 'GET') {
@@ -104,6 +106,11 @@ function createHttpServer(roomStore) {
 
       if (roomMatch && request.method === 'GET') {
         getRoom(request, response, roomStore, roomMatch[1]);
+        return;
+      }
+
+      if (rejoinCheckMatch && request.method === 'POST') {
+        await checkRejoin(request, response, roomStore, rejoinCheckMatch[1]);
         return;
       }
 

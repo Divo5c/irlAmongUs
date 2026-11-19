@@ -280,6 +280,7 @@ const App = (() => {
     code: '',
     isHost: false,
     room: null, // last public room snapshot
+    sessionAttached: false,
     role: null, // role payload from game:role_assigned
     killReadyAt: 0,
     voted: false,
@@ -629,7 +630,17 @@ const App = (() => {
     });
     socket.on('session:created', ({ code, playerId, token }) => {
       Object.assign(state, { code, playerId, token });
-      localStorage.setItem('rlaus_session', JSON.stringify({ code, playerId, token, name: state.name }));
+      state.sessionAttached = true;
+      rememberSession();
+    });
+    socket.on('room:rejoined', (room) => {
+      state.sessionAttached = true;
+      rememberSession();
+      if (['LOBBY', 'MAP_SETUP', 'MAP_READY'].includes(room.status)) {
+        state.room = room;
+        renderLobby(room);
+        show('lobby');
+      }
     });
     // The server only sends room:created to the host's own socket
     // (no broadcast), so it routes hosts into the lobby directly.
@@ -665,6 +676,7 @@ const App = (() => {
         stopGpsLoop();
         state.room = null;
         state.selfPos = null;
+        state.sessionAttached = false;
         localStorage.removeItem('rlaus_session');
         show('home');
         errorHome('Die Sitzung ist abgelaufen. Tritt mit einem gültigen Code erneut bei.');
@@ -1086,9 +1098,18 @@ const App = (() => {
     socket.on('connect', () => connectionStatus());
     socket.on('connect_error', () => connectionStatus('Verbindung verloren. Wir verbinden dich neu.'));
     socket.on('disconnect', (reason) => {
-      if (reason !== 'io client disconnect') connectionStatus('Verbindung verloren. Wir verbinden dich neu.');
-      // Socket.IO reconnects automatically; try to rejoin when back.
-      socket.once('connect', () => tryRejoin());
+      const wasAttached = state.sessionAttached;
+      state.sessionAttached = false;
+      if (reason === 'io client disconnect') return;
+      connectionStatus('Verbindung verloren. Wir verbinden dich neu.');
+      if (!wasAttached) return;
+      rememberSession();
+      socket.once('connect', () => {
+        if (tryRejoin()) return;
+        stopGpsLoop();
+        state.room = null;
+        show('home');
+      });
     });
 
     state.socket = socket;
@@ -1101,12 +1122,68 @@ const App = (() => {
 
 
 
-  function tryRejoin() {
-    const saved = JSON.parse(localStorage.getItem('rlaus_session') ?? 'null');
-    if (!saved) return;
+  const SESSION_KEY = 'rlaus_session';
+  const REJOIN_WINDOW_MS = 15 * 60 * 1000;
+
+  function rememberSession() {
+    const { code, playerId, token, name } = state;
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ code, playerId, token, name, lastActiveAt: Date.now() }));
+  }
+
+  function isRecentSession(saved) {
+    if (!Number.isFinite(saved.lastActiveAt)) return false;
+    const age = Date.now() - saved.lastActiveAt;
+    return age >= 0 && age <= REJOIN_WINDOW_MS;
+  }
+
+  function forgetSession(raw) {
+    if (localStorage.getItem(SESSION_KEY) === raw) localStorage.removeItem(SESSION_KEY);
+  }
+
+  function recentSession() {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    let saved;
+    try {
+      saved = JSON.parse(raw);
+    } catch {
+      forgetSession(raw);
+      return null;
+    }
+    if (!saved || !/^[A-Z2-9]{6}$/.test(saved.code) || !saved.playerId || !saved.token || !isRecentSession(saved)) {
+      forgetSession(raw);
+      return null;
+    }
+    return { ...saved, raw };
+  }
+
+  async function checkSavedSession(saved) {
+    if (!saved || !isRecentSession(saved) || localStorage.getItem(SESSION_KEY) !== saved.raw) return false;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(`/rooms/${saved.code}/rejoin-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: saved.playerId, token: saved.token }),
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      if (response.status === 404) forgetSession(saved.raw);
+      return response.status === 204 && isRecentSession(saved) && localStorage.getItem(SESSION_KEY) === saved.raw;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function tryRejoin(saved = recentSession()) {
+    if (!saved || !isRecentSession(saved) || localStorage.getItem(SESSION_KEY) !== saved.raw) return false;
     state.name = saved.name ?? state.name;
     Object.assign(state, { code: saved.code, playerId: saved.playerId, token: saved.token });
     state.socket.emit('room:rejoin', { code: saved.code, playerId: saved.playerId, token: saved.token });
+    return true;
   }
 
   // ---------------------------------------------------------------- home //
@@ -1161,6 +1238,7 @@ const App = (() => {
   $('btn-leave').addEventListener('click', () => {
     localStorage.removeItem('rlaus_session');
     state.socket?.disconnect();
+    state.socket = null;
     state.room = null;
     show('home');
   });
@@ -4411,24 +4489,36 @@ const App = (() => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
 
-  // Auto-rejoin: NICHT mehr still einschleichen — das Original-Popup fragt
-  // nach (Beim App-Öffnen zurück in die laufende Runde oder Lobby).
-  if (localStorage.getItem('rlaus_session')) {
-    const saved = JSON.parse(localStorage.getItem('rlaus_session') ?? 'null');
-    if (saved?.code) {
-      $('rejoin-text').textContent =
-        `Du warst in der Runde ${saved.code}. Zur\u00fcck beitreten?`;
-      $('rejoin-overlay').classList.remove('hidden');
-    }
+  function recordActiveSession() {
+    if (state.sessionAttached && state.socket?.connected) rememberSession();
   }
-  $('btn-rejoin-yes').addEventListener('click', () => {
+  window.addEventListener('pagehide', recordActiveSession);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') recordActiveSession();
+  });
+
+  let offeredSession;
+  async function offerRejoin() {
+    const saved = recentSession();
+    if (state.socket || !(await checkSavedSession(saved)) || state.socket) return;
+    offeredSession = saved;
+    $('rejoin-text').textContent = `Du warst in der Runde ${saved.code}. Wieder beitreten?`;
+    $('rejoin-overlay').classList.remove('hidden');
+  }
+  void offerRejoin();
+  window.addEventListener('online', offerRejoin);
+  $('btn-rejoin-yes').addEventListener('click', async () => {
+    const saved = offeredSession;
+    offeredSession = null;
     $('rejoin-overlay').classList.add('hidden');
+    if (!(await checkSavedSession(saved)) || state.socket) return;
     ensureSocket();
-    ensureSocket().once('connect', () => tryRejoin());
+    tryRejoin(saved);
   });
   $('btn-rejoin-no').addEventListener('click', () => {
     $('rejoin-overlay').classList.add('hidden');
-    localStorage.removeItem('rlaus_session');
+    if (offeredSession) forgetSession(offeredSession.raw);
+    offeredSession = null;
     showToast('Runde gelassen \u2014 du kannst sp\u00e4ter \u00fcber den Code joinen.');
   });
 

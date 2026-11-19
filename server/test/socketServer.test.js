@@ -852,6 +852,37 @@ describe('socket flow security & gameplay', () => {
     }
   });
 
+  test('rejoin check only confirms valid sessions in an existing room', async () => {
+    const { host, player, code, hostToken, playerToken } = await createRoomWithTwoPlayers();
+    const check = (roomCode, playerId, token) => fetch(`${baseUrl}/rooms/${roomCode}/rejoin-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId, token }),
+    });
+
+    try {
+      const valid = await check(code, 'host-1', hostToken);
+      assert.equal(valid.status, 204);
+      assert.equal(valid.headers.get('cache-control'), 'no-store');
+      assert.equal(await valid.text(), '');
+      assert.equal(host.connected, true);
+
+      const wrongToken = await check(code, 'host-1', playerToken);
+      const missingRoom = await check(randomCode(), 'host-1', hostToken);
+      assert.equal(wrongToken.status, 404);
+      assert.equal(missingRoom.status, 404);
+      assert.deepEqual(await wrongToken.json(), await missingRoom.json());
+
+      const removed = waitForRoomWhere(host, (room) => room.players.length === 1);
+      player.disconnect();
+      await removed;
+      assert.equal((await check(code, 'player-2', playerToken)).status, 404);
+    } finally {
+      host.disconnect();
+      player.disconnect();
+    }
+  });
+
   test('a lobby host reconnecting inside the grace period keeps host identity', async () => {
     const { host, player, code, hostToken } = await createRoomWithTwoPlayers();
     const reconnected = await connectClient();

@@ -24,6 +24,19 @@ function getRoom(_request, response, roomStore, code) {
   sendJson(response, 200, roomStore.toPublicRoom(room));
 }
 
+async function checkRejoin(request, response, roomStore, code) {
+  const credentials = await readJsonBody(request);
+  const { playerId, token } = credentials ?? {};
+  response.setHeader('Cache-Control', 'no-store');
+
+  const room = roomStore.getRoom(code);
+  if (!roomStore.verifyToken(code, playerId, token) || !room?.players.some(({ id }) => id === playerId)) {
+    sendJson(response, 404, { error: 'Session not found.' });
+    return;
+  }
+  response.writeHead(204).end();
+}
+
 async function joinRoom(request, response, roomStore, code) {
   const player = await readJsonBody(request);
 
@@ -44,4 +57,4 @@ function sendRoomStoreError(response, error) {
   sendJson(response, statusCode, { error: error.message });
 }
 
-module.exports = { HttpError, createRoom, getRoom, joinRoom };
+module.exports = { HttpError, createRoom, getRoom, joinRoom, checkRejoin };
