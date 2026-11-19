@@ -2884,13 +2884,36 @@ const App = (() => {
       ctx.closePath();
       ctx.stroke();
       ctx.fill();
-      if (r.name) {
+      if (r.name && r.type !== 'CAFETERIA') {
+        // Cafeteria hat schon das Tisch-Label, kein doppeltes Außen-Label.
         const cx = poly.reduce((s, p) => s + p.x, 0) / poly.length;
         const cy = poly.reduce((s, p) => s + p.y, 0) / poly.length;
-        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        const minX = Math.min(...poly.map((p) => p.x));
+        const maxX = Math.max(...poly.map((p) => p.x));
+        const minY = Math.min(...poly.map((p) => p.y));
+        // Label außerhalb des Polygons (oben drüber) mit Pfeil zur Box.
+        const lx = (minX + maxX) / 2;
+        const ly = minY - 5; // 5m oberhalb der Raum-Box
+        const [plx, ply] = toPx(lx, ly);
+        const [pcx, pcy] = toPx(cx, cy);
+        // Dünner Pfeil vom Label zum Polygon-Zentrum.
+        ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(plx, ply + 6);
+        ctx.lineTo(pcx, pcy);
+        ctx.stroke();
+        // Pfeilspitze.
+        ctx.beginPath();
+        ctx.moveTo(plx - 2, ply + 8);
+        ctx.lineTo(plx, ply + 6);
+        ctx.lineTo(plx + 2, ply + 8);
+        ctx.stroke();
+        // Label-Text außerhalb des Polygons.
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.font = '600 11px system-ui';
         ctx.textAlign = 'center';
-        ctx.fillText(r.name, ...toPx(cx, cy));
+        ctx.fillText(r.name, plx, ply);
       }
     }
 
