@@ -3,7 +3,7 @@
  * All server interaction runs through Socket.IO with the same event
  * protocol as the Flutter client. UI language: German.
  */
-'use strict';
+import { avatar, element, icon } from './ui.js';
 
 const App = (() => {
   const $ = (id) => document.getElementById(id);
@@ -27,8 +27,8 @@ const App = (() => {
       'phase.meeting': 'Meeting',
       'phase.game_over': 'Spiel vorbei',
       // Buttons
-      'btn.report': 'Report',
-      'btn.use': 'Use',
+      'btn.report': 'Melden',
+      'btn.use': 'Benutzen',
       'btn.sabotage': 'Sabotage',
       'btn.kill': 'Kill',
       'btn.emergency': 'NOTFALL',
@@ -50,7 +50,7 @@ const App = (() => {
       'map.you': 'DU',
       'map.noTasks': 'Aktiv gerade keine Task',
       // Tasks
-      'tasks.summary': 'Deine Tasks',
+      'tasks.summary': 'Deine Aufgaben',
       'comms.down': 'Kommunikation gest\u00f6rt \u2014 keine Taskdaten!',
       'tasks.done': 'erledigt',
       'tasks.stage': 'Stufe',
@@ -316,10 +316,7 @@ const App = (() => {
   // ------------------------------------------------------------- helpers //
 
   function show(name) {
-    for (const [key, el] of Object.entries(screens)) {
-      el.classList.toggle('active', key === name);
-    }
-    // Bottom-Sheets schließen bei jedem Screenwechsel mit zu.
+    document.body.dataset.screen = name;
     if (name !== 'game') hideEmergencyPanel();
   }
 
@@ -446,58 +443,55 @@ const App = (() => {
       event.reason?.stack ?? '');
   });
 
-  function beep(freq = 660, durationMs = 140) {
-    if (!optEnabled('rlaus_sound', true)) return;
-    try {
-      if (!App.audioCtx) App.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const ctx = App.audioCtx;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.frequency.value = freq;
-      osc.type = 'sine';
-      gain.gain.value = 0.15 * sfxVolumeBase();
-      osc.connect(gain).connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + durationMs / 1000);
-    } catch (_) { /* audio not available */ }
+  let audioContext;
+  const alertTones = {
+    round_start: [330, 494, 659], task_done: [523, 784], report_body: [294, 220, 294],
+    emergency_alarm: [392, 262, 392], sabotage_alarm: [220, 165, 220],
+    victory_crew: [392, 523, 659], victory_impostor: [311, 233, 155],
+    kill: [196, 123], kill_knife: [196, 123], vote_locked: [440, 587],
+  };
+
+  function sfxVolumeBase() {
+    const savedVolume = Number(localStorage.getItem('rlaus_sfx_vol') ?? 0.8);
+    return Number.isFinite(savedVolume) ? Math.min(1, Math.max(0, savedVolume)) : 0.8;
   }
 
-  /* -------------------------------------------------------- sfx ---
-   * Originales Sound-Paket aus dem Spiel verwendet die WAVs im Ordner
-   * /sfx/ (aus den 4 Zips kuratiert). Ausgabe nur wenn Sound an ist,
-   * Fehler schweigen (Sound ist Zuckerguss, kein Critical Path).
-   * Erste Berührung "entriegelt" die Mitte (iOS-Autoplay-Regel).
-   */
-  const sfxCache = {};
-  function sfxVolumeBase() {
-    const raw = Number(localStorage.getItem('rlaus_sfx_vol'));
-    return Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0.8;
+  function playTones(notes, milliseconds, volume) {
+    if (!optEnabled('rlaus_sound', true) || audioContext?.state !== 'running') return;
+    const level = sfxVolumeBase();
+    const duration = milliseconds / 1000;
+    notes.forEach((frequency, index) => {
+      const start = audioContext.currentTime + index * duration;
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(level * volume * 0.12, start + 0.012);
+      gain.gain.linearRampToValueAtTime(0, start + duration);
+      oscillator.connect(gain).connect(audioContext.destination);
+      oscillator.start(start);
+      oscillator.stop(start + duration);
+    });
   }
+
+  function beep(frequency = 660, milliseconds = 140) {
+    playTones([frequency], milliseconds, 0.8);
+  }
+
   function sfx(name, volume = 1) {
-    if (!optEnabled('rlaus_sound', true)) return;
-    const effective = sfxVolumeBase() * Math.max(0, volume);
-    if (effective <= 0) return;
-    try {
-      let a = sfxCache[name];
-      if (!a) {
-        a = sfxCache[name] = new Audio(`/sfx/${name}.wav`);
-        a.preload = 'auto';
-      }
-      a.volume = Math.min(1, effective);
-      a.currentTime = 0;
-      a.play().catch(() => {});
-    } catch (_) { /* sound best-effort */ }
+    const notes = alertTones[name] ?? [name === 'panel_close' ? 330 : 520];
+    playTones(notes, notes.length > 1 ? 115 : 55, volume);
   }
-  const sfxUnlocked = { done: false };
-  document.addEventListener('touchend', () => {
-    if (sfxUnlocked.done) return;
-    sfxUnlocked.done = true;
-    try {
-      const a = new Audio('/sfx/task_open.wav');
-      a.volume = 0;
-      a.play().then(() => a.pause()).catch(() => {});
-    } catch (_) { /* unlock best-effort */ }
-  }, { once: true, passive: true });
+
+  function unlockAudio() {
+    const Audio = window.AudioContext ?? window.webkitAudioContext;
+    if (!Audio || !optEnabled('rlaus_sound', true)) return;
+    audioContext ??= new Audio();
+    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+  }
+
+  document.addEventListener('pointerup', unlockAudio, { passive: true });
+  document.addEventListener('keydown', unlockAudio);
   window.RlausSfx = sfx;
 
   // Menue/Lobby-Sound: JEDER Button-Druck gibt ein kurzes UI-Klick-Geräusch.
@@ -548,7 +542,7 @@ const App = (() => {
       }
 
       // Only auto-route when the user is not already in a deeper screen.
-      const active = document.querySelector('.screen.active')?.id;
+      const active = 'screen-' + document.body.dataset.screen;
       if (room.status === 'LOBBY' && active !== 'screen-lobby') {
         show('lobby');
       }
@@ -577,6 +571,7 @@ const App = (() => {
       else stopGpsLoop();
       tryRestoreAnchor(room);
       renderTeamProgress(room);
+      if (meetingIntroActive && meetingAwaitActive()) renderMeetingAwaitContent();
       drawGameMap();
       updateEmergencyPanel();
       // MAP_READY: the host may go back to the lobby and start the game.
@@ -670,7 +665,10 @@ const App = (() => {
         stopGpsLoop();
         state.room = null;
         state.selfPos = null;
-        showToast('Sitzung abgelaufen \u2014 bitte mit dem Code neu beitreten.');
+        localStorage.removeItem('rlaus_session');
+        show('home');
+        errorHome('Die Sitzung ist abgelaufen. Tritt mit einem gültigen Code erneut bei.');
+        return;
       }
       if (errorCode === 'NOT_IN_ROOM') {
         // Verlorene Session (AUTH/Reconnect): raus aus dem Spiel, GPS-Stop.
@@ -693,7 +691,7 @@ const App = (() => {
       }[errorCode];
       const text = friendly ?? message ?? 'Aktion fehlgeschlagen.';
       if (text == null) return;
-      if (screens.home.classList.contains('active')) {
+      if (document.body.dataset.screen === 'home') {
         errorHome(text);
       } else {
         showToast(text);
@@ -723,7 +721,8 @@ const App = (() => {
     });
     socket.on('game:sabotage_fixed', ({ code: _code }) => {
       if (state.room) delete state.room.sabotage;
-      $('sabotage-banner').classList.add('hidden');
+      renderSabotage();
+      showToast(langActive() === 'en' ? 'Sabotage repaired' : 'Sabotage repariert');
       sfx('notification');
       renderGameHud();
     });
@@ -734,6 +733,7 @@ const App = (() => {
     });
     socket.on('position:confirmed', (pos) => {
       state.selfPos = pos;
+      if (meetingIntroActive && meetingAwaitActive()) renderMeetingAwaitContent();
       state._posRejectCount = 0;
       state._posHoldUntil = 0;
       state.anchorOk = !!pos.onCorridor || !!pos.onRoom;
@@ -863,9 +863,10 @@ const App = (() => {
       // Divo-Intro läuft noch (Host-Check dauert)? Voting ist da -> Intro
       // überspringen und sofort zur Abstimmung.
       if (meetingIntroActive) finalizeMeetingForVoting();
+      else renderMeeting({ phase: 'VOTING', reporterId: state.room?.reporterId ?? null });
       $('meeting-title').textContent = t('meeting.voteTitle');
       $('meeting-title').classList.add('pixel-title');
-      if (!state.voted) $('meeting-hint').textContent = deadlineText(votingDeadline);
+      if (!state.voted) $('meeting-hint').textContent = langActive() === 'en' ? 'Choose a player.' : 'Wähle, für wen du abstimmst.';
       // 10s-Bedenkklackern wie im Original (arbeitsspeicherfreundlich: 1
       // Timer). ISO-String parsen — string minus Zahl war NaN (Log 18).
       window.clearTimeout(state.votingWarnTimer);
@@ -890,51 +891,26 @@ const App = (() => {
         ? t('meeting.results.title_en')
         : t('meeting.results.title');
       proceeding.textContent = '';
-      list.innerHTML = '';
+      list.replaceChildren();
       overlay.classList.remove('hidden');
       $('meeting-overlay').classList.add('hidden');
-      // Nicht-anonym: zeige wer wogegen gevotet hat. Anonym: nur Anzahl.
-      if (!votes || !votes.length) {
-        // Keine Votes oder anonym ohne Einzel-Details.
-        const votedCount = state.room?.votedIds?.length ?? 0;
-        const li = document.createElement('li');
-        li.className = 'vote-results-item anonymous';
-        if (isAnon) {
-          const anonText = lang === 'en' ? t('meeting.results.anonymous_en') : t('meeting.results.anonymous');
-          li.innerHTML = `<span class="chip anonymous"></span>`
-            + `<span class="name">${anonText}</span>`
-            + `<span class="target">${votedCount}</span>`;
-        } else {
-          li.innerHTML = `<span class="chip anonymous"></span>`
-            + `<span class="name">${lang === 'en' ? t('meeting.results.skipped_en') : t('meeting.results.skipped')}</span>`
-            + `<span class="target">${votedCount}</span>`;
-        }
-        list.appendChild(li);
+      const skipLabel = lang === 'en' ? t('meeting.results.skipped_en') : t('meeting.results.skipped');
+      if (isAnon || !votes?.length) {
+        const label = isAnon ? t(lang === 'en' ? 'meeting.results.anonymous_en' : 'meeting.results.anonymous') : skipLabel;
+        const count = votes?.length || state.room?.votedIds?.length || 0;
+        const row = element('li', 'vote-results-item anonymous');
+        row.append(avatar('gray'), element('span', 'name', label), element('span', 'target', count));
+        list.append(row);
       } else {
-        const nameOf = new Map((state.room?.players ?? []).map((p) => [p.id, p]));
-        for (const v of votes) {
-          const li = document.createElement('li');
-          li.className = 'vote-results-item';
-          const skipped = v.targetId == null || v.targetId === 'skip';
-          if (skipped) li.classList.add('skip');
-          const voterChip = `<span class="chip" style="background:${colorChipHex(v.voterColorId)}"></span>`;
-          const voterName = escapeHtml(String(v.voterName ?? '?'));
-          if (isAnon) {
-            li.innerHTML = `${voterChip}`
-              + `<span class="name" style="color:#5a6b7c">?</span>`
-              + `<span class="target">${skipped
-                ? (lang === 'en' ? t('meeting.results.skipped_en') : t('meeting.results.skipped'))
-                : escapeHtml(String(v.targetName ?? '?'))}</span>`;
-          } else {
-            const target = skipped
-              ? (lang === 'en' ? t('meeting.results.skipped_en') : t('meeting.results.skipped'))
-              : escapeHtml(String(v.targetName ?? '?'));
-            const votedText = lang === 'en' ? t('meeting.results.voted_en') : t('meeting.results.voted');
-            li.innerHTML = `${voterChip}`
-              + `<span class="name">${voterName}</span>`
-              + `<span class="target">${skipped ? target : votedText + ' ' + target}</span>`;
-          }
-          list.appendChild(li);
+        for (const vote of votes) {
+          const skipped = vote.targetId == null || vote.targetId === 'skip';
+          const row = element('li', 'vote-results-item');
+          row.append(
+            avatar(vote.voterColorId),
+            element('span', 'name', vote.voterName ?? '?'),
+            element('span', 'target', skipped ? skipLabel : '→ ' + (vote.targetName ?? '?')),
+          );
+          list.append(row);
         }
       }
       // Countdown 4.5s dann ausblenden.
@@ -967,12 +943,12 @@ const App = (() => {
       const votedIds = state.room?.votedIds ?? [];
       if (!votedIds.length) return;
       for (const id of votedIds) {
-        const card = $('vote-list').querySelector(`[data-player-id="${id}"]`);
+        const card = [...$('vote-list').children].find((row) => row.dataset.playerId === id);
         if (!card || card.querySelector('.voted-chip')) continue;
-        const chip = document.createElement('img');
-        chip.className = 'voted-chip';
-        chip.src = '/img/ui/Button_Pic/Voted.png';
-        chip.alt = 'voted';
+        const chip = icon('check', 'voted-chip');
+        chip.removeAttribute('aria-hidden');
+        chip.setAttribute('role', 'img');
+        chip.setAttribute('aria-label', 'Hat abgestimmt');
         card.appendChild(chip);
       }
     }
@@ -1003,10 +979,8 @@ const App = (() => {
       const bean = $('eject-bean');
       const text = $('eject-text');
       const players = state.room?.players ?? [];
-      const ejectedColor = colorChipHex(
-        players.find((p) => p.id === ejectedPlayerId)?.colorId,
-      );
-      bean.style.setProperty('--bean-color', ejectedColor);
+      const ejected = players.find((p) => p.id === ejectedPlayerId);
+      bean.replaceChildren(...(ejected ? [avatar(ejected.colorId)] : []));
       // Animation neu starten (remove -> void offsetWidth -> add).
       bean.style.animation = 'none';
       void bean.offsetWidth;
@@ -1015,11 +989,10 @@ const App = (() => {
       if (ejectedPlayerId == null) {
         ejectLine = 'Niemand wurde rausgeworfen (Skipped).';
       } else if (!confirmEjects) {
-        // Player-Name kommt von fremden Clients — IMMER escapen vor innerHTML.
-        const en = escapeHtml(String(ejectedPlayerName ?? '?'));
+        const en = String(ejectedPlayerName ?? '?');
         ejectLine = t('eject.was').replace('{name}', en);
       } else {
-        const en = escapeHtml(String(ejectedPlayerName ?? '?'));
+        const en = String(ejectedPlayerName ?? '?');
         const line = ejectedRole === 'IMPOSTOR'
           ? t('eject.wasImp').replace('{name}', en)
           : t('eject.wasNotImp').replace('{name}', en);
@@ -1028,9 +1001,9 @@ const App = (() => {
             .replace('{n}', String(impostorsRemaining))
             .replace('{s}', langActive() === 'en' && impostorsRemaining !== 1 ? 's' : '')
           : '';
-        ejectLine = remain ? `${line}<br>${remain}` : line;
+        ejectLine = remain ? `${line}\n${remain}` : line;
       }
-      text.innerHTML = ejectLine;
+      text.textContent = ejectLine;
       $('meeting-overlay').classList.add('hidden');
       overlay.classList.remove('hidden');
       sfx('eject_text');
@@ -1049,27 +1022,27 @@ const App = (() => {
       sfx(winner === 'CREWMATE' ? 'victory_crew' : 'victory_impostor');
       $('boundary-banner').classList.add('hidden');
       $('gameover-overlay').classList.remove('hidden');
-      // Perspektive: Eigenes Team gewonnen -> Victory, sonst Defeat.
-      // Farbe wie im Original: Crew-Sieg cyan, Impostor-Sieg rot.
-      const myRole = state.role?.role;
-      const teamWon = (winner === 'CREWMATE' && myRole === 'CREWMATE')
-        || (winner === 'IMPOSTOR' && myRole === 'IMPOSTOR');
       const goTitle = $('gameover-title');
-      goTitle.textContent = teamWon ? 'Victory' : 'Defeat';
+      goTitle.textContent = langActive() === 'en'
+        ? (winner === 'CREWMATE' ? 'Crew wins' : 'Impostor wins')
+        : (winner === 'CREWMATE' ? 'Crew gewinnt' : 'Impostor gewinnt');
       goTitle.classList.add('pixel-title', 'gameover-title');
       goTitle.dataset.tone = winner === 'CREWMATE' ? 'crew' : 'imp';
       $('gameover-overlay').querySelector('.card')
         ?.setAttribute('data-win', winner === 'CREWMATE' ? 'crew' : 'imp');
       const reasonText = {
-        TASKS_COMPLETE: 'Alle Tasks wurden erledigt.',
+        TASKS_COMPLETE: 'Alle Aufgaben sind erledigt.',
         IMPOSTORS_DEAD: 'Kein Impostor mehr am Leben.',
         IMPOSTOR_PARITY: 'Impostor in \u00dcberzahl (h\u00e4tten Crew nicht mehr stoppen k\u00f6nnen).',
-        SABOTAGE_EXPIRED: 'Sabotage nicht rechtzeitig gefixt!',
+        SABOTAGE_EXPIRED: 'Die Zeit für die Reparatur ist abgelaufen.',
       }[reason];
-      const alivePlayers = (players ?? []).filter((p) => p.isAlive).map((p) => p.name);
-      $('gameover-detail').textContent =
-        `${reasonText ?? ''}${reasonText ? ' ' : ''}Am Ende \u00fcbrig: ${alivePlayers.join(', ')}`;
+      const progress = state.room?.taskProgress;
+      const taskSummary = progress?.total ? progress.completed + '/' + progress.total + ' Aufgaben erledigt' : '';
+      $('gameover-detail').textContent = [reasonText, taskSummary].filter(Boolean).join(' · ');
+      $('gameover-roster').replaceChildren(...(players ?? []).map((player) =>
+        playerCard(player, player.role === 'IMPOSTOR' ? 'Impostor' : 'Crewmate')));
       $('btn-rematch').classList.toggle('hidden', !state.isHost);
+      $('btn-gameover-lobby').classList.toggle('hidden', state.isHost);
     });
     socket.on('task:progress', ({ completedTaskId, advancedTaskId, stageIndex }) => {
       const ownList = state.role?.tasks ?? state.tasks ?? [];
@@ -1103,12 +1076,19 @@ const App = (() => {
         beep(880);
         vibrate(50);
         const li = $('task-list').querySelector(`[data-task-id="${completedTaskId}"]`);
-        if (li) li.classList.add('done');
+        if (li) {
+          li.classList.add('done');
+          li.querySelector('button').disabled = true;
+          li.querySelector('svg').replaceWith(icon('check'));
+        }
       }
       drawGameMap();
       renderGameHud();
     });
-    socket.on('disconnect', () => {
+    socket.on('connect', () => connectionStatus());
+    socket.on('connect_error', () => connectionStatus('Verbindung verloren. Wir verbinden dich neu.'));
+    socket.on('disconnect', (reason) => {
+      if (reason !== 'io client disconnect') connectionStatus('Verbindung verloren. Wir verbinden dich neu.');
       // Socket.IO reconnects automatically; try to rejoin when back.
       socket.once('connect', () => tryRejoin());
     });
@@ -1121,10 +1101,7 @@ const App = (() => {
     $('gameover-overlay').classList.add('hidden');
   }
 
-  function deadlineText(deadline) {
-    if (!deadline) return 'Zeit l\u00e4uft\u2026';
-    return `Bis ${new Date(deadline).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
-  }
+
 
   function tryRejoin() {
     const saved = JSON.parse(localStorage.getItem('rlaus_session') ?? 'null');
@@ -1229,28 +1206,20 @@ const App = (() => {
   }
 
   function renderLobbyPlayers(room) {
-    const list = $('lobby-players');
-    list.innerHTML = '';
-    for (const player of room.players) {
-      const li = document.createElement('li');
-      const badge = player.id === room.hostId
-        ? 'Host'
-        : player.isBot
-          ? 'Bot'
-          : player.isAlive
-            ? 'bereit'
-            : 'ausgeschieden';
-      const isMate = (state.teammates ?? []).some((m) => m.id === player.id);
-      li.innerHTML = `<span${isMate ? ' class="imp-name"' : ''}>${escapeHtml(player.name)}${player.isBot ? ' \u{1F916}' : ''}</span><span class="badge">${badge}</span>`;
-      list.appendChild(li);
-    }
+    $('lobby-players').replaceChildren(...room.players.map((player) =>
+      playerCard(player, player.id === room.hostId ? '★ Host' : player.isBot ? 'Bot' : 'Bereit')));
   }
 
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  function playerCard(player, label) {
+    const card = element('li', 'player-card');
+    card.append(
+      avatar(player.colorId, player.isAlive === false),
+      element('span', 'player-name', player.name),
+      element('span', 'badge', label),
+    );
+    return card;
   }
+
 
   $('btn-edit-map').addEventListener('click', () => {
     if (!state.room) return;
@@ -1261,6 +1230,7 @@ const App = (() => {
     ensureSocket().emit('map:start', { code: state.code });
     show('map');
     refreshCachedMapButton();
+
     // Default-Map/Orriginal SOFORT ins Editor-UI (Divo: schneller Start):
     // vom aktuellen Room-Snapshot, sonst aus dem Gerät-Cache.
     const roomMap = state.room?.map;
@@ -1704,7 +1674,7 @@ const App = (() => {
     const max = maxImpostorsForClient(count);
     const current = Number(select.value) || 1;
     if (select.options.length !== 3 || Number(select.options[2].value) !== max) {
-      select.innerHTML = '';
+      select.replaceChildren();
       for (let n = 1; n <= 3; n += 1) {
         const option = document.createElement('option');
         option.value = `${n}`;
@@ -1736,58 +1706,36 @@ const App = (() => {
 
   // ---------------------------------------------------------------- game //
 
-  /** Among-Us-like full-screen role card: stays until the player taps it. */
+  let roleDismissTimer;
   function showRoleOverlay(payload) {
     const overlay = $('role-overlay');
     const impostor = payload.role === 'IMPOSTOR';
-    // Tap-Handler ZUERST registrieren — egal was danach knallt, der Spieler
-    // kommt beim Tappen auf jeden Fall weiter (IRL-Freeze-Fix). Divo
-    // (v19.13.7): KEIN Auto-Timeout mehr — der Screen bleibt, bis getippt
-    // wurde (Impostor-Info darf nicht untergehen).
-    const dismiss = () => {
+    clearTimeout(roleDismissTimer);
+    overlay.onclick = () => {
+      clearTimeout(roleDismissTimer);
       overlay.onclick = null;
       overlay.classList.add('hidden');
+      $('btn-settings').focus({ preventScroll: true });
       beep(impostor ? 180 : 560);
     };
-    overlay.onclick = dismiss;
-    try {
-      overlay.classList.remove('hidden');
-      $('role-card').className = impostor ? 'role-card impostor' : 'role-card crew';
-      const title = $('role-card-title');
-      title.textContent = impostor ? t('role.imp.title') : t('role.crew.title');
-      title.classList.add('pixel-title');
-      const chipOf = (name, self, mate) => {
-        const label = `${escapeHtml(name)}${self ? ' (Du)' : ''}`;
-        return `<span class="role-chip${mate ? ' mate' : ''}${self ? ' self' : ''}">${label}</span>`;
-      };
-      const playerNames = (state.room?.players ?? []).map((p) => p.name);
-      const selfName = state.room?.players?.find((p) => p.id === state.playerId)?.name;
-      const impCount = impostor
-        ? (payload.teammates?.length ?? 0) + 1
-        : (state.room?.config?.impostorCount ?? 1);
-      if (impostor) {
-        const mates = (payload.teammates ?? []);
-        $('role-card-detail').innerHTML =
-          `${t('role.imp.line1')}<br>`
-          + `<span class="pixel-sub">Es ${impCount === 1 ? 'ist' : 'sind'} ${impCount} Impostor${impCount === 1 ? '' : 'en'} unter euch${mates.length ? ` &mdash; ${t('game.partner')}:</span>` : '.</span>'}`
-          + (mates.length
-            ? `<div class="role-row">${mates.map((mate) => chipOf(mate.name, false, true)).join('')}</div>`
-            : '<div class="role-row"><span class="role-chip mate">Du bist alleiniger Impostor</span></div>')
-          + `<small>${t('role.tap')}</small>`;
-      } else {
-        $('role-card-detail').innerHTML =
-          `${t('role.crew.line1')} ${t('role.crew.and')}<br>`
-          + `<span class="pixel-sub">Es ${impCount === 1 ? 'ist' : 'sind'} <b class="imp-count">${impCount}</b> Impostor${impCount === 1 ? '' : 'en'} unter uns:</span>`
-          + `<div class="role-row">${playerNames.map((name) => chipOf(name, name === selfName, false)).join('')}</div>`
-          + `<small>${t('role.tap')}</small>`;
-      }
-      $('role-banner').classList.add('hidden');
-      $('btn-kill').classList.toggle('hidden', !impostor);
-      renderRole(payload); // task list build + flags + teammates line
-    } catch (error) {
-      // UI darf nie den Spieler einfrieren — Fehler sichtbar machen.
-      showJsError(error);
+    overlay.classList.remove('hidden');
+    $('role-card').className = impostor ? 'role-card impostor' : 'role-card crew';
+    $('role-card-title').textContent = impostor ? t('role.imp.title') : t('role.crew.title');
+    const teammates = new Set((payload.teammates ?? []).map(({ id }) => id));
+    const row = element('div', 'role-row');
+    for (const player of state.room?.players ?? []) {
+      if (impostor && player.id !== state.playerId && !teammates.has(player.id)) continue;
+      const chip = element('span', teammates.has(player.id) ? 'role-chip mate' : 'role-chip');
+      chip.append(avatar(player.colorId), element('span', 'player-name', player.name));
+      row.append(chip);
     }
+    const description = impostor ? t('role.imp.line1') : t('role.crew.line1') + ' ' + t('role.crew.and');
+    $('role-card-detail').replaceChildren(element('p', 'pixel-sub', description), row);
+    $('role-continue').textContent = langActive() === 'en' ? 'Continue' : 'Weiter';
+    $('role-continue').focus({ preventScroll: true });
+    roleDismissTimer = setTimeout(() => overlay.onclick?.(), 3000);
+    $('role-banner').classList.add('hidden');
+    renderRole(payload);
   }
 
   function renderRole(payload) {
@@ -1808,21 +1756,23 @@ const App = (() => {
     // Build task list (crewmates), impostors can still get fake tasks.
     // Tap a task to open its minigame (gated by proximity in openTask).
     const list = $('task-list');
-    if (list) {
-      list.innerHTML = '';
-      for (const task of payload.tasks ?? []) {
-        const li = document.createElement('li');
-        li.className = 'task-item';
-        li.dataset.taskId = task.id;
-        li.innerHTML = `<span>${TASK_ICONS[task.type] ?? '\u{1F4DD}'} ${escapeHtml(task.title)}</span>` +
-          (task.roomName ? `<small>${escapeHtml(task.roomName)}${task.stages?.length > 1 ? ` \u2022 ${t('tasks.stage')} ${(task.stageIndex ?? 0) + 1}` : ''}</small>` : '');
-        li.addEventListener('click', () => openTask(task));
-        list.appendChild(li);
+    list.replaceChildren();
+    for (const task of payload.tasks ?? []) {
+      const li = element('li', task.completed ? 'task-item done' : 'task-item');
+      li.dataset.taskId = task.id;
+      const button = element('button', 'task-item__button');
+      button.disabled = Boolean(task.completed);
+      const copy = element('span', 'task-item__copy', task.title);
+      if (task.roomName) {
+        const stage = task.stages?.length > 1 ? ' · ' + t('tasks.stage') + ' ' + ((task.stageIndex ?? 0) + 1) : '';
+        copy.append(element('small', '', task.roomName + stage));
       }
-      if (!payload.tasks?.length) {
-        list.innerHTML = '<li><span>Keine Tasks \u2014 als Impostor sabotier, als Geist beobachte.</span></li>';
-      }
+      button.append(icon(task.completed ? 'check' : 'task'), copy);
+      button.addEventListener('click', () => openTask(task));
+      li.append(button);
+      list.append(li);
     }
+    if (!payload.tasks?.length) list.append(element('li', '', 'Keine Aufgaben'));
     state.tasks = payload.tasks ?? [];
     const countEl = $('task-count');
     if (countEl) countEl.textContent = `${payload.tasks?.length ?? 0}`;
@@ -1836,27 +1786,12 @@ const App = (() => {
     const pct = total ? Math.round((progress.completed / total) * 100) : 0;
     const strip = document.getElementById('task-progress-strip');
     if (!strip) return;
-    // Host kann den Balken komplett verstecken (Info-Control-Knopf).
-    if (state.taskbarAlways === false) {
-      strip.style.display = 'none';
-      return;
-    }
-    strip.style.display = '';
-    const before = document.getElementById('task-progress-fill').style.width;
-    // COMMS gest\u00f6rt: Crew kann den Team-Fortschritt nicht sehen.
     const commsBlind = room.sabotage?.type === 'COMMS' && state.role?.role !== 'IMPOSTOR';
-    const shown = commsBlind ? before : `${pct}%`;
-    if (shown !== before) {
-      document.getElementById('task-progress-fill').style.width = shown;
-      strip.classList.remove('flash');
-      void strip.offsetWidth; // restart the pop animation
-      strip.classList.add('flash');
-    }
-    strip.style.opacity = commsBlind ? '0.25' : '1';
-    const count = document.getElementById('task-label-count');
-    if (count) {
-      count.textContent = commsBlind ? '' : `${progress.completed}/${total}`;
-    }
+    strip.classList.toggle('hidden', state.taskbarAlways === false || commsBlind);
+    if (state.taskbarAlways === false || commsBlind) return;
+    $('task-progress-fill').style.setProperty('--progress', pct / 100);
+    strip.setAttribute('aria-valuenow', pct);
+    $('task-label-count').textContent = pct + '%';
   }
 
   /** Report/Kill-Buttons je nach Nähe (Kill nur mit echten Zielen). */
@@ -1889,9 +1824,11 @@ const App = (() => {
     taskbox.querySelector('summary').textContent = commsBlind
       ? t('comms.down')
       : `${t('tasks.summary')} (${state.tasks?.filter((x) => !x.completed).length ?? 0})`;
-    $('task-list').style.display = commsBlind ? 'none' : '';
+    $('task-list').classList.toggle('hidden', commsBlind);
+    $('screen-game').classList.toggle('ghost-mode', imAlive === false);
     const bodies = state.nearbyBodies ?? [];
     const reportBtn = $('btn-report');
+    reportBtn.classList.remove('hidden');
     reportBtn.disabled = !(bodies.length && imAlive !== false);
     reportBtn.classList.toggle('ready', bodies.length > 0 && imAlive !== false);
     const killBtn = $('btn-kill');
@@ -1912,6 +1849,7 @@ const App = (() => {
           killBtn.disabled = !targets.length;
           if (killLabel) killLabel.textContent = 'Kill';
         }
+        setActionCooldown(killBtn, cooldownLeft, room.config?.killCooldownMs ?? 20000);
         killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
       }
     }
@@ -2155,7 +2093,7 @@ const App = (() => {
     const useBtn = $('btn-use');
     const useLabel = useBtn.querySelector('.icon-label');
     const action = useAction();
-    if (useLabel) useLabel.textContent = action ? action.label : 'Use';
+    if (useLabel) useLabel.textContent = action ? action.label : t('btn.use');
     const inMeeting = state.room?.status !== 'IN_GAME';
     // Divo (v19.13.7): Tote Crew behält den Use-Button — Geister können
     // ihre Tasks weiter vollenden (Among-Us-Regel, Server erlaubt das).
@@ -2163,6 +2101,12 @@ const App = (() => {
     useBtn.disabled = !action || inMeeting;
     useBtn.classList.toggle('ready', !!action && !inMeeting);
     useBtn.dataset.kind = action?.kind ?? '';
+  }
+
+  function setActionCooldown(button, remaining, duration) {
+    button.classList.toggle('on-cooldown', remaining > 0);
+    const progress = Math.max(0, Math.min(1, 1 - remaining / Math.max(1, duration)));
+    button.style.setProperty('--cooldown', progress + 'turn');
   }
 
   function updateSabotageButton() {
@@ -2179,6 +2123,7 @@ const App = (() => {
       if (sabLabel) sabLabel.textContent = text;
     };
     if (sab) {
+      setActionCooldown(sabBtn, 0, 1);
       // Aktive Sabotage: Knopf bleibt bedienbar (hell), Label zeigt Restzeit.
       if (sab.deadline) {
         const left = Math.max(0, Math.ceil((Date.parse(sab.deadline) - Date.now()) / 1000));
@@ -2191,8 +2136,11 @@ const App = (() => {
       return;
     }
     // Cooldown bis zur naechsten Sabotage als Countdown auf dem Knopf.
+    sabBtn.classList.remove('sabotage-active');
     const cd = state.room?.sabotageCooldownUntil ?? 0;
-    const left = Math.max(0, Math.ceil((cd - Date.now()) / 1000));
+    const remaining = Math.max(0, cd - Date.now());
+    setActionCooldown(sabBtn, remaining, Math.max(remaining, 30000));
+    const left = Math.ceil(remaining / 1000);
     if (left > 0) {
       setSabLabel(`${left}s`);
       sabBtn.disabled = true;
@@ -2222,16 +2170,18 @@ const App = (() => {
     title.textContent = 'Sabotage w\u00e4hlen';
     card.appendChild(title);
     const meta = {
-      REACTOR: { label: '\u2622\uFE0F Reactor Meltdown', hint: '2 Crew im Reactor \u2014 30s Countdown' },
-      O2: { label: '\u26FD O2 D\u00e4mpfung', hint: 'Fix an O2 UND Admin \u2014 30s Countdown' },
-      LIGHTS: { label: '\u{1F4A1} Lichter aus', hint: 'Niemand sieht Leichen \u2014 Fix in Electrical' },
-      COMMS: { label: '\u{1F4E1} Comms gest\u00f6rt', hint: 'Taskliste weg \u2014 Fix in Communications' },
+      REACTOR: { label: 'Reactor Meltdown', hint: '2 Crew im Reactor \u2014 90 Sekunden' },
+      O2: { label: 'O2 D\u00e4mpfung', hint: 'Fix an O2 UND Admin \u2014 90 Sekunden' },
+      LIGHTS: { label: 'Lichter aus', hint: 'Niemand sieht Leichen \u2014 Fix in Electrical' },
+      COMMS: { label: 'Comms gest\u00f6rt', hint: 'Taskliste weg \u2014 Fix in Communications' },
     };
     for (const type of types) {
       const btn = document.createElement('button');
       btn.className = 'task-tap-btn sabotage-choice';
-      btn.innerHTML = `<strong>${meta[type]?.label ?? type}</strong>` +
-        `<small>${meta[type]?.hint ?? ''}</small>`;
+      btn.append(
+        element('strong', '', meta[type]?.label ?? type),
+        element('small', '', meta[type]?.hint ?? ''),
+      );
       btn.addEventListener('click', () => {
         overlay.remove();
         ensureSocket().emit('game:sabotage', { code: state.code, type });
@@ -2258,7 +2208,10 @@ const App = (() => {
     if (types.includes('COMMUNICATIONS')) allowed.push('COMMS');
     return allowed;
   }
-  setInterval(renderGameHud, 500);
+  setInterval(() => {
+    renderGameHud();
+    renderSabotage();
+  }, 500);
   // Selbst-Marker-Puls: weiche Dauerwelle auf der Karte + GPS-Status.
   // 300ms statt 800ms: Der Marker "fliegt" live mit dir (Feedback aus
   // dem Draußen-Test: 2s-Schritte sahen hackelich aus).
@@ -2273,34 +2226,28 @@ const App = (() => {
   function renderSabotage() {
     const banner = $('sabotage-banner');
     const sab = state.room?.sabotage;
-    if (!sab || state.room?.status !== 'IN_GAME') {
-      banner.classList.add('hidden');
-      return;
+    const active = Boolean(sab && state.room?.status === 'IN_GAME');
+    const critical = active && sab.deadline != null;
+    $('screen-game').classList.toggle('alarm-frame', critical);
+    banner.classList.toggle('hidden', !active);
+    if (!active) return;
+    const remaining = critical ? Math.max(0, Math.ceil((Date.parse(sab.deadline) - Date.now()) / 1000)) : 0;
+    const details = {
+      REACTOR: t('sab.reactor'),
+      O2: t('sab.o2') + ' · O2: ' + (sab.panels?.o2 ? '✓' : '–') + ' · Admin: ' + (sab.panels?.admin ? '✓' : '–'),
+      LIGHTS: t('sab.lights'),
+      COMMS: t('sab.comms'),
+    };
+    const guidance = details[sab.type] ?? 'Sabotage';
+    if (banner.dataset.guidance !== guidance) {
+      banner.dataset.guidance = guidance;
+      banner.replaceChildren(icon('sabotage'), element('span', '', guidance), element('strong', 'sabotage-banner__timer'));
     }
-    const remaining = Math.max(0, Math.round((Date.parse(sab.deadline) - Date.now()) / 1000));
-    if (sab.type === 'REACTOR' && sab.deadline) {
-      banner.textContent = `\u2622\uFE0F REACTOR MELTDOWN \u2014 ${t('sab.reactor')} ${remaining}s`;
-    } else if (sab.type === 'O2' && sab.deadline) {
-      const o2 = sab.panels?.o2 ? '\u2705' : '\u274C';
-      const admin = sab.panels?.admin ? '\u2705' : '\u274C';
-      banner.textContent = `\u26A0\uFE0F ${t('sab.o2')} ${o2} + Admin ${admin} \u2014 ${remaining}s`;
-    } else if (sab.type === 'LIGHTS') {
-      banner.textContent = `\u{1F4A1} ${t('sab.lights')}`;
-    } else if (sab.type === 'COMMS') {
-      banner.textContent = `\u{1F4E1} ${t('sab.comms')}`;
-    } else {
-      return;
-    }
-    banner.classList.remove('hidden');
-    banner.classList.toggle('reactor-war', sab.deadline != null);
-    banner.classList.toggle('o2-war', sab.deadline == null);
-    renderGameHud();
+    const timer = banner.querySelector('strong');
+    timer.textContent = critical ? remaining + ' s' : '';
+    timer.classList.toggle('hidden', !critical);
+    timer.classList.toggle('urgent', critical && remaining < 10);
   }
-  setInterval(renderSabotage, 1000);
-
-  // ------------------------------------------------------------ gps loop //
-
-  /** GPS->Meter Projektion auf Basis des gespeicherten Karten-Ankers. */
   function projectorFor(key = null) {
     if (key) return key === state.projKey ? state.proj : null;
     const code = state.code;
@@ -2471,6 +2418,7 @@ const App = (() => {
     if (!el) return;
     const inGame = state.room?.status === 'IN_GAME';
     if (!inGame) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
     const proj = projectorFor();
     let msg = null;
     if (!('geolocation' in navigator)) msg = t('gps.noapi');
@@ -2480,9 +2428,11 @@ const App = (() => {
     else if (!proj) msg = t('gps.noanchor');
     else if (Date.now() - state.gpsFixAt > 10000) msg = t('gps.lost');
     if (msg) {
-      el.textContent = `\ud83d\udcdb ${msg}`;
-      el.classList.add('hidden');
-      el.classList.remove('hidden');
+      if (el.dataset.message !== msg) {
+        el.dataset.message = msg;
+        el.replaceChildren(icon('pin'), ' ', msg);
+      }
+      el.classList.remove('gps-status--ok');
       if (renderGpsStatus.lastMsg !== msg && msg !== t('gps.waiting')) {
         // Diagnose für das RLAUS-Log: warum der Projektor fehlt.
         const diag = state.room?.map?.cal?.p1
@@ -2494,7 +2444,13 @@ const App = (() => {
         renderGpsStatus.lastMsg = msg;
       }
     } else {
-      el.classList.add('hidden');
+      const accuracy = Math.round(state.gpsAccM ?? 0);
+      const label = accuracy ? 'GPS ±' + accuracy + ' m' : 'GPS bereit';
+      if (el.dataset.message !== label) {
+        el.dataset.message = label;
+        el.replaceChildren(icon('pin'), ' ', label);
+      }
+      el.classList.add('gps-status--ok');
       renderGpsStatus.lastMsg = null;
     }
   }
@@ -2669,29 +2625,7 @@ const App = (() => {
 
   // Icon je Task-Typ — der Marker auf der Karte zeigt das Symbol statt
   // einer Nummer, die Task-Liste nutzt dasselbe Icon (wiedererkennbar).
-  const TASK_ICONS = {
-    fix_wiring: '\u{1F50C}',
-    swipe_card: '\u{1F4B3}',
-    upload_data: '\u{1F4E4}',
-    calibrate_distributor: '\u2699\uFE0F',
-    start_reactor: '\u2622\uFE0F',
-    unlock_manifolds: '\u{1F513}',
-    enter_id_code: '\u{1F194}',
-    reset_breakers: '\u26A1',
-    chart_course: '\u{1F5FA}\uFE0F',
-    clean_o2_filter: '\u{1F343}',
-    empty_garbage: '\u{1F5D1}\uFE0F',
-    divert_power: '\u{1F500}',
-    align_engine_output: '\u{1F4CF}',
-    stabilize_steering: '\u{1F3AF}',
-    clear_asteroids: '\u2604\uFE0F',
-    prime_shields: '\u{1F6E1}\uFE0F',
-    inspect_sample: '\u{1F9EA}',
-    submit_scan: '\u{1FA7A}',
-    fuel_engines: '\u26FD',
-    align_engine: '\u{1F4CF}',
-    align_engine_output: '\u{1F4CF}',
-  };
+
 
   // -------------------------------------------------------- live map draw //
 
@@ -2786,79 +2720,66 @@ const App = (() => {
     ctx.fill();
     // Label
     ctx.fillStyle = pressableAtTable ? '#ffe9e9' : 'rgba(255,255,255,0.55)';
-    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.font = '7px Nunito, sans-serif';
     ctx.fillText('EMERGENCY', cx, cy + 2);
     ctx.textAlign = 'left';
   }
+
+  const mapSuit = new Path2D('M18 24C19 11 27 6 37 7C49 8 56 20 56 33L54 53 49 57 48 65 37 65 35 57 28 57 26 65 15 65 14 53 7 52 8 34 15 30Z');
+  const mapVisor = new Path2D('M27 26C32 22 46 23 51 27L51 31C44 34 33 34 27 31Z');
 
   function drawGameMap() {
     const canvas = $('game-map');
     const map = state.room?.map;
     if (!canvas || !map?.nodes?.length) return;
     const wrap = canvas.parentElement;
-    canvas.width = wrap.clientWidth * 2;
-    canvas.height = wrap.clientHeight * 2;
+    const width = wrap.clientWidth;
+    const height = wrap.clientHeight;
+    if (!width || !height) return;
+    const pixelRatio = Math.min(devicePixelRatio || 1, 2);
+    const pixelWidth = Math.round(width * pixelRatio);
+    const pixelHeight = Math.round(height * pixelRatio);
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     const ctx = canvas.getContext('2d');
-    ctx.scale(2, 2);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
 
-    const nodes = Object.fromEntries(map.nodes.map((n) => [n.id, n]));
-    const fitMinX = Math.min(...map.nodes.map((n) => n.x));
-    const fitMaxX = Math.max(...map.nodes.map((n) => n.x));
-    const fitMinY = Math.min(...map.nodes.map((n) => n.y));
-    const fitMaxY = Math.max(...map.nodes.map((n) => n.y));
-    const fitW = fitMaxX - fitMinX || 50;
-    const fitH = fitMaxY - fitMinY || 50;
-    const pad = 20;
-    const halfW = canvas.width / 2 - pad * 2;
-    const halfH = canvas.height / 2 - pad * 2;
-    const fitScale = Math.min(halfW / fitW, halfH / fitH);
+    const nodes = Object.fromEntries(map.nodes.map((node) => [node.id, node]));
+    const points = [...map.nodes, ...(map.rooms ?? []).flatMap((room) => room.polygon ?? [])];
+    const minX = Math.min(...points.map(({ x }) => x));
+    const maxX = Math.max(...points.map(({ x }) => x));
+    const minY = Math.min(...points.map(({ y }) => y));
+    const maxY = Math.max(...points.map(({ y }) => y));
 
-    // Zwei Modi: 0 = ganze Karte ( Alles auf einen Blick),
-    // 1 = NAH (2.4x, zentriert auf dich — folgt dir beim Laufen).
+    // Keep room labels and points of interest clear of the HUD and action dock.
+    const landscape = width > height;
+    const padding = width < 440 ? 38 : 56;
+    const top = Math.round(height * (landscape ? .25 : .24));
+    const bottom = Math.round(height * (landscape ? .80 : .79));
+    const right = width - padding;
+    const centerX = width / 2;
+    const centerY = (top + bottom) / 2;
+    const fitScale = Math.min((right - padding) / Math.max(24, maxX - minX),
+      (bottom - top) / Math.max(24, maxY - minY));
+
     state.mapZoomIdx = Number(localStorage.getItem('rlaus_mapZoom')) === 1 ? 1 : 0;
-    const zoomed = state.mapZoomIdx === 1;
-    let minX; let minY; let maxX = 0; let maxY = 0; let scale;
-    if (zoomed && state.selfPos?.x != null) {
-      const z = 2.4;
-      scale = fitScale * z;
-      const viewW = halfW / scale;
-      const viewH = halfH / scale;
-      minX = state.selfPos.x - viewW / 2;
-      minY = state.selfPos.y - viewH / 2;
-    } else {
-      let pts = map.nodes.map((n) => [n.x, n.y]);
-      // Eigener Pin zwingt die Karte nicht mehr ins Schrumpfen.
-      if (state.selfPos?.x != null
-        && state.selfPos.x >= fitMinX - fitW * 0.15 && state.selfPos.x <= fitMaxX + fitW * 0.15
-        && state.selfPos.y >= fitMinY - fitH * 0.15 && state.selfPos.y <= fitMaxY + fitH * 0.15) {
-        pts = [...pts, [state.selfPos.x, state.selfPos.y]];
-      }
-      minX = Math.min(...pts.map((p) => p[0]));
-      maxX = Math.max(...pts.map((p) => p[0]));
-      minY = Math.min(...pts.map((p) => p[1]));
-      maxY = Math.max(...pts.map((p) => p[1]));
-      const w = maxX - minX || 50;
-      const h = maxY - minY || 50;
-      scale = Math.min(halfW / w, halfH / h);
-    }
-    const clamped = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const zoomed = state.mapZoomIdx === 1 && state.selfPos?.x != null;
+    const scale = fitScale * (zoomed ? 2.4 : 1);
+    const anchorX = zoomed ? state.selfPos.x : (minX + maxX) / 2;
+    const anchorY = zoomed ? state.selfPos.y : (minY + maxY) / 2;
     const toPx = (x, y) => {
-      const [px, py] = [pad + (x - minX) * scale, pad + (y - minY) * scale];
-      // Out-of-bounds (z.B. bist du vor map border): Pin bleibt am Rand.
-      if (zoomed) {
-        return [
-          clamped(px, pad, canvas.width / 2 - pad),
-          clamped(py, pad, canvas.height / 2 - pad),
-        ];
-      }
-      return [px, py];
+      const px = centerX + (x - anchorX) * scale;
+      const py = centerY + (y - anchorY) * scale;
+      return zoomed
+        ? [Math.max(padding, Math.min(right, px)), Math.max(top, Math.min(bottom, py))]
+        : [px, py];
     };
 
     // corridors: server format is { id, a, b } between two nodes
     ctx.lineWidth = 5;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#3a3f55';
+    ctx.strokeStyle = '#51638e';
     for (const c of map.corridors ?? []) {
       const from = nodes[c.a];
       const to = nodes[c.b];
@@ -2869,13 +2790,15 @@ const App = (() => {
       ctx.stroke();
     }
 
-    // rooms polygons
+    // Room labels share space with task markers, so keep their panels apart.
+    const roomLabels = [];
     ctx.lineWidth = 2;
     for (const r of map.rooms ?? []) {
       const poly = r.polygon ?? [];
       if (poly.length < 3) continue;
       ctx.strokeStyle = r.type === 'MEETING' ? 'rgba(74,222,128,0.7)' : 'rgba(255,209,102,0.55)';
-      ctx.fillStyle = 'rgba(255, 209, 102, 0.07)';
+      ctx.fillStyle = 'rgba(201, 214, 238, 0.11)';
+      ctx.setLineDash([5, 4]);
       ctx.beginPath();
       poly.forEach((pt, i) => {
         const [px, py] = toPx(pt.x, pt.y);
@@ -2883,6 +2806,7 @@ const App = (() => {
       });
       ctx.closePath();
       ctx.stroke();
+      ctx.setLineDash([]);
       ctx.fill();
       if (r.name && r.type !== 'CAFETERIA') {
         // Cafeteria hat schon das Tisch-Label, kein doppeltes Außen-Label.
@@ -2910,7 +2834,17 @@ const App = (() => {
 
         const lx = (minX + maxX) / 2 + offsetX;
         const ly = minY + offsetY;
-        const [plx, ply] = toPx(lx, ly);
+        let [plx, ply] = toPx(lx, ly);
+        ctx.font = '700 12px Nunito, sans-serif';
+        const labelWidth = Math.min(ctx.measureText(r.name).width + 14, 112);
+        plx = Math.max(labelWidth / 2 + 8, Math.min(width - labelWidth / 2 - 8, plx));
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const overlaps = roomLabels.some((label) =>
+            Math.abs(plx - label.x) < (labelWidth + label.width) / 2 + 4 && Math.abs(ply - label.y) < 24);
+          if (!overlaps) break;
+          ply -= 24;
+        }
+        roomLabels.push({ x: plx, y: ply, width: labelWidth });
         const [pcx, pcy] = toPx(cx, cy);
         // Pfeil vom Namen zum Raum (Pfeilspitze am Raum).
         ctx.strokeStyle = 'rgba(255,255,255,0.6)';
@@ -2933,11 +2867,17 @@ const App = (() => {
         ctx.closePath();
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.fill();
-        // Label-Text außerhalb des Polygons.
-        ctx.fillStyle = 'rgba(255,255,255,0.95)';
-        ctx.font = '600 11px system-ui';
+        ctx.fillStyle = '#0b1020';
+        ctx.strokeStyle = '#51638e';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(plx - labelWidth / 2, ply - 10, labelWidth, 20, 5);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#f2f6ff';
         ctx.textAlign = 'center';
-        ctx.fillText(r.name, plx, ply);
+        ctx.fillText(r.name, plx, ply + 4, labelWidth - 10);
+        ctx.textAlign = 'left';
       }
     }
 
@@ -2978,7 +2918,7 @@ const App = (() => {
       ctx.stroke();
       ctx.font = '15px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText('\u{1F6E0}\uFE0F', fx, fy + 5);
+      ctx.fillText('!', fx, fy + 5);
       ctx.textAlign = 'left';
     }
 
@@ -3038,35 +2978,25 @@ const App = (() => {
         const wedge = waypoints[(taskIdx * 7) % waypoints.length];
         [tx, ty] = toPx(wedge.x + (taskIdx % 3) * 6, wedge.y);
       }
-      const icon = TASK_ICONS[task.type] ?? '\u{1F4DD}';
-      // Task-Marker dezent: kleiner, kein Pulsieren (lenkt ab und überdeckt Namen).
-      ctx.fillStyle = 'rgba(255,209,102,0.35)';
+      const near = taskNear(task);
+      const radius = near ? 12 : 8;
+      ctx.fillStyle = '#f5d84a';
+      ctx.strokeStyle = near ? '#f2f6ff' : '#111a30';
+      ctx.lineWidth = near ? 2 : 1.5;
       ctx.beginPath();
-      ctx.arc(tx, ty, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(tx, ty, 7, 0, Math.PI * 2);
+      ctx.arc(tx, ty, radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.font = '11px system-ui';
+      ctx.fillStyle = '#111a30';
+      ctx.font = '800 13px Nunito, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(icon, tx, ty + 3.5);
+      ctx.fillText('!', tx, ty + 4);
       ctx.textAlign = 'left';
       taskHits.push({ x: tx, y: ty, task });
     }
     state._taskHits = taskHits;
 
-    // Kein eigener Fix: deutlicher Hinweis mitten auf der Karte.
-    if (!state.selfPos?.x && !commsBlind) {
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
-      ctx.font = 'bold 14px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText(t('map.waiting'), canvas.width / 2, 30);
-      ctx.textAlign = 'left';
-    }
+
 
     // Bots (nur virtuelle Bewohner): Crew hellblau, IMPOSTOR-BOTS ROT
     // (Divo v19.13.4: der Feind soll sichtbar sein, solange getestet wird).
@@ -3112,11 +3042,16 @@ const App = (() => {
       smooth.x += (state.selfPos.x - smooth.x) * 0.55;
       smooth.y += (state.selfPos.y - smooth.y) * 0.55;
       const [sx, sy] = toPx(smooth.x, smooth.y);
-      const turn = (Date.now() % 1600) / 1600; // weiche Puls-Welle
-      ctx.fillStyle = `rgba(74,222,128,${0.5 + 0.3 * Math.sin(turn * Math.PI)})`;
+      const self = state.room.players.find(({ id }) => id === state.playerId);
+      const suitColor = colorChipHex(self?.colorId);
+      const turn = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : (Date.now() % 1600) / 1600;
+      ctx.strokeStyle = suitColor;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = .65 - turn * .32;
       ctx.beginPath();
       ctx.arc(sx, sy, 16 + 6 * turn, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
       // Kompass-Fallback: wenn GPS selbst beim Gehen keine Richtung
       // liefert, zeigt der Pfeil die Handy-Ausrichtung vom Sensor.
       const heading = state.gpsHeading ?? (state.sensorMoving
@@ -3155,14 +3090,19 @@ const App = (() => {
           ctx.textAlign = 'left';
         }
       }
-      ctx.fillStyle = '#4ade80';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(sx, sy, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.save();
+      ctx.translate(sx - 12, sy - 13);
+      ctx.scale(.38, .38);
+      ctx.fillStyle = suitColor;
+      ctx.strokeStyle = '#070a14';
+      ctx.lineWidth = 4;
+      if (self?.isAlive === false) ctx.globalAlpha = .6;
+      ctx.fill(mapSuit);
+      ctx.stroke(mapSuit);
+      ctx.fillStyle = '#81e0f7';
+      ctx.fill(mapVisor);
+      ctx.restore();
+      ctx.fillStyle = '#f2f6ff';
       ctx.font = '700 11px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText('DU', sx, sy - 16);
@@ -3180,7 +3120,7 @@ const App = (() => {
       ctx.fillStyle = 'rgba(250, 204, 21, 0.75)';
       ctx.font = '600 13px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText('\u{1F4A1} LICHTER AUS \u2014 find Electrical im Dunkeln!', w / 2, h / 2);
+      ctx.fillText('Licht aus · Geh zu Electrical', w / 2, h / 2);
       ctx.textAlign = 'left';
     }
   }
@@ -3235,14 +3175,9 @@ const App = (() => {
     const overlay = $('kill-anim');
     if (!overlay) return;
     // Farben: OPFER = eigene Spielerfarbe; KILLER = klassisches Impostor-Rot.
-    const victim = overlay.querySelector('.kill-bean.victim');
-    const killer = overlay.querySelector('.kill-bean.killer');
-    if (victim) {
-      victim.style.background = colorChipHex(
-        state.room?.players?.find((p) => p.id === state.playerId)?.colorId,
-      );
-    }
-    if (killer) killer.style.background = '#C51111';
+    const victim = state.room?.players?.find((player) => player.id === state.playerId);
+    overlay.querySelector('.kill-bean.victim').replaceChildren(avatar(victim?.colorId, true));
+    overlay.querySelector('.kill-bean.killer').replaceChildren(avatar('red'));
 
     // Reset laufende Animationen (Re-Trigger beim zweiten Kill).
     overlay.classList.remove('kill-anim-out', 'hidden');
@@ -3368,18 +3303,21 @@ const App = (() => {
   }
 
   function showToast(message) {
-    const toast = document.createElement('div');
-    toast.textContent = message;
-    Object.assign(toast.style, {
-      position: 'fixed', left: '50%', bottom: '28px', transform: 'translateX(-50%)',
-      maxWidth: '88vw', padding: '10px 16px', borderRadius: '10px',
-      background: 'rgba(30, 30, 38, 0.95)', color: '#fff',
-      fontSize: '14px', zIndex: '999',
-      boxShadow: '0 6px 18px rgba(0, 0, 0, 0.4)',
-    });
-    document.body.appendChild(toast);
+    const toast = element('div', 'toast', message);
+    $('toast-region').replaceChildren(toast);
     setTimeout(() => toast.remove(), 3200);
   }
+
+  function connectionStatus(message = '') {
+    const status = $('connection-status');
+    status.textContent = message;
+    status.classList.toggle('hidden', !message);
+  }
+
+  window.addEventListener('offline', () => connectionStatus('Du bist offline. Prüfe deine Verbindung.'));
+  window.addEventListener('online', () => connectionStatus(state.socket?.disconnected
+    ? 'Verbindung verloren. Wir verbinden dich neu.' : ''));
+  if (!navigator.onLine) connectionStatus('Du bist offline. Prüfe deine Verbindung.');
 
   $('btn-report').addEventListener('click', () => {
     if (state.room?.status === 'MEETING') return;
@@ -3514,7 +3452,7 @@ const App = (() => {
       return;
     }
     if (cal2.step === 'pick') {
-      steps.textContent = 'Punkt A steht \u2705 \u2014 jetzt die zweite Ecke (weit weg!).';
+      steps.textContent = 'Punkt A steht \u2014 jetzt die zweite Ecke (weit weg!).';
       status.textContent = 'Tippe auf der Karte DORT hin, wo du gerade stehst.';
       btn.disabled = true;
       btn.textContent = 'Karte tappen \u2026';
@@ -3529,14 +3467,14 @@ const App = (() => {
       return;
     }
     if (cal2.step === 'p2-map') {
-      steps.textContent = 'Punkt A \u2705 \u2014 Punkt B: tippe auf der Karte, wo du stehst.';
+      steps.textContent = 'Punkt A \u2014 Punkt B: tippe auf der Karte, wo du stehst.';
       status.textContent = 'Tippe auf die zweite Ecke.';
       btn.disabled = true;
       btn.textContent = 'Karte tappen \u2026';
       return;
     }
     if (cal2.step === 'done') {
-      steps.textContent = 'Kalibriert \u2705 \u2014 ab jetzt startet die Karte automatisch richtig.';
+      steps.textContent = 'Kalibriert \u2014 ab jetzt startet die Karte automatisch richtig.';
       status.textContent = 'Speichern \u2026';
       btn.disabled = true;
       btn.textContent = ' Gespeichert ';
@@ -3612,7 +3550,7 @@ const App = (() => {
       state.velEst = null;
       state.projKey = null;
       state.proj = null;
-      showToast('\ud83d\udcdb Kalibrierung gespeichert \u2014 gilt f\u00fcr immer (auch am Geburtstag).');
+      showToast('Kalibrierung gespeichert \u2014 gilt f\u00fcr immer (auch am Geburtstag).');
       setTimeout(() => cal2Hide(), 1200);
     }
     cal2UpdateUi();
@@ -3874,7 +3812,7 @@ const App = (() => {
     state.posSmooth = null;
     $('calib-overlay').classList.add('hidden');
     clearInterval(drawCalibMap._iv);
-    showToast('\ud83d\udcdb Setz-Punkt gespeichert \u2014 dein Marker erscheint mit dem n\u00e4chsten GPS-Fix.');
+    showToast('Setz-Punkt gespeichert \u2014 dein Marker erscheint mit dem n\u00e4chsten GPS-Fix.');
   });
   document.addEventListener('click', (event) => {
     if (event.target.closest('#btn-calib-close')) {
@@ -3943,7 +3881,7 @@ const App = (() => {
         code: state.code,
         anchor: cached.anchor,
       });
-      showToast('\ud83d\udcdb GPS-Ursprung aus deiner gespeicherten Karte wiederhergestellt.');
+      showToast('GPS-Ursprung aus deiner gespeicherten Karte wiederhergestellt.');
     }
   }
 
@@ -3956,7 +3894,7 @@ const App = (() => {
     const hint = $('anchor-hint');
     hint.classList.toggle('hidden', !showBtn);
     hint.textContent = room?.map?.cal
-      ? '\u2705 Karte kalibriert — der Button dient nur noch als Feintuning.'
+      ? ' Karte kalibriert — der Button dient nur noch als Feintuning.'
       : 'Kalibriere ein Mal: 2 klare Punkte (z. B. Stra\u00dfenecken) abgehen, die App merkt sich das f\u00fcr immer.';
   }
 
@@ -4027,6 +3965,11 @@ const App = (() => {
     hideOverlaysNot();
     show('lobby');
   });
+  $('btn-gameover-lobby').addEventListener('click', () => {
+    hideOverlaysNot();
+    if (state.room) renderLobby(state.room);
+    show('lobby');
+  });
 
   // ------------------------------------------------------------- meeting //
 
@@ -4036,12 +3979,10 @@ const App = (() => {
   const MEETING_INTRO_TIMERS = [];
   let meetingIntroActive = false;
   let meetingRevealStarted = false;
-  let meetingIntroWatcher = null;
+
   let meetingConfirmHandler = null;
 
   function clearMeetingIntroTimers() {
-    window.clearInterval(meetingIntroWatcher);
-    meetingIntroWatcher = null;
     while (MEETING_INTRO_TIMERS.length) {
       window.clearTimeout(MEETING_INTRO_TIMERS.pop());
     }
@@ -4066,11 +4007,7 @@ const App = (() => {
   function meetingIntroShow(condition) {
     meetingIntroActive = true;
     $('meeting-intro').classList.remove('hidden');
-    $('meeting-intro-card').className =
-      condition === 'EMERGENCY' ? 'meeting-intro-emergency'
-        : condition === 'REPORT' ? 'meeting-intro-report'
-          : condition === 'AWAIT' ? 'meeting-intro-await'
-            : 'meeting-intro-reveal';
+    $('meeting-intro-card').className = 'meeting-intro-card meeting-intro-' + condition.toLowerCase();
   }
 
   function startMeetingIntro(payload) {
@@ -4099,15 +4036,15 @@ const App = (() => {
       ? t('meeting.flash.report_body')
       : t('meeting.flash.emergency_body');
     const action = t(isReport ? 'meeting.flash.report_action' : 'meeting.flash.emergency_action');
-    const icon = isReport ? '\u2620' : '\ud83d\udce3';
-    $('meeting-intro-content').innerHTML =
-      '<div class="intro-card-inner">'
-      + `<div class="intro-icon">${icon}</div>`
-      + `<div class="intro-big">${escapeHtml(big)}</div>`
-      + `<div class="intro-sub">${escapeHtml(sub)}</div>`
-      + `<div class="intro-sub intro-action">${escapeHtml(action)}</div>`
-      + '<div class="intro-wait-dots"><span></span><span></span><span></span></div>'
-      + '</div>';
+    const dots = element('div', 'intro-wait-dots');
+    dots.append(element('span'), element('span'), element('span'));
+    meetingIntroContent(
+      icon(isReport ? 'flag' : 'report', 'icon intro-icon'),
+      element('div', 'intro-big', big),
+      element('div', 'intro-sub', sub),
+      element('div', 'intro-sub intro-action', action),
+      dots,
+    );
     // HUD-Sperre sofort: Knöpfe weg, Meldung auf der Map.
     renderGameHud();
     drawGameMap();
@@ -4127,7 +4064,7 @@ const App = (() => {
     state.meetingAwaitActive = true;
     meetingIntroShow('AWAIT');
     renderMeetingAwaitContent(true);
-    meetingIntroWatcher = window.setInterval(renderMeetingAwaitContent, 1000);
+
     // Bestätigung des Hosts auch für späte Joiner sichtbar machen.
     meetingConfirmHandler = () => runMeetingReveal();
     ensureSocket().once('game:meeting_confirmed', meetingConfirmHandler);
@@ -4141,56 +4078,50 @@ const App = (() => {
     meetingIntroShow('AWAIT');
     renderMeetingAwaitContent(true);
     // 1s-Poll: Zaehler aktualisieren waehrend Spieler in die Cafeteria rennen.
-    meetingIntroWatcher = window.setInterval(renderMeetingAwaitContent, 1000);
+
     // Failsafe: 20s nach Start laeuft das Meeting auch ohne Host-Check.
     MEETING_INTRO_TIMERS.push(window.setTimeout(() => runMeetingReveal(), 20000));
+  }
+
+  function meetingIntroContent(...content) {
+    const card = element('div', 'intro-card-inner');
+    card.append(...content);
+    $('meeting-intro-content').replaceChildren(card);
+  }
+
+  function meetingAwaitActive() {
+    return $('meeting-intro-card').classList.contains('meeting-intro-await');
   }
 
   let meetingAwaitKey = null;
   function renderMeetingAwaitContent(force = false) {
     if (!meetingIntroActive || meetingRevealStarted) return;
-    const self = (state.room?.players ?? []).find((p) => p.id === state.playerId);
-    const alive = self?.isAlive !== false;
-    const isHost = self?.isHost === true;
+    const players = state.room?.players ?? [];
+    const self = players.find((p) => p.id === state.playerId);
     const inCafe = roomIdContains('CAFETERIA');
-    const counts = state.room?.meeting?.meetingAdminCount ?? 0;
-    const totalAlive = (state.room?.players ?? []).filter((p) => p.isAlive !== false).length;
-    const ghosts = (state.room?.players ?? []).filter((p) => p.isAlive === false).length;
-    // 1s-Watcher: NUR bei echtem Zustandswechsel neu zeichnen — sonst
-    // zerschießt der Rebuild den armierten Doppel-Tap des Hosts (Log 18).
-    const key = `${inCafe ? 'c' : 'w'}${alive ? 'a' : 'd'}${isHost ? 'h' : 'g'}${counts}`;
+    const isHost = self?.isHost === true;
+    const walking = !inCafe && self?.isAlive !== false;
+    const count = state.room?.meeting?.meetingAdminCount ?? 0;
+    const totalAlive = players.filter((p) => p.isAlive !== false).length;
+    const ghosts = players.length - totalAlive;
+    const key = [walking, isHost, count, totalAlive, ghosts].join(':');
     if (!force && key === meetingAwaitKey) return;
     meetingAwaitKey = key;
 
-    if (!inCafe && alive) {
-      // Nicht-Host, nicht in Cafeteria -> keine Popup, nur Meldung + Walk-Icon.
-      $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
-        + '<div class="intro-kicker">' + escapeHtml(t('meeting.beacon')) + '</div>'
-        + '<div class="intro-icon intro-walk">\ud83d\udeb6</div>'
-        + `<div class="intro-big">${escapeHtml(t('meeting.await.walk'))}</div>`
-        + `<div class="intro-sub">${escapeHtml(t('meeting.counts.living'))}: ${counts}/${totalAlive}`
-        + ` \u2022 ${escapeHtml(t('meeting.counts.ghosts'))}: ${ghosts}</div></div>`;
-      return;
+    const title = t(isHost && !walking ? 'meeting.await.title' : 'meeting.beacon');
+    const instruction = t(walking ? 'meeting.await.walk' : 'meeting.await.waiting');
+    const summary = t('meeting.counts.living') + ': ' + count + '/' + totalAlive
+      + ' · ' + t('meeting.counts.ghosts') + ': ' + ghosts;
+    const content = [element('div', 'intro-kicker', title)];
+    if (walking) content.push(icon('pin', 'icon intro-icon'));
+    content.push(element('div', 'intro-big', instruction), element('div', 'intro-sub', summary));
+    if (isHost && !walking) {
+      const button = element('button', 'intro-confirm-btn', t('meeting.await.confirm'));
+      button.id = 'meeting-admin-confirm';
+      content.push(button);
     }
-    if (isHost) {
-      $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
-        + '<div class="intro-kicker">' + escapeHtml(t('meeting.await.title')) + '</div>'
-        + `<div class="intro-big">${escapeHtml(t('meeting.await.waiting'))}</div>`
-        + `<div class="intro-sub">${escapeHtml(t('meeting.counts.living'))}: ${counts}/${totalAlive}`
-        + ` \u2022 ${escapeHtml(t('meeting.counts.ghosts'))}: ${ghosts}</div>`
-        + `<button id="meeting-admin-confirm" class="intro-confirm-btn">`
-        + escapeHtml(t('meeting.await.confirm')) + '</button></div>';
-      setupMeetingAdminConfirm();
-      return;
-    }
-    // Nicht-Host, in Cafeteria oder tot -> warten auf Admin.
-    $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
-      + '<div class="intro-kicker">' + escapeHtml(t('meeting.beacon')) + '</div>'
-      + `<div class="intro-big">${escapeHtml(t('meeting.await.waiting'))}</div>`
-      + `<div class="intro-sub">${escapeHtml(t('meeting.counts.living'))}: ${counts}/${totalAlive}`
-      + ` \u2022 ${escapeHtml(t('meeting.counts.ghosts'))}: ${ghosts}</div>`
-      + '<div class="intro-wait-dots"><span></span><span></span><span></span></div>'
-      + '<div class="intro-scanner"></div></div>';
+    meetingIntroContent(...content);
+    if (isHost && !walking) setupMeetingAdminConfirm();
   }
 
   function setupMeetingAdminConfirm() {
@@ -4230,13 +4161,14 @@ const App = (() => {
       ?? 'Jemand';
     const me = state.playerId === payload.reporterId;
     sfx('ui_select');
-    $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
-      + '<div class="intro-kicker">DAS MEETING BEGINNT</div>'
-      + '<div class="intro-icon">\ud83d\udce3</div>'
-      + `<div class="intro-big">${escapeHtml(me ? t('meeting.reveal.reporter_you') : reporterName)}</div>`
-      + `<div class="intro-sub">${escapeHtml(me
-        ? (kind === 'EMERGENCY' ? t('meeting.reveal.reporter_you_emergency') : t('meeting.reveal.reporter_you'))
-        : (kind === 'EMERGENCY' ? t('meeting.reveal.reporter_emergency') : t('meeting.reveal.reporter')))}</div></div>`;
+    meetingIntroContent(
+      element('div', 'intro-kicker', 'Das Meeting beginnt'),
+      icon('report', 'icon intro-icon'),
+      element('div', 'intro-big', me ? t('meeting.reveal.reporter_you') : reporterName),
+      element('div', 'intro-sub', me
+        ? t(kind === 'EMERGENCY' ? 'meeting.reveal.reporter_you_emergency' : 'meeting.reveal.reporter_you')
+        : t(kind === 'EMERGENCY' ? 'meeting.reveal.reporter_emergency' : 'meeting.reveal.reporter')),
+    );
     MEETING_INTRO_TIMERS.push(window.setTimeout(stepMeetingUnfound, 2000));
   }
 
@@ -4247,14 +4179,13 @@ const App = (() => {
       const players = state.stashedMeeting?.players ?? state.room?.players ?? [];
       const names = unfound
         .map((death) => players.find((p) => p.id === death.id)?.name ?? death.name)
-        .map((name) => escapeHtml(name))
-        .join(' \u2022 ');
+        .join(' · ');
       sfx('notification');
-      $('meeting-intro-content').innerHTML = '<div class="intro-card-inner">'
-        + '<div class="intro-kicker">\u2020</div>'
-        + '<div class="intro-icon">\u2620</div>'
-        + `<div class="intro-big">${escapeHtml(t('meeting.reveal.unfound'))}</div>`
-        + `<div class="intro-sub">${names}</div></div>`;
+      meetingIntroContent(
+        icon('flag', 'icon intro-icon'),
+        element('div', 'intro-big', t('meeting.reveal.unfound')),
+        element('div', 'intro-sub', names),
+      );
       MEETING_INTRO_TIMERS.push(window.setTimeout(finishMeetingIntro, 2000));
     } else {
       finishMeetingIntro();
@@ -4335,20 +4266,19 @@ const App = (() => {
     $('btn-skipvote').classList.add('hidden');
     $('vote-list').querySelectorAll('.vote-card').forEach((card) => {
       card.classList.remove('pickable', 'selected');
+      card.querySelector('.vote-card__pick').disabled = true;
       card.querySelector('.vote-confirm')?.remove();
     });
     markMyVoteChip();
   }
 
   function markMyVoteChip() {
-    if (!state.myVoteTargetId) return;
-    const row = $('vote-list')
-      .querySelector(`[data-player-id="${state.myVoteTargetId}"]`);
+    const row = [...$('vote-list').children].find((card) => card.dataset.playerId === state.playerId);
     if (row && !row.querySelector('.voted-chip')) {
-      const chip = document.createElement('img');
-      chip.className = 'voted-chip';
-      chip.src = '/img/ui/Button_Pic/Voted.png';
-      chip.alt = 'voted';
+      const chip = icon('check', 'voted-chip');
+      chip.removeAttribute('aria-hidden');
+      chip.setAttribute('role', 'img');
+      chip.setAttribute('aria-label', 'Hat abgestimmt');
       row.appendChild(chip);
     }
   }
@@ -4382,81 +4312,63 @@ const App = (() => {
   /** Tablet-Karten (Farbchips) + Among-Us-Flow: Karte waehlen -> gruen/rot
       bestaetigen -> Vote gelockt.Reporter kriegt das Megafon-Piktogramm.
       isDiscussion: Karte ausgegraut (kein Vote moeglich). */
-  function openVoteList(candidates, onPick, title = 'Auf wen abstimmst du?', isDiscussion = false) {
+  function openVoteList(candidates, onPick, title = 'Wen wählst du?', isDiscussion = false) {
     const list = $('vote-list');
-    list.innerHTML = '';
+    list.replaceChildren();
     $('meeting-hint').textContent = title;
     $('btn-skipvote').classList.toggle('hidden', !onPick || state.voted);
-    const reporterId = state.room?.reporterId ?? null;
     for (const player of candidates) {
-      const isMate = (state.teammates ?? []).some((m) => m.id === player.id);
-      const isSelf = player.id === state.playerId;
-      const li = document.createElement('li');
-      li.className = 'vote-card';
-      li.dataset.playerId = player.id;
       const dead = player.isAlive === false;
-      if (dead) li.classList.add('dead');
-      if (isDiscussion) li.classList.add('discussion');
-      const chip = document.createElement('span');
-      chip.className = 'vote-chip';
-      chip.style.background = colorChipHex(player.colorId);
-      li.appendChild(chip);
-      const nameSpan = document.createElement('span');
-      nameSpan.className = `vote-name${isMate ? ' imp-name' : ''}`;
-      nameSpan.textContent = `${player.name}${isSelf ? ' (you)' : ''}`;
-      li.appendChild(nameSpan);
-      if (player.id === reporterId && !dead) {
-        const mega = document.createElement('span');
-        mega.className = 'vote-megaphone';
-        mega.textContent = '\ud83d\udce3';
-        li.appendChild(mega);
-      }
-      if (state.voted) {
-        markMyVoteChip();
-      }
-      if (onPick && !dead && !state.voted) {
-        li.classList.add('pickable');
-        li.addEventListener('click', (event) => {
-          if (event.target.closest('.vote-confirm')) return;
-          list.querySelectorAll('.vote-card').forEach((card) => {
-            if (card === li) return;
-            card.classList.remove('selected');
-            card.querySelector('.vote-confirm')?.remove();
-          });
-          li.classList.add('selected');
-          let confirmBar = li.querySelector('.vote-confirm');
-          if (!confirmBar) {
-            confirmBar = document.createElement('span');
-            confirmBar.className = 'vote-confirm';
-            const yes = document.createElement('button');
-            yes.className = 'yes';
-            yes.textContent = '\u2714';
-            const no = document.createElement('button');
-            no.className = 'no';
-            no.textContent = '\u2716';
-            yes.addEventListener('click', (confirmEvent) => {
-              confirmEvent.stopPropagation();
-              voteFor(player.id);
-              li.classList.remove('selected');
-            });
-            no.addEventListener('click', (confirmEvent) => {
-              confirmEvent.stopPropagation();
-              li.classList.remove('selected');
-              confirmBar.remove();
-            });
-            confirmBar.appendChild(yes);
-            confirmBar.appendChild(no);
-            li.appendChild(confirmBar);
-            sfx('ui_select');
-          }
-        });
-      }
-      list.appendChild(li);
+      const pickable = Boolean(onPick) && !dead && !state.voted;
+      const row = element('li', 'vote-card');
+      row.dataset.playerId = player.id;
+      row.classList.toggle('dead', dead);
+      row.classList.toggle('discussion', isDiscussion);
+      row.classList.toggle('pickable', pickable);
+      const pick = element('button', 'vote-card__pick');
+      pick.disabled = !pickable;
+      const name = player.name + (dead ? ' · Ausgeschieden' : player.id === state.playerId ? ' (Du)' : '');
+      pick.append(avatar(player.colorId, dead), element('span', 'vote-name', name));
+      pick.setAttribute('aria-label', name);
+      if (player.id === state.room?.reporterId && !dead) pick.append(icon('report', 'icon vote-megaphone'));
+      row.append(pick);
+      list.append(row);
     }
-    // Karten frisch gebaut -> vorhandene Votes sofort markieren.
-    patchVotedBadges();
-    if (!onPick) return; // Diskussion: kein Skip-Vote vor der Abstimmung.
   }
+
+  $('vote-list').addEventListener('click', (event) => {
+    const row = event.target.closest('.vote-card.pickable');
+    if (!row || state.voted) return;
+    if (event.target.closest('.yes')) {
+      voteFor(row.dataset.playerId);
+      row.classList.remove('selected');
+      row.querySelector('.vote-confirm')?.remove();
+      return;
+    }
+    if (event.target.closest('.no')) {
+      row.classList.remove('selected');
+      row.querySelector('.vote-confirm')?.remove();
+      row.querySelector('.vote-card__pick').focus();
+      return;
+    }
+    if (!event.target.closest('.vote-card__pick')) return;
+    for (const selected of $('vote-list').querySelectorAll('.selected')) {
+      selected.classList.remove('selected');
+      selected.querySelector('.vote-confirm')?.remove();
+    }
+    const confirmation = element('div', 'vote-confirm');
+    const yes = element('button', 'yes');
+    const no = element('button', 'no');
+    yes.setAttribute('aria-label', 'Stimme bestätigen');
+    no.setAttribute('aria-label', 'Auswahl abbrechen');
+    yes.append(icon('check'));
+    no.append(icon('close'));
+    confirmation.append(yes, no);
+    row.append(confirmation);
+    row.classList.add('selected');
+    yes.focus({ preventScroll: true });
+    sfx('ui_select');
+  });
 
   $('btn-skipvote').addEventListener('click', () => {
     if (state.voted) return;
@@ -4466,7 +4378,35 @@ const App = (() => {
     sfx('vote_locked');
     $('btn-skipvote').classList.add('hidden');
     setVotedHint();
+    markMyVoteChip();
+    $('vote-list').querySelectorAll('.vote-card__pick').forEach((button) => { button.disabled = true; });
   });
+  const nameInput = $('player-name');
+  const syncNameCount = () => { $('name-count').textContent = nameInput.value.length + ' / 20'; };
+  nameInput.addEventListener('input', syncNameCount);
+  syncNameCount();
+  const codeInput = $('join-code');
+  const codeTiles = [...document.querySelectorAll('.code-field__tiles span')];
+  function syncCodeTiles() {
+    codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z2-9]/g, '');
+    codeTiles.forEach((tile, index) => {
+      tile.textContent = codeInput.value[index] ?? '–';
+      tile.toggleAttribute('data-next', index === codeInput.value.length);
+    });
+  }
+  codeInput.addEventListener('input', syncCodeTiles);
+  syncCodeTiles();
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const dismiss = [
+      ['settings-menu', 'btn-settings-close'], ['cal2-overlay', 'btn-cal2-close'],
+      ['calib-overlay', 'btn-calib-close'], ['emergency-panel', 'btn-emergency-close'],
+      ['admin-table', 'btn-admin-table-close'], ['rejoin-overlay', 'btn-rejoin-no'],
+      ['role-overlay', 'role-continue'],
+    ].find(([overlay]) => !$(overlay).classList.contains('hidden'));
+    if (dismiss) $(dismiss[1]).click();
+  });
+
   // ------------------------------------------------------------ bootstrap //
 
   // Service-Worker for offline install (only on secure origins).

@@ -1,0 +1,64 @@
+@layer base {
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-base);
+  -webkit-font-smoothing: antialiased;
+}
+html {
+  background: linear-gradient(var(--bg0), var(--bg1) 55%, var(--bg0)) fixed;
+}
+body::before {
+  /* Rechter radialer Akzent-Schein + feines Linien-Grid (Kap. 6) */
+  content: '';
+  position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(var(--size-1100px) var(--size-500px) at 50% -10%, rgba(var(--accent-rgb), 0.14), transparent 60%),
+    linear-gradient(90deg, var(--tone-255-255-255-0p045) var(--size-1px), transparent var(--size-1px)),
+    linear-gradient(180deg, var(--tone-255-255-255-0p03) var(--size-1px), transparent var(--size-1px));
+  background-size: auto, var(--size-44px) var(--size-44px), var(--size-44px) var(--size-44px);
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+body { overscroll-behavior: none; }
+
+::-webkit-scrollbar { width: var(--size-8px); }
+::-webkit-scrollbar-thumb { background: var(--tone-255-255-255-0p18); border-radius: var(--size-8px); }
+:focus-visible { outline: var(--size-2px) solid var(--accent); outline-offset: var(--size-3px); }
+
+/* ------------------------------- Screens -------------------------------- */
+.screen {
+  display: none;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding: var(--size-16px);
+  max-width: var(--size-560px);
+  margin: 0 auto;
+}
+
+
+.hero { text-align: center; margin: var(--size-30px) 0 var(--size-20px); }
+.hero h1 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: var(--fs-2xl);
+  line-height: 1.2;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+.hero .accent {
+  color: var(--accent-light);
+  text-shadow: 0 0 var(--size-14px) rgba(var(--accent-rgb), 0.35);
+}
+.tagline {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin: var(--size-12px) 0 0;
+}
+}

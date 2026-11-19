@@ -21,10 +21,10 @@ const MIME_TYPES = {
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
   '.ico': 'image/x-icon',
   '.wav': 'audio/wav',
   '.mp3': 'audio/mpeg',
-  '.png': 'image/png',
 };
 
 function serveStaticFile(response, relativePath) {
@@ -79,7 +79,8 @@ function createHttpServer(roomStore) {
           serveStaticFile(response, url.pathname.slice(1));
           return;
         }
-        const asset = path.normalize(url.pathname).replace(/^([/\\])+/, '');
+        // URL paths use forward slashes on every host, including Windows.
+        const asset = path.posix.normalize(url.pathname).slice(1);
         if (asset.startsWith('css/') || asset.startsWith('js/') || asset.startsWith('icons/')
           || asset.startsWith('sfx/') || asset.startsWith('img/')) {
           serveStaticFile(response, asset);

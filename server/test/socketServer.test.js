@@ -247,6 +247,25 @@ describe('socket flow security & gameplay', () => {
     assert.deepEqual(await response.json(), { status: 'ok' });
   });
 
+  test('serves the PWA shell and nested browser assets', async () => {
+    const assets = [
+      ['/', 'text/html; charset=utf-8'],
+      ['/css/style.css', 'text/css; charset=utf-8'],
+      ['/css/styles/fonts/nunito-latin.woff2', 'font/woff2'],
+      ['/js/app.js?v=19.17.0', 'text/javascript; charset=utf-8'],
+      ['/js/ui.js', 'text/javascript; charset=utf-8'],
+      ['/img/terminal.svg', 'image/svg+xml'],
+      ['/manifest.webmanifest', 'application/manifest+json; charset=utf-8'],
+      ['/socket.io/socket.io.js', 'application/javascript; charset=utf-8'],
+    ];
+    await Promise.all(assets.map(async ([url, contentType]) => {
+      const response = await fetch(baseUrl + url);
+      assert.equal(response.status, 200, url);
+      assert.equal(response.headers.get('content-type')?.toLowerCase(), contentType, url);
+      assert.ok((await response.arrayBuffer()).byteLength > 0, url);
+    }));
+  });
+
   test('roles are distributed privately and never broadcast', async () => {
     const { host, player, code } = await createRoomWithTwoPlayers();
 

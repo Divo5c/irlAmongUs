@@ -1,0 +1,127 @@
+@layer screens {
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@keyframes sab-pulse { 50% { opacity: 0.75; } }
+
+@keyframes intro-alert-shake {
+  0%, 100% { transform: rotate(-1deg) scale(1); }
+  50% { transform: rotate(1deg) scale(1.02); } }
+
+@keyframes intro-icon-pop { from { transform: scale(0.2) rotate(-16deg); opacity: 0; } }
+
+@keyframes intro-dot { 40% { transform: translateY(var(--size-minus-9px)) scale(1.15); } }
+
+@keyframes intro-walk-bob { 50% { transform: translateY(var(--size-minus-9px)) scale(1.06); } }
+
+@keyframes intro-scan { from { transform: translateX(-70%); }
+  to { transform: translateX(70%); } }
+
+@keyframes stars-drift { from { transform: translateX(0); }
+  to { transform: translateX(-6%); } }
+
+@keyframes eject-drift { 0% { transform: translateX(-130vw) rotate(0deg); }
+  100% { transform: translateX(130vw) rotate(-12deg); } }
+
+@keyframes rolePop {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes sabotage-pulse {
+  0%, 100% { box-shadow: 0 0 var(--size-20px) var(--tone-124-58-237-0p6); }
+  50% { box-shadow: 0 0 var(--size-35px) var(--tone-124-58-237-0p9); }
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 var(--size-8px) var(--size-20px) var(--tone-0-0-0-0p45); }
+  50% { box-shadow: 0 var(--size-8px) var(--size-26px) var(--tone-255-92-105-0p55); }
+}
+
+@keyframes meeting-hud-pulse {
+  0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
+  50% { opacity: 0.85; transform: translateX(-50%) scale(1.03); } }
+
+@keyframes bar-pop { 35% { transform: scaleX(1.01) scaleY(1.18); } }
+
+@keyframes leave-pulse { 50% { box-shadow: 0 var(--size-8px) var(--size-30px) var(--tone-239-68-68-0p55); } }
+
+@keyframes abort-pulse { 50% { box-shadow: 0 0 var(--size-16px) var(--tone-239-68-68-0p8); } }
+
+@keyframes kill-bg-flash { 0% { filter: brightness(1); } 50% { filter: brightness(1.5); } }
+
+@keyframes kill-slash-sweep {
+  0% { transform: skewY(-9deg) scaleX(0.2); opacity: 0; }
+  55% { transform: skewY(-9deg) scaleX(1.04); opacity: 0.95; }
+  100% { transform: skewY(-9deg) scaleX(1); opacity: 0.9; } }
+
+@keyframes kill-knife-chop {
+  0% { transform: translate(-60%, -320%) rotate(-42deg); opacity: 0; }
+  70% { transform: translate(-10%, -10%) rotate(18deg); opacity: 1; }
+  100% { transform: translate(-8%, -6%) rotate(14deg); opacity: 1; } }
+
+@keyframes kill-bean-shake { 25% { transform: translateY(var(--size-minus-6px)); } 75% { transform: translateY(var(--size-4px)); } }
+
+@keyframes kill-text-pop { from { transform: scale(0.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+@keyframes kill-anim-fade { to { opacity: 0; } }
+
+@keyframes banner-flash {
+  50% { background: var(--tone-255-30-44-0p96); box-shadow: 0 0 var(--size-30px) var(--tone-255-60-70-0p9); }
+}
+
+@keyframes emergency-slide { from { transform: translateY(110%); } }
+
+@keyframes btn-float { 50% { transform: translateY(var(--size-minus-2px)); } }
+
+@keyframes task-done { 40% { filter: brightness(1.8); } }
+
+@keyframes task-err { 40% { background: var(--tone-239-68-68-0p35); } }
+
+@keyframes rock-float { to { transform: rotate(18deg); } }
+}
+
+@layer utilities {
+  @keyframes alarm-frame {
+    from { opacity: .55; }
+    to { opacity: 1; }
+  }
+
+  @keyframes terminal-sheet {
+    from { opacity: 0; transform: translateY(var(--space-8)); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes terminal-entrance {
+    from { opacity: 0; transform: scale(.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .role-card, .vote-tablet, .task-overlay--game > .task-card {
+    animation: terminal-entrance var(--time-panel) var(--ease-out) both;
+  }
+
+  .role-card-title {
+    font-weight: 800;
+    paint-order: stroke fill;
+    -webkit-text-stroke: var(--line-4) var(--space-950);
+  }
+
+  .role-row .role-chip {
+    animation: terminal-sheet var(--time-progress) var(--ease-out) var(--time-panel) both;
+  }
+
+  .role-row .role-chip:nth-child(even) { animation-delay: var(--time-progress); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none;
+      transition: none;
+      scroll-behavior: auto;
+    }
+
+    .eject-bean {
+      position: static;
+      transform: none;
+    }
+  }
+}

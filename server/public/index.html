@@ -2,42 +2,43 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-  <meta name="theme-color" content="#0d1117">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
   <meta name="description" content="Real Life Among Us: Lobbys, Karte aus echten Stra&szlig;en, Tasks und Kill-Runden mit Freunden">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="icon" href="/icons/terminal.svg">
   <title>Real Life Among Us</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
+<body data-screen="home">
+  <div class="connection-status hidden" id="connection-status" role="status"></div>
+  <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
   <!-- ============================== HOME ================================ -->
-  <section id="screen-home" class="screen active">
+  <section id="screen-home" class="screen screen-home">
     <div class="hero">
+      <svg class="hero-avatar" aria-hidden="true"><use href="/img/terminal.svg#crew"></use></svg>
       <h1>Real Life<br><span class="accent">Among Us</span></h1>
-      <p class="tagline">Lobby aufmachen, Stra&szlig;en laden, durchs Viertel spielen.</p>
     </div>
     <div class="card">
-      <label for="player-name">Dein Name</label>
+      <label for="player-name">Dein Name <output class="name-count" id="name-count" for="player-name">0 / 20</output></label>
       <input id="player-name" maxlength="20" autocomplete="off" placeholder="z. B. Divo">
-      <label for="join-code">Raum-Code (nur zum Beitreten)</label>
-      <input id="join-code" maxlength="6" autocomplete="off" placeholder="z. B. AB39X7" style="text-transform: uppercase">
-      <button id="btn-host" class="primary big">Lobby erstellen</button>
-      <button id="btn-join" class="secondary big">Lobby beitreten</button>
-      <p id="home-error" class="error hidden"></p>
+      <label for="join-code">Lobby-Code</label>
+      <div class="code-field">
+        <input id="join-code" class="join-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <div class="code-field__tiles" aria-hidden="true"><span>–</span><span>–</span><span>–</span><span>–</span><span>–</span><span>–</span></div>
+      </div>
+      <button id="btn-join" class="primary big">Lobby beitreten</button>
+      <button id="btn-host" class="secondary big">Lobby erstellen</button>
+      <p id="home-error" class="error hidden" role="alert"></p>
     </div>
-    <p class="legal">Datenschutzlight: Position wird nur serverseitig f&uuml;r dein Spiel gespeichert, nie an andere Spieler geleakt.</p>
-  </section>
+      </section>
 
   <!-- ============================== LOBBY =============================== -->
-  <section id="screen-lobby" class="screen">
+  <section id="screen-lobby" class="screen screen-lobby">
         <div class="topbar">
       <span class="room-code" id="lobby-code">&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;</span>
       <button class="ghost small" id="btn-share">Code kopieren</button>
-      <button id="btn-lobby-settings" class="gear-btn" aria-label="Haupt-Einstellungen">&#9881;&#xFE0E;</button>
+      <button id="btn-lobby-settings" class="gear-btn" aria-label="Haupt-Einstellungen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#settings"></use></svg></button>
     </div>
     <h2>Lobby</h2>
     <ul id="lobby-players" class="player-list"></ul>
@@ -46,7 +47,7 @@
       <span>Spiel-Einstellungen</span>
       <span class="rules-chevron">&#9662;</span>
     </button>
-    <div class="rules-body collapsed" id="rules-body">
+    <div class="rules-body collapsed rules-body" id="rules-body">
     <div class="rules-panels">
       <div class="rules-group">
         <div class="rules-tab">spieler &amp; impostoren</div>
@@ -99,14 +100,14 @@
       <div class="rules-group">
         <div class="rules-tab">aufgaben</div>
         <div class="settings-grid">
-          <label>Tasks pro Crewmate
+          <label>Aufgaben pro Crewmate
             <select id="cfg-tasks"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select>
           </label>
-          <label>Task-Wirkweite (m)
+          <label>Aufgabenreichweite (m)
             <select id="cfg-taskradius"><option>5</option><option>8</option><option>12</option><option>15</option><option>20</option></select>
           </label>
           <label class="settings-toggle-inline">
-            <span>Task-Balken immer sichtbar</span>
+            <span>Aufgabenbalken immer sichtbar</span>
             <input type="checkbox" id="cfg-taskbar" checked>
           </label>
         </div>
@@ -131,14 +132,14 @@
     </div>
     <button id="btn-load-cached-lobby" class="secondary big hidden"></button>
     <button id="btn-edit-map" class="primary big">Karte bearbeiten / neue Stra&szlig;en laden</button>
-    <button id="btn-start-game" class="primary big">Spiel starten</button>
+    <button id="btn-start-game" class="primary big btn-start-game">Spiel starten</button>
   </div>
-    <p id="lobby-waiting" class="hint">Warte auf den Host&hellip; hier l&auml;uft gleich was.</p>
+    <p id="lobby-waiting" class="hint">Warte auf den Host.</p>
     <button class="ghost" id="btn-leave">Lobby verlassen</button>
   </section>
 
   <!-- ============================ MAP EDITOR ============================ -->
-  <section id="screen-map" class="screen">
+  <section id="screen-map" class="screen screen-map">
     <div class="topbar">
       <button class="ghost small" id="btn-map-back">&larr; Lobby</button>
       <span class="hint" id="map-status"></span>
@@ -155,8 +156,8 @@
       <button id="btn-room-mode" class="secondary">Raum zeichnen</button>
       <button id="btn-room-undo" class="ghost">&#8630; Punkt zur&uuml;ck</button>
       <div id="room-type-picker" class="hidden">
-        <p class="hint" style="margin:0 0 6px;">1)&nbsp;Typ antippen (= Name) &rarr; 2)&nbsp;Punkte tippen &rarr; 3)&nbsp;ersten Punkt ANtippen = fertig &amp; speichert.</p>
-        <div id="room-type-grid">
+        <p class="hint">1)&nbsp;Typ antippen (= Name) &rarr; 2)&nbsp;Punkte tippen &rarr; 3)&nbsp;ersten Punkt ANtippen = fertig &amp; speichert.</p>
+        <div class="room-type-grid" id="room-type-grid">
           <button data-room-type="CAFETERIA">Cafeteria</button>
           <button data-room-type="MEDBAY">Medbay</button>
           <button data-room-type="SECURITY">Security</button>
@@ -168,10 +169,10 @@
           <button data-room-type="WEAPONS">Weapons</button>
         </div>
       </div>
-      <button id="btn-map-settings" class="gear-btn" aria-label="Haupt-Einstellungen">&#9881;&#xFE0E;</button>
+      <button id="btn-map-settings" class="gear-btn" aria-label="Haupt-Einstellungen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#settings"></use></svg></button>
     </div>
     <div class="map-frame">
-      <canvas id="map-canvas"></canvas>
+      <canvas class="map-canvas" id="map-canvas"></canvas>
       <div class="map-controls">
         <button class="round" id="btn-zoom-in">+</button>
         <button class="round" id="btn-zoom-out">&minus;</button>
@@ -181,7 +182,7 @@
     <p class="hint" id="map-hint">Tippe eine Stra&szlig;e an, um sie auszuw&auml;hlen. Mehrere Stra&szlig;en = gr&ouml;&szlig;eres Spielfeld.</p>
     <div class="editor-actions">
       <button id="btn-build-streets" class="secondary big">Ausgew&auml;hlte &uuml;bernehmen</button>
-      <button id="btn-map-calib" class="secondary big">&#128205; Kalibrieren</button>
+      <button id="btn-map-calib" class="secondary big"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Kalibrieren</button>
       <button id="btn-map-save" class="primary big">Karte speichern</button>
     </div>
     <p class="legal" id="osm-attribution">Stra&szlig;endaten &copy; OpenStreetMap-Mitwirkende</p>
@@ -189,133 +190,147 @@
   </section>
 
   <!-- ============================== GAME ================================ -->
-  <section id="screen-game" class="screen">
+  <section id="screen-game" class="screen screen-game">
     <div class="topbar">
-      <span class="hint" id="game-phase-hint"></span>
-      <button id="btn-abort" class="gear-btn hidden" aria-label="Runde abbrechen">&#9919;&#xFE0E;</button>
-      <button id="btn-settings" class="gear-btn" aria-label="Haupt-Einstellungen">&#9881;&#xFE0E;</button>
+      <span class="hint game-phase-hint" id="game-phase-hint"></span>
+      <button id="btn-abort" class="gear-btn hidden btn-abort" aria-label="Runde abbrechen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#flag"></use></svg></button>
+      <button id="btn-settings" class="gear-btn btn-settings" aria-label="Haupt-Einstellungen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#settings"></use></svg></button>
     </div>
-    <div id="task-progress-strip" aria-hidden="true">
-      <div id="task-progress-fill"></div>
-      <div id="task-progress-strip-label">
-        <span id="task-label-text">TOTAL TASKS COMPLETED</span>
-        <span id="task-label-count">0/0</span>
+    <div class="task-progress-strip" id="task-progress-strip" role="progressbar" aria-label="Teamaufgaben" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="task-progress-fill" id="task-progress-fill"></div>
+      <div class="task-progress-strip-label" id="task-progress-strip-label">
+        <span id="task-label-text">Teamaufgaben</span>
+        <span class="task-label-count" id="task-label-count">0/0</span>
       </div>
     </div>
-    <div id="role-overlay" class="hidden">
+    <div id="role-overlay" class="hidden role-overlay" role="dialog" aria-labelledby="role-card-title">
       <div id="role-card" class="role-card crew">
-        <div id="role-card-title">CREWMATE</div>
-        <div id="role-card-detail"></div>
+        <div class="role-card-title" id="role-card-title">CREWMATE</div>
+        <div class="role-card-detail" id="role-card-detail"></div>
+        <button id="role-continue" class="role-continue primary">Weiter</button>
       </div>
     </div>
     <!-- Under-Sie-Moment (Among Us): NUR für das Opfer selbst sichtbar,
          weil game:killed an Crew-Leute privat ist (v19.13.5). -->
-    <div id="kill-anim" class="hidden" aria-hidden="true">
+    <div id="kill-anim" class="hidden kill-anim" aria-hidden="true">
       <div class="kill-bg"></div>
       <div class="kill-slash s1"></div>
       <div class="kill-slash s2"></div>
-      <div class="kill-knife">&#128128;&#xFE0E;</div>
+      <div class="kill-knife"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#kill"></use></svg></div>
       <div class="kill-beans">
         <div class="kill-bean victim"><span></span></div>
         <div class="kill-bean killer"><span></span></div>
       </div>
       <div class="kill-text pixel-title">GEKILLT</div>
     </div>
-    <div id="role-banner" class="role-crew hidden">DU BIST CREWMATE</div>
+    <div id="role-banner" class="role-crew hidden role-banner">DU BIST CREWMATE</div>
     <div id="teammates" class="hint hidden"></div>
-    <div id="gps-status" class="gps-status hidden"></div>
-    <div id="sabotage-banner-line"><div id="sabotage-banner" class="hidden"></div></div>
-    <div id="live-map-wrap">
-      <canvas id="game-map"></canvas>
-      <button id="btn-map-zoom" aria-label="Karten-Zoom">&#x2922;&#xFE0E;</button>
-      <div id="boundary-banner" class="hidden">Geh zur&uuml;ck ins Spielfeld!</div>
+    <div id="gps-status" role="status" class="gps-status hidden"></div>
+    <div class="sabotage-banner-line" id="sabotage-banner-line"><div id="sabotage-banner" class="hidden sabotage-banner"></div></div>
+    <div class="live-map-wrap" id="live-map-wrap">
+      <canvas class="game-map" id="game-map"></canvas>
+      <button class="btn-map-zoom" id="btn-map-zoom" aria-label="Karten-Zoom">&#x2922;&#xFE0E;</button>
+      <div id="boundary-banner" class="hidden boundary-banner">Geh zur&uuml;ck ins Spielfeld!</div>
     </div>
-    <div class="game-actions">
-      <button id="btn-report" class="round-btn icon-btn" disabled>
-        <img src="/img/ui/btn-report.png" alt=""><span class="icon-label" data-i18n="btn.report">Report</span></button>
-      <button id="btn-use" class="round-btn icon-btn hidden" disabled>
-        <img src="/img/ui/btn-use.png" alt=""><span class="icon-label" data-i18n="btn.use">Use</span></button>
-      <button id="btn-sabotage" class="round-btn icon-btn hidden" disabled>
-        <img src="/img/ui/btn-sabotage.png" alt=""><span class="icon-label" data-i18n="btn.sabotage">Sabotage</span></button>
-      <button id="btn-kill" class="round-btn icon-btn hidden">
-        <img src="/img/ui/btn-kill.png" alt=""><span class="icon-label" data-i18n="btn.kill">Kill</span></button>
+    <div class="game-dock">
+      <details class="taskbox" id="taskbox">
+        <summary>Deine Aufgaben (<span id="task-count">0</span>)</summary>
+        <ul id="task-list" class="task-list"></ul>
+      </details>
+      <div class="game-actions">
+        <button id="btn-report" class="round-btn icon-btn" disabled>
+          <svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#report"></use></svg>
+          <span class="icon-label" data-i18n="btn.report">Melden</span>
+        </button>
+        <button id="btn-use" class="round-btn icon-btn hidden" disabled>
+          <svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#use"></use></svg>
+          <span class="icon-label" data-i18n="btn.use">Benutzen</span>
+        </button>
+        <button id="btn-sabotage" class="round-btn icon-btn hidden" disabled>
+          <svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#sabotage"></use></svg>
+          <span class="icon-label" data-i18n="btn.sabotage">Sabotage</span>
+        </button>
+        <button id="btn-kill" class="round-btn icon-btn hidden">
+          <svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#kill"></use></svg>
+          <span class="icon-label" data-i18n="btn.kill">Kill</span>
+        </button>
+      </div>
     </div>
     <div id="meeting-hud-msg" class="hidden meeting-hud-msg">
       Begib dich zur Cafeteria.
     </div>
-    <div id="emergency-panel" class="hidden">
+    <div id="emergency-panel" class="hidden emergency-panel" role="dialog">
       <div class="emergency-tablet">
         <div class="emergency-stripes"></div>
-        <p id="emergency-status" class="emergency-status"></p>
+        <p id="emergency-status" class="emergency-status emergency-status"></p>
         <button id="btn-emergency" class="emergency-dome" aria-label="Notfall-Meeting">
           <span class="emergency-cap"></span>
           <span class="emergency-face" data-i18n="btn.emergency">NOTFALL</span>
         </button>
-        <button id="btn-emergency-close" class="secondary">Schlie&szlig;en</button>
+        <button id="btn-emergency-close" class="secondary btn-emergency-close">Schlie&szlig;en</button>
       </div>
     </div>
     <!-- Among-Us-Admin-Tisch (Divo 4.11): Use im ADMIN-Raum öffnet die
          anonyme Raumbesetzung (graue Bohnen, keine Namen). -->
-    <div id="admin-table" class="hidden">
+    <div id="admin-table" class="hidden admin-table" role="dialog">
       <div class="admin-tablet">
         <div class="admin-tablet-head">
           <span class="pixel-title" id="admin-table-title">ADMIN</span>
           <button id="btn-admin-table-close" class="secondary">Schlie&szlig;en</button>
         </div>
-        <canvas id="admin-table-canvas"></canvas>
-        <p id="admin-table-status"></p>
+        <canvas class="admin-table-canvas" id="admin-table-canvas"></canvas>
+        <p class="admin-table-status" id="admin-table-status"></p>
       </div>
     </div>
-    <details id="taskbox">
-      <summary>Deine Tasks (<span id="task-count">0</span>)</summary>
-      <ul id="task-list" class="task-list"></ul>
-    </details>
-    <div id="meeting-overlay" class="overlay hidden">
+    <div id="meeting-overlay" class="overlay hidden" role="dialog">
       <div class="vote-tablet">
         <div class="vote-tablet-head">
           <h3 id="meeting-title" class="pixel-title">Who Is The Impostor?</h3>
-          <div id="vote-countdown" class="vote-countdown"></div>
-          <img id="btn-skipvote" class="skip-vote-img hidden" src="/img/ui/btn-skipvote.png" alt="Skip Vote" title="Skip Vote">
+          <div id="vote-countdown" class="vote-countdown vote-countdown"></div>
+          <button type="button" id="btn-skipvote" class="skip-vote-btn hidden">Überspringen</button>
         </div>
-        <p id="meeting-hint" class="hint"></p>
+        <svg class="meeting-table" viewBox="0 0 160 32" aria-hidden="true"><ellipse cx="80" cy="16" rx="77" ry="13" fill="currentColor"/><ellipse cx="80" cy="13" rx="68" ry="8" fill="none" stroke="white" stroke-opacity=".65"/></svg>
+        <p id="meeting-hint" class="hint meeting-hint"></p>
         <ul id="vote-list" class="vote-grid"></ul>
-        <div id="vote-reveal-bar" class="vote-reveal-bar hidden"></div>
+        <div id="vote-reveal-bar" class="vote-reveal-bar hidden vote-reveal-bar"></div>
       </div>
     </div>
     <!-- Divo-Meeting-Upgrade (4.11): Report-Sting -> Admin-Bestaetigung ->
          Reveal (Reporter / unentdeckte Tote / Reporter redet zuerst). -->
-    <div id="meeting-intro" class="hidden">
-      <div id="meeting-intro-card" class="meeting-intro-report">
+    <div id="meeting-intro" class="hidden meeting-intro">
+      <div id="meeting-intro-card" class="meeting-intro-report meeting-intro-card">
         <div id="meeting-intro-content"></div>
       </div>
     </div>
-    <div id="eject-overlay" class="eject-overlay hidden">
+    <div id="eject-overlay" class="eject-overlay hidden eject-overlay">
       <div class="eject-stars"></div>
-      <div id="eject-bean" class="eject-bean"></div>
-      <div id="eject-text" class="eject-text pixel-title"></div>
+      <div id="eject-bean" class="eject-bean eject-bean"></div>
+      <div id="eject-text" class="eject-text pixel-title eject-text"></div>
     </div>
     <!-- v19.16: Voting Results (Among Us Stil) - 4.5s nach dem Abstimmen -->
-    <div id="vote-results-overlay" class="vote-results-overlay hidden">
+    <div id="vote-results-overlay" class="vote-results-overlay hidden vote-results-overlay" role="dialog">
       <div class="vote-results-card">
-        <h3 id="vote-results-title" class="pixel-title">Stimmenauszählung</h3>
-        <ul id="vote-results-list" class="vote-results-list"></ul>
-        <div id="vote-results-proceeding" class="vote-results-proceeding"></div>
+        <h3 id="vote-results-title" class="pixel-title vote-results-title">Stimmenauszählung</h3>
+        <ul id="vote-results-list" class="vote-results-list vote-results-list"></ul>
+        <div id="vote-results-proceeding" class="vote-results-proceeding vote-results-proceeding"></div>
       </div>
     </div>
-    <div id="gameover-overlay" class="overlay hidden">
+    <div id="gameover-overlay" class="overlay hidden gameover-overlay" role="dialog">
       <div class="card">
-        <h3 id="gameover-title">Spiel vorbei</h3>
+        <h3 class="gameover-title" id="gameover-title">Spiel vorbei</h3>
         <p id="gameover-detail" class="hint"></p>
-        <button id="btn-rematch" class="primary big hidden">Neue Runde</button>
+        <ul id="gameover-roster" class="gameover-roster player-list"></ul>
+        <button id="btn-rematch" class="primary big hidden">Zurück zur Lobby</button>
+        <button id="btn-gameover-lobby" class="secondary big hidden">Zurück zur Lobby</button>
       </div>
     </div>
   </section>
 
-    <div id="settings-menu" class="task-overlay hidden">
+    <div id="settings-menu" class="task-overlay task-overlay--sheet hidden" role="dialog" aria-label="Einstellungen">
       <div class="task-card settings-card">
         <div class="task-head">
           <div class="task-title" data-i18n="settings.title">Haupt-Einstellungen</div>
-          <button id="btn-settings-close" class="task-close">&#10005;</button>
+          <button id="btn-settings-close" class="task-close" aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#close"></use></svg></button>
         </div>
         <div class="settings-body">
           <label class="settings-toggle">
@@ -323,8 +338,8 @@
             <span data-i18n="settings.sound">Sound &amp; Klingeltöne</span>
           </label>
           <label class="settings-toggle settings-slider">
-            <span>&#128266; Lautstärke</span>
-            <input type="range" id="opt-sfx-vol" min="0" max="100" value="80" style="flex:1;">
+            <span>Lautstärke</span>
+            <input type="range" id="opt-sfx-vol" min="0" max="100" value="80">
           </label>
           <label class="settings-toggle">
             <input type="checkbox" id="opt-vibration" checked>
@@ -341,47 +356,47 @@
               <option value="en">English</option>
             </select>
           </label>
-          <button id="btn-set-anchor" class="primary big hidden">&#128205; Karte kalibrieren</button>
+          <button id="btn-set-anchor" class="primary big hidden"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Karte kalibrieren</button>
           <p class="hint hidden" id="anchor-hint">Kalibriere ein Mal: 2 klare Punkte (z. B. Stra&#223;enecken) abgehen, die App merkt sich das f&#252;r immer.</p>
           <button id="btn-leave-from-menu" class="danger-big" data-i18n="btn.leave">Verlassen</button>
           <p class="hint" id="settings-note" data-i18n="settings.note">Verlassen beendet die Verbindung. Die Lobby läuft weiter.</p>
           <div id="dev-errorbox" class="hidden">
-            <div class="task-title" style="font-size:13px;">&#128221; Fehler-Log</div>
-            <textarea id="error-log-box" readonly rows="7" style="width:100%; font-size:10px; font-family:monospace; background:rgba(0,0,0,0.4); color:#cbd5e1; border-radius:8px; border:1px solid rgba(255,255,255,0.12); padding:8px; box-sizing:border-box;"></textarea>
-            <div class="bot-row" style="display:flex; gap:8px;">
-              <button id="btn-error-copy" class="secondary" style="flex:1;">&#128203; Kopieren</button>
-              <button id="btn-error-clear" class="ghost" style="flex:1;">Leeren</button>
+            <div class="task-title">Fehler-Log</div>
+            <textarea id="error-log-box" class="error-log-box" readonly rows="7"></textarea>
+            <div class="bot-row">
+              <button id="btn-error-copy" class="secondary">Kopieren</button>
+              <button id="btn-error-clear" class="ghost">Leeren</button>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <div id="calib-overlay" class="task-overlay hidden">
+    <div id="calib-overlay" class="task-overlay hidden" role="dialog">
       <div class="task-card settings-card">
         <div class="task-head">
-          <div class="task-title">&#128205; Setz-Punkt kalibrieren</div>
-          <button id="btn-calib-close" class="task-close">&#10005;</button>
+          <div class="task-title"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Setz-Punkt kalibrieren</div>
+          <button id="btn-calib-close" class="task-close" aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#close"></use></svg></button>
         </div>
         <p class="hint">1) Stell dich &#252;berall da hin (z.B. Cafeteria), wo du GENAU jenen Ort auf der Karte antippst. 2) W&#228;hle den Raum auf der Mini-Karte. 3) &quot;Ich stehe hier&quot;.</p>
-        <canvas id="calib-map"></canvas>
+        <canvas class="calib-map" id="calib-map"></canvas>
         <div id="calib-status" class="hint">Kein GPS-Signal — geh raus.</div>
         <button id="btn-calib-here" class="primary big" disabled>Ich stehe hier</button>
       </div>
     </div>
-    <div id="cal2-overlay" class="task-overlay hidden">
+    <div id="cal2-overlay" class="task-overlay hidden" role="dialog">
       <div class="task-card settings-card">
         <div class="task-head">
-          <div class="task-title">&#128205; Karte kalibrieren</div>
-          <button id="btn-cal2-close" class="task-close">&#10005;</button>
+          <div class="task-title"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Karte kalibrieren</div>
+          <button id="btn-cal2-close" class="task-close" aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#close"></use></svg></button>
         </div>
         <p class="hint" id="cal2-steps">Gehe zu 2 klaren Punkten (z. B. Stra&#223;enecken, weit auseinander). Einmal machen — f&#252;r immer gespeichert.</p>
-        <canvas id="cal2-map" class="cal2-canvas"></canvas>
+        <canvas id="cal2-map" class="cal2-canvas cal2-map"></canvas>
         <div id="cal2-status" class="hint">Punkt A: geh zur ersten Ecke.</div>
-        <button id="btn-cal2-sample" class="primary big" disabled>GPS sampeln</button>
+        <button id="btn-cal2-sample" class="primary big" disabled>GPS-Punkt erfassen</button>
       </div>
     </div>
-    <div id="rejoin-overlay" class="task-overlay hidden">
+    <div id="rejoin-overlay" class="task-overlay hidden" role="dialog">
       <div class="task-card settings-card">
         <div class="task-head">
           <div class="task-title" id="rejoin-title">Runde gefunden</div>
@@ -392,9 +407,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.16.3"></script>
-  <script src="/js/mapEditor.js?v=19.16.3"></script>
-  <script src="/js/tasks.js?v=19.16.3"></script>
-  <script src="/js/app.js?v=19.16.3"></script>
+  <script src="/js/osm.js?v=19.17.0"></script>
+  <script src="/js/mapEditor.js?v=19.17.0"></script>
+  <script type="module" src="/js/tasks.js?v=19.17.0"></script>
+  <script type="module" src="/js/app.js?v=19.17.0"></script>
 </body>
 </html>

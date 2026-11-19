@@ -11,6 +11,8 @@
  *   RlausTasks.isActive()                          \u2014 a game is open
  *   RlausTasks.close()                             \u2014 force-close
  */
+import { avatar, icon } from './ui.js';
+
 (() => {
   let current = null; // { task, cleanup }
 
@@ -35,16 +37,23 @@
   /** Shared overlay shell: header + body; returns controller. */
   function openShell(titleText) {
     const overlay = document.createElement('div');
-    overlay.className = 'task-overlay';
+    overlay.className = 'task-overlay task-overlay--game';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', titleText);
     const card = el('div', 'task-card');
     const header = el('div', 'task-head');
     const title = el('div', 'task-title', titleText);
-    const closeBtn = el('button', 'task-close', '\u2715');
+    const closeBtn = el('button', 'task-close');
+    closeBtn.setAttribute('aria-label', 'Aufgabe schließen');
+    closeBtn.append(icon('close'));
     header.append(title, closeBtn);
     const body = el('div', 'task-body');
     card.append(header, body);
     overlay.appendChild(card);
+    const previousFocus = document.activeElement;
     document.body.appendChild(overlay);
+    closeBtn.focus({ preventScroll: true });
     let closed = false;
     const cleanupFns = [];
     function close() {
@@ -54,12 +63,18 @@
         try { fn(); } catch { /* keep closing */ }
       }
       overlay.remove();
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
       if (current) current = null;
     }
     closeBtn.addEventListener('click', () => {
       window.RlausSfx?.('panel_close', 0.7);
       close();
-      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+      if (localStorage.getItem('rlaus_vibration') !== 'false') navigator.vibrate?.(20);
+    });
+    overlay.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      closeBtn.click();
     });
     return {
       body,
@@ -78,7 +93,7 @@
     bar.style.background = color;
     return {
       set(fraction) {
-        bar.style.width = `${Math.max(0, Math.min(100, fraction * 100))}%`;
+        bar.style.setProperty('--progress', Math.max(0, Math.min(1, fraction)));
       },
       node: wrap,
     };
@@ -638,7 +653,8 @@
     body.append(field, hole);
     let swept = 0;
     for (let index = 0; index < 6; index += 1) {
-      const leaf = el('div', 'o2-leaf', '\u{1F343}');
+      const leaf = el('div', 'o2-leaf');
+      leaf.append(icon('leaf'));
       leaf.style.left = `${10 + (index % 3) * 32}%`;
       leaf.style.top = `${10 + Math.floor(index / 3) * 40}%`;
       field.appendChild(leaf);
@@ -826,7 +842,9 @@
 
     function spawn() {
       if (!alive) return;
-      const rock = el('div', 'asteroid', '\u{1FAA8}');
+      const rock = el('button', 'asteroid');
+      rock.setAttribute('aria-label', 'Asteroid treffen');
+      rock.append(icon('rock'));
       const startY = Math.random() * 80 + 10;
       rock.style.top = `${startY}%`;
       field.appendChild(rock);
@@ -936,7 +954,8 @@
   function mountSubmitScan(shell, finish, setHint) {
     const { body } = shell;
     const stage = el('div', 'scan-stage');
-    const figure = el('div', 'scan-figure', '\u{1F464}');
+    const figure = el('div', 'scan-figure');
+    figure.append(avatar('cyan'));
     stage.appendChild(figure);
     body.appendChild(stage);
     const progress = progressBar(body, '#4ade80');

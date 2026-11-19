@@ -1,0 +1,118 @@
+@layer components {
+/* Glas-Karte (Rezept 5.4) */
+.card {
+  background: var(--card);
+  border: var(--size-1px) solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+
+
+  padding: var(--size-16px);
+  display: flex; flex-direction: column; gap: var(--size-12px);
+}
+
+label {
+  font-size: var(--fs-xs); font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--accent-light);
+}
+input, select {
+  height: var(--size-50px); padding: 0 var(--size-14px);
+  border: var(--size-1px) solid var(--tone-255-255-255-0p18);
+  border-radius: var(--radius-md);
+  background: var(--tone-255-255-255-0p07);
+  color: var(--tone-fff); font-size: var(--fs-base); outline: none;
+  font-family: var(--font-body);
+}
+select { height: var(--size-44px); }
+input::placeholder { color: var(--faint); }
+input:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--size-3px) rgba(var(--accent-rgb), 0.2);
+}
+
+/* ------------------------------- Buttons -------------------------------- */
+/* Primär-CTA = glänzendes Weiß-Pill (Rezept 5.1). */
+button {
+  font: inherit; border: none; border-radius: var(--radius-pill);
+  padding: var(--size-12px) var(--size-20px); cursor: pointer; min-height: var(--size-46px);
+  color: var(--tone-fff); background: var(--tone-255-255-255-0p08);
+  font-weight: 600; font-size: var(--fs-sm);
+  transition: transform var(--duration-0p15s) ease, filter var(--duration-0p15s) ease, background var(--duration-0p15s) ease;
+}
+button:hover:not(:disabled) { transform: translateY(var(--size-minus-1px)); filter: brightness(1.05); }
+button:disabled { opacity: 0.55; cursor: default; }
+button.primary {
+  background: linear-gradient(180deg, var(--tone-ffffff) 0%, var(--tone-f1e2e5) 5%, var(--tone-f6eaec) 72%, var(--tone-ffffff) 100%);
+  color: var(--btn-ink); font-weight: 700;
+  box-shadow:
+    0 var(--size-10px) var(--size-18px) var(--size-minus-8px) var(--tone-255-255-255-0p5),
+    0 0 var(--size-26px) var(--tone-255-255-255-0p14),
+    inset 0 0 0 var(--size-2px) var(--tone-255-255-255-0p9);
+}
+button.secondary {
+  background: transparent;
+  border: var(--size-1px) solid var(--tone-255-255-255-0p28);
+}
+button.secondary:hover:not(:disabled) { background: var(--tone-255-255-255-0p1); }
+/* Danger = flaches Dunkelrot, kein Glow (Rezept 5.3). */
+button.danger { background: var(--accent-deep); color: var(--tone-fff); font-weight: 700; }
+button.ghost {
+  background: transparent; border: var(--size-1px) solid var(--tone-255-255-255-0p14);
+  font-size: var(--fs-sm); padding: var(--size-10px) var(--size-16px);
+}
+button.ghost.danger { color: var(--accent-light); }
+button.big { padding: var(--size-14px) var(--size-22px); font-size: var(--fs-base); font-weight: 700; }
+button.small { padding: var(--size-7px) var(--size-14px); font-size: var(--fs-xs); min-height: var(--size-40px); }
+.bot-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--size-10px);
+  margin-bottom: var(--size-12px);
+}
+button.round {
+  width: var(--size-44px); height: var(--size-44px); padding: 0; border-radius: var(--radius-pill);
+  font-size: var(--fs-lg); background: var(--tone-255-255-255-0p07);
+  border: var(--size-1px) solid var(--tone-255-255-255-0p14);
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--size-12px); gap: var(--size-8px);
+}
+.room-code {
+  font-family: var(--font-tech);
+  font-size: var(--fs-xl); font-weight: 700; letter-spacing: var(--size-6px);
+  color: var(--tone-fff);
+  text-shadow: 0 0 var(--size-12px) rgba(var(--accent-rgb), 0.4);
+}
+.room-code.small { font-size: var(--fs-base); letter-spacing: var(--size-3px); }
+.hint { color: var(--muted); font-size: var(--fs-xs); line-height: 1.4; }
+.legal {
+  color: var(--faint); font-size: var(--fs-xs); text-align: center;
+  margin-top: var(--size-18px); line-height: 1.4;
+}
+.error { color: var(--accent-light); font-size: var(--fs-sm); margin: 0; }
+
+
+/* Listen-Items (Rezept 5.9) */
+.player-list {
+  list-style: none; padding: 0; margin: 0 0 var(--size-14px);
+  display: flex; flex-direction: column; gap: var(--size-8px);
+}
+.player-list li {
+  background: var(--tone-255-255-255-0p07);
+  border: var(--size-1px) solid var(--tone-255-255-255-0p1);
+  border-radius: var(--radius-sm);
+  padding: var(--size-10px) var(--size-14px);
+  display: flex; justify-content: space-between; align-items: center; gap: var(--size-8px);
+}
+.player-list li.dead { opacity: 0.45; text-decoration: line-through; }
+.player-list li .badge {
+  font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--accent-light);
+  border: var(--size-1px) solid rgba(var(--accent-rgb), 0.6);
+  background: rgba(var(--accent-rgb), 0.12);
+  border-radius: var(--radius-pill); padding: var(--size-1px) var(--size-7px); white-space: nowrap;
+}
+}

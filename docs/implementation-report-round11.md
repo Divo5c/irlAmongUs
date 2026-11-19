@@ -161,3 +161,109 @@ only in the lobby.
   guests stay).
 
 Final: 207 pass / 0 fail. Deploy `?v=19.13.7`, sw `rlaus-shell-v61`.
+
+---
+
+## v19.13.8: Kill-Animation (opfer-sichtbar)
+- Neuer Overlay `#kill-anim` — nur das Opfer sieht ihn: CSS-Slash-Sweep + 🗡-Chop + Victim-Bean via `colorChipHex` + „GEKILLT"-Text.
+- `showKillAnim()` im `game:killed`-Handler, tap-to-skip, 1600ms + 450ms fade.
+- Kill-Privacy bleibt erhalten (nur Opfer + Impostoren erfahren es).
+- Sw `rlaus-shell-v62`.
+
+## v19.13.9: Admin-Tisch + i18n-Corruption-Fix
+- `roomStore.getAdminTableState(code, playerId)` — Gate: eigene Position muss im ADMIN-Raum sein (`roomId === #adminRoomId(room)`), sonst `NOT_AT_ADMIN_TABLE`.
+- Counts = lebende Spieler pro roomId (Gänge/Corpse ausgeschlossen, dead vanish), COMMS-Sabotage → `{blocked:true, counts:{}}`.
+- `game:admin_table`-Handler → private `game:admin_table_state`; Client: `useAction()` ADMIN_TABLE-Kind wenn `roomIdContains('ADMIN')`, `openAdminTable/closeAdminTable/drawAdminTable`, Polling 2s, Listener IM `ensureSocket()` (Module-Scope-Bug gefunden und gefixt).
+- Overlay-Close bei `meeting_started`/`game:over`/`reset_done`.
+- i18n: `game.aborted` war durch `sed` mit `\u`-Escapes korruptiert live („2014 alle zur00fcck") — jetzt korrekt `\u2014`-Escapes.
+- Sw `rlaus-shell-v63`.
+
+## v19.14.0: Divo-Meeting-Intro (Meeting-Flow-Überholung)
+**Server:**
+- `room.undiscoveredDeaths = []` init in `startGame`/`resetToLobby`/`abortRound`.
+- `killPlayer` pusht `victim.id` in die Liste (kills ohne gefundene Leiche).
+- `reportBody` entfernt alle gefundenen Corpse-Owner-IDs aus der Liste.
+- `#publicMeetingInfo` liefert jetzt `meetingKind` (EMERGENCY/REPORT) + `unfoundDeaths [{id,name}]`.
+- Neuer Handler `game:meeting_confirm` (assertHost) → Broadcast `game:meeting_confirmed {code}`.
+
+**Client:**
+- `#meeting-intro`-Overlay-Statemachine:
+  1. **Flash**: report-flash (sfx `report_body`/`emergency_alarm` + Animation „LEICHE GEFUNDEN"/„NOTFALL-MEETING").
+  2. **Await**: „Warten auf Bestätigung von Admin…" (in Cafeteria) bzw. „Begib dich zur Cafeteria" (außerhalb) mit 0,8s-Poll + Puls-Dots. Host sieht 2-Tap-Confirm-Button IMMER.
+  3. **Reveal**: Reporter+Megaphon 📢 → ☠ ungefundene Tote (skip wenn leer) → „REPORTER darf zuerst reden."-Banner → `renderMeeting` am Ende.
+  4. **Failsafe**: ~20s Auto-Proceed. Intro schließt bei VOTING/Meeting-Ende.
+- Vote-UI-Rework: Zeilen-Select → grünes ✓-Bestätigen / rotes ✗-Abbrechen → Vote gelockt; SKIP-VOTE-Button; Among-Us-Look (helles Tablet, Bohnen-Chips, tote Zeilen rot-X/gegraut, Reporter-Megaphon; anonyme Votes grau).
+- `node --check`, dateiweise Suite, Deploy `?v=19.14.0`, sw `rlaus-shell-v64`.
+
+## v19.14.1: Divo-Log-18-Fixes
+- **Round-start Kill-Cooldown**: `lastKillAt` initialisiert auf `Date.now()` bei `startGame` statt `0` → kein Instant-Kill in den ersten Sekunden; echtes `killReadyAt` in `game:role_assigned`.
+- **Bots voten verzögert**: 2–6s Denkzeit vor dem Vote (`botVoteDelayMs`, Test-Hook `setVoteDelayForTest(0)`).
+- **Countdown sekundengenau**: ISO-String-Parsing in `startVoteCountdown` (NaN-Bug gefixt), Diskussion und Voting ticken in Sekunden.
+- **Öffentliches VotedIds**: `votedIds` im öffentlichen Meeting-Info → grauer ✓-Chip pro Spieler (wer hat gevotet, Ziel bleibt anonym).
+- **game:killed setzt lokale Aliveness**: Opfer wird sofort auf `isAlive=false` gesetzt → kein PLAYER_DEAD-Spam mehr beim Report-Button.
+- **Geister**: spectate-only Vote-Liste, Report-Guard („Geister können nicht melden").
+- **Host-Bestätigung überlebt 0,8s-Poll**: Await-Content zeichnet nur bei echtem Zustandswechsel neu; Arming-Fenster 3,2s.
+- Deploy `?v=19.14.1`, sw `rlaus-shell-v65`.
+
+## v19.14.2: Corpse-Cleanup bei Meeting-Ende
+- `endMeeting()` leert `room.corpses = []` — nach JEDEM Meeting (Report oder Notfall) sind alte Leichen weg und nicht mehr reportbar (`NO_BODY_NEARBY`).
+- `undiscoveredDeaths` Ledger überlebt für das Intro-Reveal.
+- 2 neue Regressionstests (Re-Report nach Report-Meeting → NO_BODY_NEARBY; Emergency-Meeting → Straßen-Leiche weg, Ledger intakt).
+- Server-only Deploy, Client bleibt `?v=19.14.1`.
+
+## v19.15.0: Meeting-Flow v2 (Divo-Wunsch: direkter Cafeteria-Flow)
+- **Kurze Flash-Animation** (LEICHE GEFUNDEN / NOTFALL-MEETING) → direkt **„Zur Cafeteria"-Meldung** statt langem Intro.
+- **HUD-Sperre** während Await: Report/Use/Kill-Knöpfe ausgeblendet, stattdessen „Begib dich zur Cafeteria"-Meldung.
+- **Roter blinkender Cafeteria-Beacon** auf der Map (am Meeting-Tisch) bis zur Bestätigung.
+- **Admin-Bestätigung mit Live-Zähler**: X/Y in Cafeteria + Z Geister getrennt angezeigt. Doppelt-Tap-Arming (3,2s).
+- **Keine Zwangsvollständigkeit**: Host bestätigt unabhängig davon, wie viele da sind.
+- **Reveal** nach Bestätigung (wer, ungefundene Tote, Reporter zuerst) → Voting.
+- Server: `meetingAdminCount` im öffentlichen `room:updated` während Meeting-Await (live Zähler).
+- `meetingIntroSynced`-Guard verhindert doppelten Intro-Start.
+- i18n de/en komplett.
+- Deploy `?v=19.15.0`, sw `rlaus-shell-v66`.
+
+## v19.15.1: Reconnect-Schutz für Meeting-Intro
+- `game:meeting_started` kommt nur einmal — späte Joiner/Neuladen während Meeting bekamen kein Intro.
+- Neu: `room.meeting.confirmed` tracked Host-Bestätigung, wird im öffentlichen Meeting-Info ausgegeben (`meetingConfirmed`).
+- Client rekonstruiert bei `room:updated` während Meeting den Zustand: Await mit Zähler ODER direkt Voting-Tafel.
+- `startMeetingIntroLate()` für späten Joiner (registriert auch `meetingConfirmHandler`).
+- `renderMeeting` startet Voting-Countdown für späte Joiner (Fall-back `state.room?.votingDeadline`).
+- `meetingIntroSynced` auf `state`-Ebene konsistent, wird bei `game:over`/`reset_done` zurückgesetzt.
+- Deploy `?v=19.15.1`, sw `rlaus-shell-v67`.
+
+## v19.16.0: Meeting UI Overhaul
+- **Vereinfachter Intro**: Flash → Await „Zur Cafeteria" → kurzer Reveal → Voting (weniger Text, übersichtlicher).
+- **Voting Results Overlay** 4,5s: namentlich (nicht-anonym) oder anonym (nur Anzahl + Bohnen-Chips), „Proceeding in: Xs".
+- **Sabotage-Button hell wenn aktiv**: Button bleibt enabled bei laufender Sabotage, lila Pulse-Animation, Restzeit auf dem Knopf.
+- **Voting-Panel ausgegraut während Diskussion**: Karten grau + `pointer-events: none`, erst beim Voting normal.
+- **Impostor kann keine Tasks**: Toast „Impostoren erledigen keine Tasks", Task startet nicht (nur anzeigen).
+- **Voted.png Badge**: Statt ✓-Text nun Bild-Badge aus `Button_Pic/Voted.png`.
+- **Diskussions-Countdown sekundengenau**: „Diskussion endet in: Xs".
+- i18n de/en komplett für alle neuen Keys.
+- 72 roomStore-Tests grün.
+- Deploy `?v=19.16.0`, sw `rlaus-shell-v69`.
+
+## v19.16.1: Map & Sabotage Fixes (Divo Log 27)
+- **Sabotage-Fix-Zeit 30s → 90s** (IRL braucht man länger zum Fixen).
+- **Sabotage-Cooldown 15s → 30s** (nach kritischer Sabotage) / **45s → 60s** (nicht-kritisch).
+- **Position-Plausibilität 8 → 12 m/s**: weniger `POSITION_UNREALISTIC`-False-Positives durch GPS-Sprünge.
+- **Task-Marker kleiner** (Radius 16 → 10), kein Pulsieren mehr → Map übersichtlicher, Namen nicht mehr überdeckt.
+- **Cafeteria-Tisch deutlicher hervorgehoben** mit „CAFETERIA"-Label unter dem Tisch.
+- Deploy `?v=19.16.1`, sw `rlaus-shell-v70`.
+
+## v19.16.3: Map-Raumnamen außerhalb mit Pfeil
+- **Raumnamen nicht mehr im Polygonzentrum** (wurden von Tasks überdeckt), sondern oberhalb der Raum-Box mit **dünnem Pfeil zum Zentrum**.
+- **Pfeile dicker** (lineWidth 3) und zeigen vom **Namen zum Raum** (Pfeilspitze am Raum).
+- **Individuelle Platzierung pro Raum**: Admin nach rechts, Medbay nach unten, O2/Reactor/Nav/Shields/Comms/Storage/Weapons/Security mit eigenen Offsets.
+- **Cafeteria ausgenommen** (bereits Tisch-Label, kein Doppel-Label).
+- Deploy `?v=19.16.3`, sw `rlaus-shell-v72`.
+
+---
+
+## Kumulierter Stand (alle Deployments)
+- Client: `?v=19.16.3`, sw `rlaus-shell-v72`
+- Server: alle Commits bis `2f2e848` auf `main`
+- Tests: 189 pass / 0 fail (roomStore 72, socketServer 27, positioning 83, map 22, bots 7, gates 5)
+- Demo-Server: `https://real-life-among-us-beta.onrender.com` (Render free → Restart löscht Räume + Sessions)
+- Ntfy nach jedem Deploy via `scripts/notify.sh`

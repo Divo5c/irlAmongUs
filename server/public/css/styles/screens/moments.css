@@ -1,0 +1,350 @@
+@layer screens {
+/* Rotation: Querformat-Hinweis (iOS, kein Lock) + groessere Karte */
+.rotate-hint {
+  display: none; margin: var(--size-6px) auto; padding: var(--size-8px) var(--size-14px); max-width: var(--size-340px);
+  border-radius: var(--size-10px); font-size: var(--fs-sm); font-weight: 600; text-align: center;
+  background: var(--tone-255-209-102-0p14); color: var(--tone-ffd166);
+  border: var(--size-1px) solid var(--tone-255-209-102-0p35);
+}
+@media (orientation: portrait) {
+  .screen-game .rotate-hint { display: block; }
+}
+@media (orientation: landscape) {
+  .rotate-hint { display: none; }
+  .screen-game .live-map-wrap { height: 66dvh; }
+  .screen-game .taskbox summary { font-size: var(--fs-sm); }
+}
+
+/* Rollen-Karte: kurzer Rollen-Intro-Screen (Crew blau / Impostor rot) */
+.role-overlay {
+  position: fixed; inset: 0; z-index: var(--layer-50);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--tone-5-6-12-0p9);
+
+}
+.role-card {
+  width: min(86vw, var(--size-420px)); border-radius: var(--size-22px); padding: var(--size-34px) var(--size-22px);
+  text-align: center; box-shadow: 0 var(--size-12px) var(--size-44px) var(--tone-0-0-0-0p55);
+  animation: rolePop var(--duration-0p35s) ease-out;
+}
+.role-card.crew {
+  background: linear-gradient(160deg, var(--tone-0d2440), var(--tone-123a63));
+  border: var(--size-2px) solid var(--tone-58a6ff); color: var(--tone-d6ebff);
+}
+.role-card.impostor {
+  background: linear-gradient(160deg, var(--tone-3d0e14), var(--tone-63121b));
+  border: var(--size-2px) solid var(--tone-ff5c69); color: var(--tone-ffd6da);
+}
+.role-card-title { font-size: var(--fs-2xl); font-weight: 800; letter-spacing: var(--size-2px); }
+.role-card.crew .role-card-title { color: var(--tone-58a6ff); }
+.role-card.impostor .role-card-title { color: var(--tone-ff5c69); }
+.role-card-detail { margin-top: var(--size-10px); font-size: var(--fs-sm); opacity: 0.92; }
+
+/* Runde Among-Us-Aktionsknöpfe (Report / Use / Kill) — nebeneinander */
+.game-actions {
+  display: flex; flex-direction: row; justify-content: center; align-items: center;
+  gap: var(--size-18px); padding: var(--size-10px) 0 var(--size-4px); flex-wrap: wrap; margin-top: auto;
+}
+.round-btn {
+  width: var(--size-84px); height: var(--size-84px); border-radius: 50%;
+  font-size: var(--fs-base); font-weight: 700; line-height: 1; display: flex; align-items: center;
+  justify-content: center; border: none; cursor: pointer;
+  color: var(--tone-fff); opacity: 0.45; filter: grayscale(0.7);
+  transition: opacity var(--duration-0p2s) ease, filter var(--duration-0p2s) ease, transform var(--duration-0p1s) ease;
+  box-shadow: 0 var(--size-8px) var(--size-20px) var(--tone-0-0-0-0p45);
+  touch-action: manipulation;
+}
+.round-btn:active { transform: scale(0.92); }
+.round-btn:disabled { opacity: 0.38; filter: grayscale(0.85); }
+.round-btn.ready { opacity: 1; filter: none; animation: pulse var(--duration-1p6s) infinite; }
+.round-btn.report { background: radial-gradient(circle at 35% 30%, var(--tone-7fd4ff), var(--tone-1787c9)); }
+.round-btn.use { background: radial-gradient(circle at 35% 30%, var(--tone-ffe08a), var(--tone-d99b1a)); }
+.round-btn.sabotage { background: radial-gradient(circle at 35% 30%, var(--tone-d8b4fe), var(--tone-7c3aed)); }
+.round-btn.sabotage.sabotage-active {
+  opacity: 1; filter: none;
+  box-shadow: 0 0 var(--size-20px) var(--tone-124-58-237-0p6);
+  animation: sabotage-pulse var(--duration-1p2s) ease-in-out infinite; }
+.round-btn.kill { background: radial-gradient(circle at 35% 30%, var(--tone-ff8a94), var(--tone-d32733)); }
+
+/* v19.15: Meeting-Await Meldung auf dem Spielbildschirm (statt Knöpfe). */
+.meeting-hud-msg {
+  position: fixed; bottom: var(--size-90px); left: 50%; transform: translateX(-50%);
+  background: var(--tone-0-0-0-0p85); color: var(--tone-ffe066); padding: var(--size-12px) var(--size-20px);
+  border-radius: var(--size-10px); border: var(--size-2px) solid var(--tone-ffd600); z-index: var(--layer-200);
+  font-family: var(--font-ui); font-size: var(--fs-xs);
+  text-align: center; white-space: nowrap; box-shadow: 0 0 var(--size-20px) var(--tone-255-214-0-0p4);
+  animation: meeting-hud-pulse var(--duration-1p6s) ease-in-out infinite; }
+
+/* Crewmate-Hochkant: Karte dominiert den Screen, Aktionen unten */
+.screen-game .live-map-wrap { height: 48dvh; }
+
+/* Task-Fortschrittsbalken Divo-Style (v19.12): eckig, Label PIXEL im Balken */
+.task-progress-strip { position: relative; height: var(--size-26px); margin: var(--size-6px) var(--size-10px) 0;
+  border-radius: 0; overflow: hidden; background: var(--tone-10-14-22-0p85);
+  border: var(--size-2px) solid var(--tone-255-255-255-0p22); }
+.task-progress-fill { height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--tone-16a34a), var(--tone-4ade80));
+  transition: width var(--duration-1p1s) cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 0 var(--size-10px) var(--tone-74-222-128-0p5); }
+.task-progress-strip.flash { animation: bar-pop var(--duration-0p6s) ease; }
+.task-progress-strip-label { position: absolute; inset: 0; z-index: var(--layer-2);
+  display: flex; align-items: center; justify-content: center; gap: var(--size-10px);
+  font-family: var(--font-ui); font-size: var(--fs-xs);
+  letter-spacing: var(--size-1px); color: var(--tone-fff); text-shadow: 0 0 var(--size-6px) var(--tone-0-0-0-0p9),
+  0 var(--size-1px) 0 var(--tone-000); }
+.task-label-count { color: var(--tone-a7f3d0); }
+
+/* Gear und Einstellungen-Menü */
+.gear-btn { margin-left: auto; background: var(--tone-255-255-255-0p08);
+  border: var(--size-1px) solid var(--tone-255-255-255-0p14); color: var(--tone-255-255-255-0p85);
+  width: var(--size-34px); height: var(--size-34px); border-radius: var(--size-99px); font-size: var(--fs-base);
+  cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.settings-card { max-height: 84dvh; }
+.settings-body { padding: var(--size-16px); display: flex; flex-direction: column; gap: var(--size-12px); }
+.settings-toggle { display: flex; align-items: center; gap: var(--size-10px); padding: var(--size-12px);
+  background: var(--tone-255-255-255-0p05); border: var(--size-1px) solid var(--tone-255-255-255-0p1);
+  border-radius: var(--size-12px); cursor: pointer; }
+.settings-toggle input { width: var(--size-20px); height: var(--size-20px); accent-color: var(--tone-4ade80); }
+.danger-big { width: 100%; padding: var(--size-14px); border-radius: var(--size-12px); border: none;
+  background: linear-gradient(180deg, var(--tone-ef4444), var(--tone-b91c1c)); color: var(--tone-fff); font-weight: 800;
+  cursor: pointer; box-shadow: 0 var(--size-8px) var(--size-22px) var(--tone-185-28-28-0p4);
+  animation: leave-pulse var(--duration-2s) infinite; }
+/* GPS-Status-Zeile im Spiel: rotes Fix-Banner, nur wenn GPS fehlt */
+.gps-status { position: fixed; top: var(--size-46px); left: var(--size-10px); right: var(--size-10px); z-index: var(--layer-40);
+  background: var(--tone-127-29-29-0p94); color: var(--tone-fff); font-weight: 700;
+  font-size: var(--fs-xs); padding: var(--size-8px) var(--size-12px); border-radius: var(--size-10px);
+  box-shadow: 0 var(--size-6px) var(--size-20px) var(--tone-0-0-0-0p4); text-align: center; }
+.lang-select { margin-left: auto; background: var(--tone-255-255-255-0p1); color: var(--tone-fff);
+  border: var(--size-1px) solid var(--tone-255-255-255-0p2); border-radius: var(--size-8px); padding: var(--size-6px) var(--size-10px);
+  font-weight: 600; }
+.gear-btn { position: relative; z-index: var(--layer-45); pointer-events: auto; }
+
+/* Rundenabbruch (Host): zwei Drittel gedrückt -> rot + pulsierend */
+.btn-abort { margin-left: auto; }
+.btn-settings { margin-left: var(--size-8px); }
+.btn-abort.abort-armed { background: var(--tone-239-68-68-0p9);
+  color: var(--tone-fff); border-color: var(--tone-255-255-255-0p5);
+  animation: abort-pulse var(--duration-0p8s) infinite; }
+
+/* ===== Kill-Animation (nur Opfer, Among-Us-Moment) ==================== */
+.kill-anim { position: fixed; inset: 0; z-index: var(--layer-200); overflow: hidden;
+  background: var(--tone-120a0e); border-radius: 0; }
+.kill-anim .kill-bg { position: absolute; inset: 0;
+  background:
+    linear-gradient(115deg, var(--tone-239-68-68-0p35) 0%, transparent 40%),
+    linear-gradient(-115deg, var(--tone-127-29-29-0p5) 0%, transparent 45%),
+    radial-gradient(circle at 50% 52%, var(--tone-255-235-235-0p22), transparent 55%),
+    var(--tone-1a1013);
+  animation: kill-bg-flash var(--duration-1p5s) steps(2, end) infinite; }
+
+/* Zwei rote Breath-Slashes, diagonal fegen über den Screen */
+.kill-anim .kill-slash { position: absolute; left: -18%; width: 136%; height: 34%;
+  background: linear-gradient(180deg, var(--tone-ef4444) 0%, var(--tone-dc2626) 45%, var(--tone-fca5a5) 100%);
+  border-radius: var(--size-12px); transform: skewY(-9deg) scaleX(0.2); opacity: 0; }
+.kill-anim .kill-slash.s1 { top: 24%; animation: kill-slash-sweep var(--duration-0p42s) cubic-bezier(.2,.9,.3,1) forwards; }
+.kill-anim .kill-slash.s2 { top: 62%; animation: kill-slash-sweep var(--duration-0p42s) cubic-bezier(.2,.9,.3,1) var(--duration-0p12s) forwards; }
+
+.kill-anim .kill-knife { position: absolute; top: 34%; left: 56%;
+  font-size: clamp(var(--fs-2xl), 24vw, var(--fs-2xl)); transform: translate(-10%, -10%) rotate(18deg);
+  filter: drop-shadow(0 var(--size-10px) var(--size-22px) var(--tone-0-0-0-p7));
+  animation: kill-knife-chop var(--duration-0p38s) cubic-bezier(.3,1.4,.4,1) var(--duration-0p1s) forwards;
+  opacity: 0; }
+
+/* Zwei Bohnen: OPFER (Deine Farbe) + KILLER (rot), Among-Us-Pose */
+.kill-anim .kill-beans { position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center; gap: 4vw;
+  animation: kill-bean-shake var(--duration-0p5s) var(--duration-0p15s) ease-in-out infinite; }
+.kill-anim .kill-bean { position: relative; width: 17vw; height: 22vw; max-width: var(--size-120px);
+  max-height: var(--size-170px); border-radius: 46% 46% 42% 42% / 58% 58% 44% 44%;
+  border: var(--size-4px) solid var(--tone-0-0-0-0p85);
+  box-shadow: inset 0 -1.2vw 0 var(--tone-0-0-0-0p28); }
+.kill-anim .kill-bean span { position: absolute; top: 30%; left: 22%;
+  width: 44%; height: 26%; border-radius: var(--size-999px);
+  background: linear-gradient(180deg, var(--tone-9ed7f0), var(--tone-3fa7d6) 70%);
+  border: var(--size-3px) solid var(--tone-10-14-20-0p9); }
+.kill-anim .kill-bean.killer { transform: rotate(14deg) translateY(-6%); }
+.kill-anim .kill-text { position: absolute; left: 0; right: 0; bottom: 7%;
+  text-align: center; color: var(--tone-fff); font-size: clamp(var(--fs-base), 7vw, var(--fs-2xl));
+  text-shadow: 0 var(--size-3px) 0 var(--tone-7f1d1d), 0 0 var(--size-18px) var(--tone-239-68-68-0p9);
+  animation: kill-text-pop var(--duration-0p3s) cubic-bezier(.3,1.6,.4,1) var(--duration-0p25s) both; }
+
+.kill-anim.kill-anim-out { animation: kill-anim-fade var(--duration-0p45s) ease forwards; }
+
+/* Setz-Punkt-Kalibrier-Minimap */
+.calib-map { width: 100%; height: 44dvh; border-radius: var(--size-12px);
+  background: var(--tone-0-0-0-0p4); border: var(--size-1px) solid var(--tone-255-255-255-0p12);
+  touch-action: manipulation; }
+
+.cal2-map { width: 100%; height: 44dvh; border-radius: var(--size-12px);
+  background: var(--tone-0-0-0-0p4); border: var(--size-1px) solid var(--tone-255-255-255-0p12);
+  touch-action: manipulation; }
+
+/* Regel-Panels im Lobby-Stil (Among-Us-Tabs) */
+/* Spiel-Einstellungen einklappbar (Divo: "wie früher im Zahnrad") */
+.rules-toggle { display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: var(--size-2px) 0 var(--size-6px); background: none; border: none; cursor: pointer;
+  color: var(--tone-fff); font-weight: 700; font-size: var(--fs-sm); letter-spacing: var(--size-1px); }
+.rules-toggle .rules-chevron { font-size: var(--fs-base); transition: transform var(--duration-0p15s) ease;
+  color: var(--tone-255-255-255-0p6); }
+.rules-toggle[aria-expanded="true"] .rules-chevron { transform: rotate(180deg); }
+.rules-body.collapsed { display: none; }
+.rules-panels { display: flex; flex-direction: column; gap: var(--size-12px); margin-top: var(--size-10px); }
+.rules-group { position: relative; padding: var(--size-14px) var(--size-4px) var(--size-6px); border-radius: var(--size-12px);
+  background: var(--tone-255-255-255-0p04); border: var(--size-1px) solid var(--tone-255-255-255-0p08); }
+.rules-tab { margin: var(--size-minus-24px) 0 var(--size-8px) var(--size-12px); display: inline-block; padding: var(--size-4px) var(--size-16px);
+  border-radius: var(--size-10px) var(--size-10px) 0 0; background: var(--tone-255-255-255-0p1);
+  font-size: var(--fs-xs); letter-spacing: var(--size-2px); color: var(--tone-255-255-255-0p85);
+  font-style: italic; font-weight: 700; }
+.settings-grid { display: flex; flex-direction: column; gap: var(--size-8px); }
+.settings-grid > label { display: flex; align-items: center; gap: var(--size-10px);
+  font-size: var(--fs-xs); color: var(--tone-255-255-255-0p8); }
+.settings-grid > label select { margin-left: auto; min-width: var(--size-88px); }
+.settings-toggle-inline { padding: var(--size-8px) var(--size-10px); border-radius: var(--size-10px);
+  background: var(--tone-255-255-255-0p05); border: var(--size-1px) solid var(--tone-255-255-255-0p08); }
+.settings-toggle-inline span { flex: 1; }
+.settings-toggle-inline input { width: var(--size-20px); height: var(--size-20px); accent-color: var(--tone-4ade80); }
+/* Roter App-Fehler-Chip: sieht man, wenn JS irgendwo explodiert */
+.js-error-chip { position: fixed; top: var(--size-6px); left: var(--size-8px); right: var(--size-8px); z-index: var(--layer-999);
+  background: var(--tone-153-27-27-0p95); color: var(--tone-fff); font-size: var(--fs-xs);
+  font-family: monospace; padding: var(--size-6px) var(--size-10px); border-radius: var(--size-8px);
+  white-space: normal; word-break: break-word; cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none; animation-duration: var(--duration-0p01ms); }
+}
+@media (min-width: 43.75rem) {
+  .screen { justify-content: flex-start; padding-top: var(--size-40px); }
+}
+
+/* Among-Us-Pixel-Momente: Rollen-Reveal + Victory/Defeat (v19.8) */
+.pixel-title {
+  font-family: var(--font-ui);
+  text-shadow: 0 0 var(--size-14px) currentColor, 0 0 var(--size-40px) currentColor;
+  letter-spacing: var(--size-2px);
+}
+.role-card-title { line-height: 1.35; }
+.role-card.crew .role-card-title { color: var(--tone-9df3ff); }
+.role-card.impostor .role-card-title { color: var(--tone-ff3838); }
+.pixel-sub { display: block; margin-top: var(--size-10px); font-size: var(--fs-xs); opacity: 0.95; }
+.imp-count { color: var(--tone-ff5c69); font-weight: 800; }
+.role-row {
+  display: flex; flex-wrap: wrap; gap: var(--size-6px); justify-content: center;
+  margin: var(--size-12px) 0 var(--size-8px);
+}
+.role-chip {
+  padding: var(--size-4px) var(--size-10px); border-radius: var(--size-999px); font-size: var(--fs-xs);
+  background: var(--tone-88-166-255-0p16); border: var(--size-1px) solid var(--tone-88-166-255-0p4);
+}
+.role-chip.self { background: var(--tone-157-243-255-0p22); border-color: var(--tone-9df3ff); }
+.role-chip.mate {
+  background: var(--tone-255-80-90-0p2); border-color: var(--tone-ff5c69); color: var(--tone-ffb9be);
+  box-shadow: 0 0 var(--size-10px) var(--tone-255-60-70-0p45);
+}
+.gameover-title { font-size: clamp(var(--fs-lg), 7.6vw, var(--fs-2xl)); margin-bottom: var(--size-6px); }
+.gameover-title[data-tone='crew'] { color: var(--tone-58c2ff); }
+.gameover-title[data-tone='imp'] { color: var(--tone-ff4552); }
+.gameover-overlay .card::before {
+  content: ''; display: block; height: var(--size-4px); border-radius: var(--size-2px); margin-bottom: var(--size-12px);
+}
+.gameover-overlay .card[data-win='crew']::before { background: linear-gradient(90deg, var(--tone-58c2ff), transparent); }
+.gameover-overlay .card[data-win='imp']::before { background: linear-gradient(90deg, var(--tone-ff4552), transparent); }
+/* Lautstaerke-Schieberegler */
+.settings-slider input[type='range'] {
+  -webkit-appearance: none; appearance: none; height: var(--size-22px); background: transparent;
+}
+.settings-slider input[type='range']::-webkit-slider-runnable-track {
+  height: var(--size-8px); border-radius: var(--size-4px);
+  background: linear-gradient(90deg, var(--tone-58a6ff), var(--tone-1f3a5f));
+}
+.settings-slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none; width: var(--size-22px); height: var(--size-22px); margin-top: var(--size-minus-7px);
+  border-radius: 50%; background: var(--tone-9df3ff); border: var(--size-2px) solid var(--tone-0d1117);
+  box-shadow: 0 0 var(--size-8px) var(--tone-88-166-255-0p8);
+}
+
+/* Grenz-Eskalation: Stufe-2-Banner kehre-sofort-zurueck (Pixel-Look) */
+.boundary-banner.escalate {
+  font-family: var(--font-ui);
+  font-size: clamp(var(--fs-xs), 3.4vw, var(--fs-base));
+  padding: var(--size-14px) var(--size-12px);
+  background: var(--tone-180-12-24-0p96);
+  border: var(--size-2px) solid var(--tone-ff4552);
+  box-shadow: 0 0 var(--size-18px) var(--tone-255-60-70-0p65);
+  animation: banner-flash var(--duration-0p7s) infinite;
+}
+/* Tasks-Completed-Label in Pixel-Schrift im eckigen Balken (v19.12) */
+/* (Legacy-Regel entfernt — Label lebt jetzt im Balken) */
+
+/* Meeting-Tisch-Bottom-Sheet (v19.12): slidet von unten rein, wo die
+   Map liegt — Divo: Use am Tisch öffnet das Meeting-Feld. */
+.emergency-panel { position: fixed; left: var(--size-10px); right: var(--size-10px);
+  bottom: calc(var(--size-10px) + env(safe-area-inset-bottom, var(--size-0px))); z-index: var(--layer-44);
+  pointer-events: auto; }
+.emergency-tablet { max-width: var(--size-460px); margin: 0 auto;
+  background: linear-gradient(180deg, var(--tone-21-28-43-0p98), var(--tone-9-12-20-0p98));
+  border: var(--size-2px) solid var(--tone-255-255-255-0p2); border-radius: 0;
+  box-shadow: 0 var(--size-minus-8px) var(--size-30px) var(--tone-0-0-0-0p55);
+  padding: 0 var(--size-16px) var(--size-16px); display: flex; flex-direction: column; align-items: center;
+  gap: var(--size-12px); animation: emergency-slide var(--duration-260ms) cubic-bezier(0.2, 0.9, 0.3, 1); }
+
+/* ===== Among-Us-Admin-Tisch (Divo 4.11) ============================== */
+.admin-table { position: fixed; inset: 0; z-index: var(--layer-120);
+  background: var(--tone-6-10-8-0p9); display: flex;
+  align-items: center; justify-content: center; }
+.admin-tablet { width: min(92vw, var(--size-620px)); max-height: 86dvh;
+  background: linear-gradient(180deg, var(--tone-21-32-24-0p98), var(--tone-6-12-9-0p98));
+  border: var(--size-2px) solid var(--tone-74-222-128-0p4); border-radius: var(--size-10px);
+  box-shadow: 0 var(--size-minus-8px) var(--size-30px) var(--tone-0-0-0-0p6), 0 0 var(--size-22px) var(--tone-74-222-128-0p18) inset;
+  padding: var(--size-10px) var(--size-12px) var(--size-14px); display: flex; flex-direction: column; gap: var(--size-10px);
+  animation: emergency-slide var(--duration-260ms) cubic-bezier(0.2, 0.9, 0.3, 1); }
+.admin-tablet-head { display: flex; align-items: center; gap: var(--size-10px); }
+.admin-tablet-head .pixel-title { color: var(--tone-4ade80);
+  text-shadow: 0 0 var(--size-10px) var(--tone-74-222-128-0p6); flex: 1; }
+.admin-table-canvas { width: 100%; height: 52dvh; border-radius: var(--size-8px);
+  background: radial-gradient(circle at 50% 42%, var(--tone-143d24), var(--tone-07200f) 75%);
+  border: var(--size-1px) solid var(--tone-74-222-128-0p35); }
+.admin-table-status { margin: 0; text-align: center;
+  font-family: var(--font-ui); font-size: var(--fs-xs);
+  line-height: 1.7; color: var(--tone-dff7e6); }
+.emergency-stripes { height: var(--size-12px); width: 100%;
+  background: repeating-linear-gradient(135deg,
+    var(--tone-f5d020) 0 var(--size-14px), var(--tone-1c1c1c) var(--size-14px) var(--size-28px)); }
+.emergency-status { margin: var(--size-12px) 0 0; text-align: center;
+  font-family: var(--font-ui); font-size: var(--fs-xs);
+  line-height: 1.7; color: var(--tone-ffe9e9); white-space: pre-line; }
+.emergency-dome { position: relative; width: var(--size-116px); height: var(--size-108px); border: none;
+  border-radius: var(--size-58px)/var(--size-54px); cursor: pointer; padding: 0;
+  background: radial-gradient(ellipse at 50% 18%, var(--tone-e04545), var(--tone-a21212) 62%, var(--tone-7c0d0d));
+  box-shadow: 0 var(--size-8px) 0 var(--tone-5b0909), 0 var(--size-12px) var(--size-20px) var(--tone-0-0-0-0p55),
+    inset 0 var(--size-2px) var(--size-6px) var(--tone-255-255-255-0p25);
+  transition: transform var(--duration-0p12s) ease, box-shadow var(--duration-0p12s) ease; }
+.emergency-dome:active { transform: translateY(var(--size-6px));
+  box-shadow: 0 var(--size-2px) 0 var(--tone-5b0909), 0 var(--size-4px) var(--size-8px) var(--tone-0-0-0-0p5); }
+.emergency-dome.blocked { filter: grayscale(0.85) brightness(0.6); cursor: not-allowed; }
+.emergency-cap { position: absolute; left: -6%; right: -6%; top: -34%;
+  height: 54%; border-radius: 50% 50% 46% 46% / 90% 90% 40% 40%;
+  background: linear-gradient(160deg, var(--tone-255-255-255-0p42),
+    var(--tone-200-225-255-0p14) 55%, var(--tone-160-190-230-0p34));
+  border: var(--size-1px) solid var(--tone-255-255-255-0p5); pointer-events: none;
+   }
+.emergency-dome.open .emergency-cap { transform: translateY(-16%) rotate(-8deg);
+  opacity: 0.8; }
+.emergency-face { position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center; color: var(--tone-ffe9e9);
+  font-weight: 800; font-size: var(--fs-xs); letter-spacing: var(--size-1px);
+  text-shadow: 0 var(--size-1px) var(--size-3px) var(--tone-0-0-0-0p6); pointer-events: none; }
+.emergency-dome.pressed .emergency-cap { transform: translateY(38%) scale(1.05);
+  opacity: 0.95; }
+.btn-emergency-close { width: 100%; max-width: var(--size-300px); }
+
+/* Among-Us-Button-Art (PNG aus Button_Pic): Bild + Label darunter */
+
+
+
+
+
+
+.icon-label { font-size: var(--fs-xs); font-weight: 700; color: var(--tone-e5e7eb);
+  text-shadow: 0 var(--size-1px) var(--size-2px) var(--tone-0-0-0-0p8); }
+}

@@ -1,398 +1,352 @@
-# Design.md — universelles Design-System (Dark Glass, Akzent Rot)
+# DESIGN.md – Real Life Among Us (PWA)
 
-Wiederverwendbare Design-Spezifikation, abgeleitet aus dem Cucuri-Look (SpaceEdu-Redesign).
-Gültig für jede Website/App: Die Regel lautet **Design = Tokens + Komponenten-Rezepte**, nie
-hartkodizierte Farben. Eine andere KI kann mit diesem Dokument jedes Produkt im selben Stil bauen,
-indem sie nur die Token-Werte einsetzt. Akzentfarbe hier: **ROT** (statt Blau/Cyan).
-
----
-
-## 1. Design-Philosophie
-
-1. **Dark-First:** Fast schwarzer, leicht getönter Hintergrund; Layout atmet durch Dunkelheit, nicht durch Linien.
-2. **Glassmorphism subtil:** Karten sind halbtransparent, 1px helle Kontur, großer weicher Schatten, leichtes Backdrop-Blur. Nie milchig, nie undurchsichtig.
-3. **Ein Akzent, sparsam:** Rot kenntzeichnet Interaktion (Fokus, aktive Elemente, Links, Sprech-Status). Alles andere ist Weißtöne auf Dunkel. Akzentfläche < 10 % der Seite.
-4. **Serif als Logo-/Titelschrift, neutrale Grotesk als Text:** eleganter "Editorial"-Kontrast statt Standard-Windows-Look.
-5. **Pill statt Kante:** Buttons, Badges, Umschalter sind Kapseln (border-radius: 999px); Panels sind weich gerundete Karten (22px).
-6. **Primär-Button = glänzendes Weiß-Pill ("glossy"), kein Akzentfarb-Button:** der Akzent ruft, das CTA leuchtet. Das hält die Seite ruhig und macht CTAs unverwechselbar.
-7. **Dekorativer Textur-Grid:** hauchfeines Linienraster über dem Hintergrund (soft-light, opacity ~0.25–0.35), nie sichtbar störend.
-8. **Motion dosiert:** nur translateY(-1px) bei Hover, 0.15–0.4s ease Übergänge, respect `prefers-reduced-motion`.
-9. **Status erklären sich nicht nur über Farbe:** Badges mit Text, Icons zusätzlich; Farben sind Verstärker, nicht einzige Information.
+> Diese Datei ist die verbindliche Design- und Code-Vorgabe für alle UI-Arbeiten.
+> Lies sie vollständig, bevor du irgendeine Datei im Frontend änderst.
+> Bei Konflikten zwischen dieser Datei und deinem eigenen Geschmack gilt diese Datei.
 
 ---
 
-## 2. Farbsystem (Akzent: ROT)
+## 0. Auftrag in einem Satz
 
-### 2.1 Basis (dunkel)
+Die App soll sich anfühlen wie die Benutzeroberfläche des echten Among Us: ein Raumschiff-Terminal mit dunklen, kantig-abgerundeten Tafeln, dicken hellen Rändern, runder freundlicher Schrift, klaren Farbsignalen (Rot = Gefahr, Gelb = Aufgabe, Grün = erledigt) und knackigem Feedback. Die Umsetzung muss **hochwertig und poliert** wirken, nicht wie ein Pixel-Retro-Spiel und nicht wie ein bunter Farbbaukasten.
 
-| Token         | Wert                     | Verwendung                              |
-| ------------- | ------------------------ | --------------------------------------- |
-| `--bg0`       | `#1a0a0f`                | Hintergrund außen (fast schwarz, rot getönt) |
-| `--bg1`       | `#2a1018`                | Hintergrund Mitte (Verlaufs-Zwischenton) |
-| `--card`      | `rgba(32, 12, 20, 0.78)` | Glas-Kartenfläche                       |
-| `--card-border` | `rgba(255, 255, 255, 0.14)` | Karten-/Panel-Kontur                |
-| `--rule`      | `rgba(255, 255, 255, 0.23)` | Trennlinien unter Header              |
+**Nicht erwünscht:** Pixel-Art, 8-Bit-Schriften, Neon-Regenbogen, Standard-Material-/Bootstrap-Look, weiße App-Oberflächen, Emoji als Icons, generische SaaS-Cards.
 
-Grund-Verlauf: `linear-gradient(var(--bg0), var(--bg1) 55%, var(--bg0))`
-plus ein **radialer Schein** oben mittig in Akzentfarbe (10–14 % Alpha):
-`radial-gradient(1100px 500px at 50% -10%, rgba(255, 71, 87, 0.14), transparent 60%)`
-
-Alternativ darf `--bg0/--bg1` neutral-schwarz bleiben (`#0b0a0d`), wenn das Produkt warmere Töne ablehnt — entscheide pro Projekt, aber halte Kontrast >= WCAG AA.
-
-### 2.2 Text
-
-| Token    | Wert                        | Verwendung                         |
-| -------- | --------------------------- | ---------------------------------- |
-| `--ink`  | `#ffffff`                   | Primärtext                         |
-| `--muted`| `rgba(255, 255, 255, 0.68)` | Sekundärtext, Beschreibungen       |
-| `--faint`| `rgba(255, 255, 255, 0.48)` | Meta, Zeitstempel, Hints           |
-
-### 2.3 Akzent (ROT-Skala)
-
-Role   | Hex          | rgba (für Glow/Fills) | Verwendung
------- | ------------ | --------------------- | ----------------------------------
-Akzent | `#ff4757`    | `rgba(255, 71, 87, x)`| Links, Fokus, aktive Zustände, Highlights
-Akzent hell | `#ff8d98` | `rgba(255, 141, 152, x)` | Text auf Dunkel wenn Akzent zu grell
-Akzent dunkel/gebacken | `#c92030` | –           | Hover-Vertiefung / große Flächen
-Akzent-Pastell | `#ffd7dc` | –                 | Badges-Text auf Akzent-Glas
-
-Empfohlene Glow-Intensitäten (wie im Original): 0.2–0.45 Alpha, Reichweite 10–26px
-(`box-shadow: 0 0 10/12/14/16/26 px rgba(255,71,87, .2–.45)`).
-
-### 2.4 Semantik (kollidiert NICHT mit Akzent, weil Ton/strength – und immer Text + Icon dazu)
-
-| Rolle     | Palette                                   | Regeln                                            |
-| --------- | ----------------------------------------- | ------------------------------------------------- |
-| Danger/Fehler | `#c92030` + Text `#ff8d98`, Glas `rgba(201,32,48,.12)` | dunkler & satter als Akzent, panic-Kontext |
-| Warnung   | Gold/Amber-Verlauf `#ffd166 → #ff9a3c`    | nur Fortschritt, Budget, protective UI            |
-| Erfolg    | `#4ade80` (sparsam!)                      | Bestätigungen, wird sonst selten verdient         |
-| Info/neutral | Weißtöne (muted/faint)                 | Standardtext, Listen                              |
-
-**Kollisionsregel:** Akzent-Rot und Fehler-Rot nutzen dieselbe Familie — deshalb:
-Fehler NIE rein über Farbe (Icon `⚠` oder Text inklusive), und Fehlerflächen sind
-dunkler (`#c92030`) während interaktiver Akzent hell (`#ff4757`) bleibt.
-
-### 2.5 Button-Tinte auf glänzendem Weiß
-
-`--btn-ink: #2a1018` (dunkel, warm — nicht schwarz), damit der CTA-Text zur background-Familie passt.
+**Rechtlicher Hinweis:** Verwende keine extrahierten Original-Assets (Sprites, Sounds, Logos, Schriftdateien aus dem Spiel). Zeichne alle Grafiken als **eigene SVGs** im Stil des Spiels (Bohnen-Silhouette mit Visier, Raumschiff-Panels). Die Anmutung ist „inspiriert von“, nicht „kopiert aus“.
 
 ---
 
-## 3. Typografie
+## 1. Vor dem Programmieren (Pflicht)
 
-| Rolle        | Font             | Fallback                     | Gewicht |
-| ------------ | ---------------- | ---------------------------- | ------- |
-| Display/Titel | Serif (Prata, Georgia, serif) | Georgia, serif | 400     |
-| Body/UI      | Grotesk (Hanken Grotesk) | system-ui, Segoe UI, sans | 400–700 |
-| Logo/Wordmark | Poppins (geometrisch)    | sans-serif            | 500–600 |
-| Tech/Game/Spezial | Orbitron          | monospace                 | 400–900 |
-
-Konkret umgesetzte Weights (self-hosted WOFF2, `font-display: swap`, KEIN Google-CDN — DSGVO/Privatsphäre: Fonts liegen lokal, z. B. `fonts/…-400.woff2`):
-- Serif: 400
-- Body: 400/500/600/700
-- Logo: 500/600
-- Orbitron: 400/700/900
-
-### 3.1 Skala & Muster
-
-| Element            | Font     | Größe/Details                                                 |
-| ------------------ | -------- | ------------------------------------------------------------- |
-| Logo/Chat-Titel    | Logo     | 1.15rem, gew. 600, weiß, letter-spacing -0.01em                 |
-| Modal/Section-Titel (Serif) | Serif | 1.4–1.6rem, lower case gewicht 400, wirkt durch Serif   |
-| "Coming Soon" Hero | Logo     | 2.8rem, letter-spacing .12em                                   |
-| Untertitel/Tagline | Body     | 1.1rem, letter-spacing .35em, Akzentfarbe                      |
-| Eyebrow/Label      | Body     | 0.68–0.85rem, gew. 700, UPPERCASE, letter-spacing .08–.14em, Akzent |
-| Body               | Body     | 0.9–0.95rem, line-height 1.45–1.6                              |
-| Meta/Hint          | Body     | 0.72–0.8rem, Farbe faint, line-height 1.4                      |
-| Buttons            | Body     | 0.8–0.95rem, gew. 600–700                                       |
-
-**Muster:** Titel stehen in Serif (ruhig, 400), UI/Sektionen/Badges/Labels in Grotesk — fett &
-kurz. Uppercase nur für Labels/Eyebrows, nie für Absätze. `-webkit-font-smoothing: antialiased` setzen.
+1. **Bestehenden Stack erkennen.** Schau in `package.json`, Ordnerstruktur und vorhandene Client-Dateien. Die App ist weit fortgeschritten (Node.js + Socket.IO Server, Browser-PWA mit GPS/OpenStreetMap, getrennter Flutter-Client).
+2. **Nichts neu schreiben.** Keine Framework-Migration, keine neue Build-Toolchain, keine Umbenennung von Socket-Events oder Server-Logik. Design wird in die vorhandene Struktur eingebaut.
+3. **Der Flutter-/Android-Client ist nicht Teil dieser Aufgabe**, außer ich sage es ausdrücklich. Diese Datei gilt für die PWA.
+4. **Die 216 Server-Tests müssen weiter grün bleiben.** Führe sie nach Änderungen aus. Design-Änderungen dürfen keine Spiel- oder Netzwerklogik berühren.
+5. **Arbeite schrittweise:** erst Design-Tokens und Basis-Komponenten, dann Screen für Screen. Nach jedem Screen kurz prüfen, ob er mobil funktioniert.
 
 ---
 
-## 4. Form
+## 2. Code-Regeln
 
-### 4.1 Radien
+### 2.1 Technik
+- **Vanilla-first, passend zum Bestand.** Wenn die PWA bereits ein Framework nutzt, bleib dabei. Wenn nicht, dann reines HTML, modernes CSS und ES-Module. Kein neues UI-Framework einführen.
+- **Kein Tailwind, kein Bootstrap, keine fertige Komponentenbibliothek.**
+- **Keine Abhängigkeit von fremden CDNs zur Laufzeit.** Schriften, Icons und Bibliotheken werden lokal ausgeliefert, damit die PWA offline und bei schlechtem Mobilfunk startet.
+- **Icons und Grafiken:** inline SVG oder ein einziges SVG-Sprite (`<use href="#icon-name">`). Keine Icon-Fonts, keine Emojis in der UI.
+- **Kein Canvas für normale UI.** Canvas nur, wenn ein Minispiel es wirklich braucht.
 
-| Token          | Wert  | Verwendung                                  |
-| -------------- | ----- | ------------------------------------------- |
-| `--radius-lg`  | 22px  | Karten, Modals, Haupt-Container              |
-| `--radius-md`  | 14px  | Inputs, Textareas, Standard-Buttons          |
-| `--radius-sm`  | 10px  | Tabellen-Zeilen-Karten, Listen-Items, Avatare, Chips |
-| `--radius-pill`| 999px | Buttons-Pills, Badges, Fortschrittsbalken, Umschalter |
+### 2.2 CSS-Architektur
+- **Ein zentrales Token-File** `styles/tokens.css` mit allen Farben, Abständen, Radien, Schatten, Schriftgrößen, Z-Index-Stufen und Animationszeiten als **CSS Custom Properties** auf `:root`.
+- Weitere Dateien nach Aufgabe getrennt: `base.css` (Reset, Typografie), `components.css` (Buttons, Panels, Chips …), `screens/*.css` (Lobby, Karte, Meeting …), `motion.css` (Keyframes).
+- **Keine Hex-Werte, Pixelwerte für Abstände oder Schriftgrößen außerhalb von `tokens.css`.** Immer `var(--…)` benutzen.
+- Namensschema **BEM-artig**: `.panel`, `.panel__header`, `.panel--danger`. Keine tief verschachtelten Selektoren, keine IDs zum Stylen, kein `!important`.
+- **Mobile-first** mit `min-width`-Media-Queries. Bevorzuge `clamp()`, `min()`, `max()`, Grid und Flexbox statt fester Breiten.
+- Nutze `@layer reset, base, components, screens, utilities;`, um Spezifitätsprobleme zu vermeiden.
+- Dunkles Design ist **das** Design, kein Theme-Schalter. Setze `color-scheme: dark;`.
 
-Kleingruppen: Panels, die seitlich andocken (Drawer/Menü), runden nur
-die Innerseite (z. B. `0 16px 16px 0`).
+### 2.3 JavaScript
+- ES-Module, `const`/`let`, kein `var`. Kleine Funktionen, sprechende Namen.
+- **UI-Rendering strikt getrennt von Netzwerk- und Spiellogik.** Socket.IO-Handler aktualisieren State, die UI reagiert auf State. Keine Spiellogik in Komponenten kopieren.
+- Eine kleine Hilfsfunktion `el(tag, props, ...children)` oder `<template>`-Elemente statt String-Konkatenation mit `innerHTML`. **Nie unescapte Spielernamen in `innerHTML`** (XSS). Namen immer über `textContent`.
+- Bildschirmwechsel über **ein einziges Attribut** (`data-screen="lobby"` am Root) und CSS, nicht über verstreutes `display:none` per JS.
+- Animationen per CSS-Klassen/Attribute auslösen, nicht per `setTimeout`-Ketten.
+- Event-Delegation für Listen (Spielerliste, Abstimmung).
+- Keine neuen globalen Variablen. Keine Polling-Schleifen für UI.
 
-### 4.2 Schatten
+### 2.4 Barrierefreiheit und Qualitätsgrenze
+- Semantisches HTML: `<button>`, `<dialog>` oder `role="dialog"` für Overlays, `<progress>`/`role="progressbar"` für Fortschrittsbalken, `aria-live="polite"` für Chat und Statusmeldungen.
+- **Sichtbarer Fokus** (`:focus-visible`, 3 px heller Ring) auf allen interaktiven Elementen.
+- **Touch-Ziele mindestens 48 × 48 px.** Primäre Aktionen am unteren Bildschirmrand erreichbar mit dem Daumen.
+- Kontrast Text/Hintergrund mindestens WCAG AA (4.5:1). Gefahr und Fortschritt **nie nur über Farbe**, immer zusätzlich Icon oder Text.
+- `@media (prefers-reduced-motion: reduce)`: Wackeln, Pulsieren, Screen-Shake und Dauerblinken abschalten, Zustandswechsel bleiben sichtbar (z. B. statisches Rot).
+- **Blinken maximal 3 Mal pro Sekunde** (Fotosensitivität). Sabotage-Alarm pulsiert weich (ca. 1 Hz), kein hartes Stroboskop.
+- Safe Areas beachten: `padding: env(safe-area-inset-*)`, `viewport-fit=cover`, `height: 100dvh` statt `100vh`.
+- Keine Zoom-Sperre. Text skaliert mit `rem`.
 
-| Token        | Wert                                 |
-| ------------ | ------------------------------------ |
-| `--shadow-lg`| `0 18px 45px rgba(0, 0, 0, 0.55)`    |
-| Glow (Akzent)| `0 0 10–26px rgba(255, 71, 87, 0.2–0.45)` |
-| Weiß-Glow (CTA) | `0 10px 18px -8px rgba(255,255,255,.5), 0 0 26px rgba(255,255,255,.14)` |
-
-### 4.3 Abstände (Eyebrow-Regel: konsistent, keine festen Scales erzwungen)
-
-Container-Padding 20px; Modals 30px (Desktop) / 22px 16px (Mobile);
-Komponent-Abstände 8–15px; Seitenabstand (Header/Seite) 25px, Mobile 12px.
-`sizes` Erwartung: alles ist 44px+ klickbar (Touch).
-
----
-
-## 5. Komponenten-Rezepte
-
-### 5.1 Primär-Button (CTA) — "glossy white pill"
-
-```css
-.btn-primary {
-  background: linear-gradient(180deg, #ffffff 0%, #d6e8f8 4%, #d9ecfe 72%, #ffffff 100%);
-  /* kühl halten im Akzent-Rot-Theme? Nein: Weiß-Verlauf neutral lassen, kein Blaustich */
-  color: var(--btn-ink);
-  border: 0;
-  border-radius: var(--radius-pill);
-  font-weight: 700;
-  box-shadow:
-    0 10px 18px -8px rgba(255, 255, 255, 0.5),
-    0 0 26px rgba(255, 255, 255, 0.14),
-    inset 0 0 0 2px rgba(255, 255, 255, 0.9);
-}
-.btn-primary:hover { transform: translateY(-1px); filter: brightness(1.03); }
-.btn-primary:disabled { opacity: 0.65; cursor: wait; transform: none; }
-```
-
-Höhe 46–50px, volle Breite im Modal, inline mit Padding 0 22px im Chat.
-Verlaufstop-Töne wie `#d6e8f8/#d8ecfe` wirken kühl — im Rot-Theme neutralisieren auf
-`linear-gradient(180deg, #ffffff 0%, #f1e2e5 5%, #f6eaec 72%, #ffffff 100%)`.
-
-### 5.2 Sekundär-Button (Ghost-Pill)
-
-```css
-.btn-ghost {
-  padding: 8px 16px;
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: transparent;
-  color: #fff;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-.btn-ghost:hover { background: rgba(255, 255, 255, 0.1); transform: translateY(-1px); }
-.btn-ghost.active { background: (CTA-Verlauf wie 5.1, aber 9%-Stopvariante); color: var(--btn-ink); border-color: rgba(255,255,255,.9); }
-```
-
-### 5.3 Danger-Button
-
-`background: #c92030; color: #fff; box-shadow: none;` (flach, ohne Glow — Panic-Free und eindeutig).
-
-### 5.4 Glas-Karte / Panel
-
-```css
-.panel {
-  background: var(--card);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  color: var(--ink);
-  overflow: hidden;
-}
-```
-
-Varianten: dunklere Sidebar (`rgba(bg0, 0.6)`), Header-Bar (`rgba(bg0, 0.72)` + blur 12px),
-modales Backdrop: fixed inset 0, `rgba(bg0, 0.72)` + blur 8px.
-
-### 5.5 Badge / Pill / Rang
-
-```css
-.badge {
-  font-size: 0.6–0.65rem; font-weight: 800; letter-spacing: .1–.12em;
-  text-transform: uppercase; color: var(--accent-light);
-  border: 1px solid rgba(255, 71, 87, 0.6); background: rgba(255, 71, 87, 0.12);
-  border-radius: 999px; padding: 1px 7px; white-space: nowrap;
-}
-```
-
-Statusabstufungen via Alpha (0.12 fill / 0.6 Rand) — gleiche Karte, andere Rolle
-=> andere Farbe, gleiche Form.
-
-### 5.6 Input / Textarea
-
-```css
-.field {
-  height: 50px;  /* Textarea: min-height 64px */
-  padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff; font-size: 16px; outline: none;
-}
-.field::placeholder { color: var(--faint); }
-.field:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(255, 71, 87, 0.2);
-}
-```
-
-Checkboxes/Ranges: `accent-color: var(--accent)`.
-Immer eigene Handler erlauben — kein Autofokus-Zwang.
-
-### 5.7 Modal
-
-Komposition: `.modal` (fixed, Backdrop 5.4) > `.modal-content` (Panel, 380px breit,
-max-width 100%, max-height `calc(100dvh - 40px)`, `overflow-y: auto`,
-`overscroll-behavior: contain`, zentriert, padding 30px, text-align center,
-Schließen-`×` absolute top 10 right 15). Fokus-Verhalten:
-`outline-offset: 3px`.
-
-### 5.8 Fortschrittsbalken / Capture-Bar
-
-```css
-.bar { height: 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
-.bar__fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ffd166, #ff9a3c); transition: width .4s ease; }
-```
-
-### 5.9 Karten-/Listen-Items (Chat-Nachrichten, Online-Liste, Voice-Member)
-
-Muster: Zeile = kleine Karte (`--radius-sm`, `rgba(255,255,255,.05/.07)`,
-`border 1px rgba(255,255,255,.08–.1)`), links 3px Akzentstreifen
-(`border-left: 3px solid var(--accent)`) für Betonung/Zustand;
-Hover: warmer Glow `0 0 0 2px rgba(accent, .35)` oder deletable-Aktion blendet ein (opacity .25 → 1).
-
-### 5.10 Segmented Control / Tabs (z. B. Chat/World-Switch)
-
-Wrap in Kapsel: `background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 999px; padding: 3px; gap: 2px; display: flex;`
-Buttons transparent, aktiv = CTA-Verlauf (5.1) mit `inset 0 0 0 1px rgba(255,255,255,.9)`,
-Text `var(--btn-ink)`.
-
-### 5.11 Footer / Legal
-
-`text-align: center; padding: 18px 12px 26px; font-size: 0.8rem; color: var(--faint);`
-Links `color: var(--muted)`, hover Akzent + underline. Legal-Seiten geben
-`max-width: 640px`, Serif-H1, Akzent-H2, Body 0.95rem line-height 1.6
-auf `linear-gradient(bg0, bg1 55%, bg0)`.
-
-### 5.12 Scrollbars
-
-```css
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 8px; }
-```
+### 2.5 Performance (Spiel läuft draußen, Akku und GPS sind knapp)
+- Nur `transform` und `opacity` animieren. Keine Layout-Animationen.
+- `backdrop-filter`/Blur sparsam: maximal ein Blur-Overlay gleichzeitig.
+- Keine dauerhaft laufenden Hintergrundanimationen auf dem Kartenscreen. Dort hat GPS/Karte Vorrang.
+- SVGs klein halten, keine Rastergrafiken für UI. Schrift als `woff2`, nur benötigte Gewichte, `font-display: swap`.
+- Service Worker: neue CSS/Font/SVG-Dateien in den Precache aufnehmen und Cache-Version erhöhen.
 
 ---
 
-## 6. Hintergrund-Dekor (Texturen)
+## 3. Visuelle Identität
 
-1. Seiten-/Hero-Hintergrund = 2-Lagen-Verlauf (siehe 2.1) + radialer Akzent-Schein.
-2. Fixed Linien-Grid 44px (body::before oder eigenes Overlay):
-   `linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px)`,
-   `linear-gradient(180deg, rgba(255,255,255,.03) 1px, transparent 1px)`,
-   `background-size: 44px 44px; opacity: .35; mix-blend-mode: soft-light; pointer-events: none;`
-3. Button-Nebenfläche/Chip: weiß-Glas-Verlauf (Joj-Knob, Interact-Button):
-   `linear-gradient(180deg, #ffffff 0%, #f1e2e5 30%, #f6eaec 75%, #ffffff 100%)`,
-   `box-shadow: 0 8px 22px rgba(0, 0, 0, .4);`
+### 3.1 Grundidee
+Zwei Welten, die sich abwechseln:
+- **Schiff (Standard):** tiefes Weltraum-Blau-Schwarz, Panels wie Wandterminals mit hellem Rand.
+- **Alarm / Meeting:** das Schiff schaltet um. Sabotage taucht den Rand in Rot, das Meeting wechselt in einen hellen, ruhigeren Tisch-Raum (Cafeteria-Stimmung).
 
----
+### 3.2 Farb-Tokens
 
-## 7. Motion
-
-| Effekt          | Wert                            |
-| --------------- | ------------------------------- |
-| Hover-Lift      | `transform: translateY(-1px)` + `filter: brightness(1.03)` |
-| Standard-Ease   | `0.15s ease` (Farbe/Hintergrund), `0.3s ease-in-out` (Drawer) |
-| Bar-Wachstum    | `width .4s ease`                |
-| Scroll-Html     | `scroll-behavior: smooth`       |
-| Folder-Regel    | `@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }` — alle Deko-Animationen abschalten |
-| Pulse/Loading   | Button-Download: `#loginBtn.loading { opacity: .65; cursor: wait; transform: none; }` |
-
----
-
-## 8. Responsivität & A11y
-
-- **Breakpoints:** 900px (Layout umbricht: Sidebar nach oben, Voice-Panel als Drawer),
-  768px (Mobile: Container 100dvh, kein Margin, Header kompakter `safe-area-inset-top`),
-  640px (Schrift und Kopfzeile kompakter: Logo verstecken, Buttons schmaler).
-- Touch-Ziele >= 44px min-height; Inputs `font-size: 16px` (verhindert iOS-Zoom).
-- `:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }` überall.
-- Kontrast: white `#fff` auf Glas ok; `--muted = 68% Alpha` fällt noch über 4.5:1 auf bg0;
-  FAINT nur für Meta/Zeitstempel (kein Pflichttext).
-- Text nie nur farbcodiert: Badges tragen Text, Fehler-Icons dazu.
-- `overscroll-behavior: contain` auf Modals & Listen (verhindert Scroll-Chaining).
-- Safe-Areas: `env(safe-area-inset-*)` in Header/Input-Paddings (iPhone-Notch).
-
----
-
-## 9. Media-Handling
-
-- Fonts lokal einbinden (DSGVO/no cookie-requests), mit `font-display: swap`.
-- Canvas-/Welt-Grafik: dunkler Hintergrund `#060b16`, Panel um Canvas mit
-  `border-radius: 18px; border: 1px solid var(--card-border);` und `--shadow-lg`.
-- Sprech-/Aktivitätsanzeige: akzentgetönte Avatare/Border (`rgba(accent, .2/.4)`).
-
----
-
-## 10. Do & Don't
-
-**Do**
-- Ein Akzent, eine Rolle. Rot = interaktiv/aktiv/aufmerksam.
-- Serif für Titel, Grotesk für alles andere — strikt.
-- Primär-CTA weiß/glänzend; Akzent-Rot nur für Fokus, aktive Checks, Fortschritt, Eyebrow.
-- Badges & Status = Pill mit 0.12-Alpha-Fläche + 0.6-Alpha-Frame.
-- Panels immer mit 1px weißem Border (0.08–0.23) — das gibt die "edle Glas"-Optik.
-- Reduziere auf Dunkel: `bg`-Verlauf immer vom dunkelsten Ton wieder zurück.
-
-**Don't**
-- Keine Akzent-Overlay-Buttons als Standard (`#ff4757` als Button-BG liest sich wie Fehler).
-- Kein Blau/Grau-Standard-Look (keine `#3b82f6`, keine Tailwind-Defaults).
-- Keine sharp corners (alles hat Radius, min. 8px).
-- Keine Text-gradient-Extras, kein "Cyberpunk"-Glow auf Fließtext (Glow nur auf Badges/State-Pills/Canvas).
-- Kein Akzent-Glow auf großen Flächen (max. ~26px Reichweite, max. 0.45 Alpha).
-- Nie Google-Fonts-/CDN-requests (Datenschutz), alles self-hosted.
-- `prefers-reduced-motion` nicht ignorieren.
-
----
-
-## 11. Kopier-Block: komplette `:root` im Cucuri-Style
+Lege diese Werte in `tokens.css` an (Namen verbindlich, Werte dürfen minimal nachjustiert werden, wenn Kontrast es verlangt):
 
 ```css
 :root {
+  /* Weltraum / Schiff */
+  --space-950: #070A14;
+  --space-900: #0B1020;
+  --space-800: #111A30;
+  --space-700: #19243F;
+  --space-600: #24325A;
+
+  /* Panels (Tablet / Terminal) */
+  --panel-fill: #1A2540;
+  --panel-fill-raised: #223054;
+  --panel-border: #C9D6EE;      /* heller Rand wie im Spiel */
+  --panel-border-dim: #51638E;
+
   /* Text */
-  --ink: #ffffff;
-  --muted: rgba(255, 255, 255, 0.68);
-  --faint: rgba(255, 255, 255, 0.48);
-  /* Akzent ROT */
-  --accent: #ff4757;
-  --accent-light: #ff8d98;
-  --accent-deep: #c92030;
-  --accent-pastel: #ffd7dc;
-  --accent-rgb: 255, 71, 87;
-  /* Basis */
-  --bg0: #1a0a0f; --bg1: #2a1018;
-  --card: rgba(32, 12, 20, 0.78);
-  --card-border: rgba(255, 255, 255, 0.14);
-  --rule: rgba(255, 255, 255, 0.23);
-  --btn-ink: #2a1018;
-  /* Form */
-  --radius-lg: 22px; --radius-md: 14px; --radius-sm: 10px; --radius-pill: 999px;
-  --shadow-lg: 0 18px 45px rgba(0, 0, 0, 0.55);
-  /* Fonts */
-  --font-serif: 'Prata', Georgia, serif;
-  --font-body: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-logo: 'Poppins', sans-serif;
-  --font-tech: 'Orbitron', monospace;
+  --text-primary: #F2F6FF;
+  --text-secondary: #A9B7D6;
+  --text-disabled: #6B7898;
+
+  /* Signalfarben */
+  --signal-danger: #E5252A;     /* Sabotage, Impostor, Not-Knopf */
+  --signal-danger-deep: #8E1216;
+  --signal-task: #F5D84A;       /* Aufgaben, Hinweise */
+  --signal-ok: #3DDC84;         /* erledigt, bereit */
+  --signal-info: #4CC9FF;       /* Kommunikation, Cyan-Terminal */
+  --signal-warn: #FF9A2E;
+
+  /* Crewfarben (nur für Spieler-Identität) */
+  --crew-red:    #C51111;
+  --crew-blue:   #132ED1;
+  --crew-green:  #117F2D;
+  --crew-pink:   #ED54BA;
+  --crew-orange: #EF7D0D;
+  --crew-yellow: #F5F557;
+  --crew-black:  #3F474E;
+  --crew-white:  #D6E0F0;
+  --crew-purple: #6B2FBB;
+  --crew-brown:  #71491E;
+  --crew-cyan:   #38FEDC;
+  --crew-lime:   #50EF39;
+
+  /* Meeting-Raum (heller Gegenpol) */
+  --meeting-bg: #C9D4E6;
+  --meeting-panel: #EEF3FB;
+  --meeting-ink: #1A2238;
 }
 ```
 
+**Regeln zur Farbe**
+- Fläche ist **dunkel und gedämpft**, Farbe ist **Information**. Maximal eine Akzentfarbe pro Screen im Vordergrund.
+- Crewfarben ausschließlich für Spieler (Avatar, Name-Chip, Abstimmungs-Marker). Nie als Button- oder Dekorfarbe.
+- Jede Crewfarbe bekommt eine **Schattierung** für den Körper (`color-mix(in oklab, var(--crew-x), black 28%)`), damit die Bohne plastisch wirkt, kein flaches Pixel-Rot.
+- Keine Verläufe als Dekoration. Erlaubt: dezenter Verlauf im Weltraum-Hintergrund und Glanzkante auf Panels.
+
+### 3.3 Typografie
+- **Schrift:** runde, freundliche Grotesk. Der Look des Spiels kommt von einer Schrift wie **Varela Round**. Nutze eine lizenzfreie Variante (Varela Round oder Nunito, OFL), **lokal eingebunden als `woff2`**.
+- Stack: `"Varela Round", "Nunito", ui-rounded, system-ui, sans-serif;`
+- Zahlen (Timer, Codes): `font-variant-numeric: tabular-nums;`, damit Countdowns nicht springen.
+- Skala als Tokens (`--fs-xs` … `--fs-display`), Basis 16 px, Verhältnis ca. 1.25. Display-Titel mit `clamp()`.
+- Titel kräftig (Gewicht 700–800), Fließtext 400–600. **Satzschreibung** statt durchgehender Versalien. Versalien nur für kurze Statusstempel wie `SABOTAGE` oder `EMERGENCY MEETING`.
+- **Textkontur wie im Spiel:** große Titel und Stempel mit dunkler Außenkontur (`paint-order: stroke fill; -webkit-text-stroke: 4px var(--space-950);`), dadurch lesbar auf jedem Hintergrund.
+- Zeilenlänge unter 70 Zeichen, Zeilenhöhe 1.4–1.5.
+
+### 3.4 Form, Rand und Tiefe
+- **Radien:** Panels `--r-panel: 20px`, Buttons `--r-pill: 999px` oder `14px`, Chips `10px`. Nicht alles gleich rund machen: großer Container = großer Radius, kleines Element = kleiner Radius.
+- **Der Among-Us-Panel-Look:** dunkle Füllung, **2–3 px hellgrauer Rand**, darum ein **äußerer dunkler Ring** (zweiter Rand, z. B. `box-shadow: 0 0 0 4px var(--space-950)`), innen dezente Glanzkante oben (`inset 0 2px 0 rgba(255,255,255,.12)`).
+- **Ecken-Details:** kleine „Schrauben“ oder abgeschrägte Ecken per SVG-Maske/`clip-path` nur an großen Panels (Aufgaben-Tablet, Karten-Overlay), nicht überall.
+- **Schatten:** ein weicher, tiefer Schatten pro Ebene (`--shadow-1/2/3`). Kein zufälliges Grau.
+- **Hintergrund:** Weltraum aus `--space-950` mit sehr feinem, statischem Sternenfeld (CSS `radial-gradient`-Punkte oder ein SVG-Tile). Keine animierten Sterne auf dem Kartenscreen.
+
 ---
 
-## 12. Referenz: Cucuri-Umsetzung (Basis der Regeln)
+## 4. Komponenten
 
-- `public/style.css` — Haupt-Design (Tokens, Header, Glas-Karte, Modals, Buttons, Liste, Voice, Admin, Welt, Responsive).
-- `public/Jugendwort/jw-style.css` — Bot-Frontend mit Orbitron, zeigt Token-Reuse über Projektgrenzen.
-- `public/legal.css` — schlanke Legal-Seite (bestätigt: Tokens genügen für neue Seiten).
-- Herkunft: SpaceEdu-Spec (Design.txt Sec.4/5/7), übersetzt in Profil-, Lobby-, Welt-, Bot- und Legal-Komponenten.
+Baue zuerst diese Basiskomponenten, alle anderen Screens bestehen nur aus ihnen.
 
-Wenn eine andere KI einen neuen Screen baut: Tokens setzen, Rezept aus Kap. 5 wählen,
-nur neue Komponenten benennen — Farben, Fonts, Radien, Schatten, Verläufe nie neu erfinden.
+### 4.1 Button
+- **Primär (Aktion, z. B. „Start“, „Aufgabe starten“):** helle Füllung (`--text-primary` auf `--space-900`-Rand, oder Gelb `--signal-task` für Aufgaben), fette Schrift, dunkle Außenkontur, **fühlbare Tiefe** durch untere dickere Kante (`box-shadow: 0 5px 0 rgba(0,0,0,.45)`). Beim Drücken `translateY(3px)` und Kante schrumpft.
+- **Gefahr (Sabotage, Notfallmeeting):** `--signal-danger` mit hellem Rand.
+- **Sekundär:** dunkle Panel-Füllung mit hellem Rand.
+- **Deaktiviert:** entsättigt, `--text-disabled`, kein Schatten, `aria-disabled`.
+- **Cooldown-Zustand** (Kill, Sabotage, Notfallknopf): Button zeigt kreisförmigen oder balkenförmigen Füllfortschritt plus verbleibende Sekunden als Zahl.
+
+### 4.2 Panel
+Basis für alles. Varianten: `--terminal` (blau-dunkel), `--danger` (rot getönt), `--meeting` (hell). Optionaler Header mit Titel links und Schließen-Button rechts.
+
+### 4.3 Crewmate-Avatar (SVG)
+- Eigene Bohnen-Silhouette: Körper, Rucksack, **Visier mit Glanz** (abgerundetes Rechteck, Cyan-Verlauf, weiße Reflexion), zwei Beine.
+- Als **SVG-Symbol mit CSS-Variablen** (`--crew-body`, `--crew-shade`), damit alle 12 Farben aus einem Symbol entstehen.
+- Zustände: `alive`, `dead` (Geist-Variante, halbtransparent, Knochen-Detail optional), `speaking` (Visier-Glühen), `voted` (kleines „Ich habe gewählt“-Abzeichen), `ejected`.
+- Größen: `--avatar-s 32px`, `--avatar-m 56px`, `--avatar-l 120px`.
+
+### 4.4 Spieler-Chip
+Pillenform mit Mini-Avatar, Name (Ellipsis bei Überlänge, `max-width`), optional Statuspunkt (bereit / tot / Host). Name immer über `textContent`.
+
+### 4.5 Fortschrittsbalken (Gesamt-Aufgaben)
+Wie im Spiel: ein breiter Balken oben, dunkle Mulde, **grüne Füllung mit Glanzlinie**, Prozent daneben. Füllung per `transform: scaleX()`, weiche Übergangszeit 400 ms.
+
+### 4.6 Timer
+Große tabellarische Ziffern, Konturschrift. Unter 10 Sekunden färbt sich die Zahl `--signal-danger` und pulsiert dezent. **Kritische Sabotage hat 90 Sekunden**, der Timer ist dabei der dominante Bildschirmeintrag.
+
+### 4.7 Toast / Hinweis
+Kleine Panel-Leiste oben, gleiche Sprache wie Buttons („Aufgabe erledigt“). Gleiche Aktion heißt überall gleich. Fehlertexte nennen Ursache **und** Lösung („Du bist zu weit weg. Geh näher an den Raum.“), ohne Entschuldigung.
+
+### 4.8 Bottom Sheet und Dialog
+Für Rolle, Aufgabenliste, Einstellungen. Von unten einfahrend, Backdrop dunkel (kein Blur auf der Karte). Schließbar per Button, Geste und ESC.
+
+### 4.9 Eingabefelder
+Lobby-Code als **großes Feld mit Einzelzeichen-Kacheln** (Monospace-Ziffern über `tabular-nums`, Auto-Uppercase, `inputmode` passend, `autocomplete="off"`). Namensfeld mit Zeichenzähler.
+
+---
+
+## 5. Screens
+
+Für jeden Screen gilt: ein klarer Hauptzweck, eine primäre Aktion, Rest zurückhaltend.
+
+### 5.1 Start / Lobby-Beitritt
+- Großes Titel-Lockup „Real Life Among Us“ mit Konturschrift, darunter Code-Eingabe und zwei Buttons: **Lobby beitreten** (primär), **Lobby erstellen** (sekundär).
+- Hintergrund: Sternenfeld, langsam schwebende Silhouette einer Bohne im Visier-Licht ist erlaubt (einzige Daueranimation der App, nur hier).
+
+### 5.2 Lobby
+- Oben: Lobby-Code groß und kopierbar.
+- Mitte: **Spielerraster** der Crew-Avatare (wie die Wartelobby der Dropship), jeder mit Namens-Chip. Host trägt Krone/Stern-Abzeichen.
+- Farbwahl als Raster der 12 Crewfarben, vergebene Farben ausgegraut.
+- Unten: Host sieht **Spiel starten** (Gelb, groß), andere sehen „Warte auf den Host“. Einstellungen (übernommene Karte, letzte Einstellungen) in einem Sekundär-Panel.
+
+### 5.3 Rollen-Enthüllung
+Kurze, dramatische Sequenz, **die eine Hero-Animation der App**:
+- Schwarzer Bildschirm, Titel „Du bist ein Crewmate“ bzw. „Impostor“, die Hintergrundfarbe wechselt (Crew: kühles Cyan-Blau-Licht, Impostor: Rot).
+- Avatare erscheinen gestaffelt. Bei Impostor werden Mit-Impostor rot hervorgehoben.
+- Dauer ca. 3 s, überspringbar per Tippen. Danach Wechsel zum HUD.
+- Bei `prefers-reduced-motion`: statisches Bild mit Einblendung.
+
+### 5.4 Haupt-HUD mit Karte (der wichtigste Screen)
+- **Karte füllt den Bildschirm.** Alles andere liegt als schlankes Overlay darüber.
+- **Oben:** Gesamt-Fortschrittsbalken, daneben kleine Statusanzeige (GPS-Genauigkeit als Icon plus Balken).
+- **Unten links:** kompakte **Aufgabenliste** (aufklappbar). Offen = gelb markiert, erledigt = grün mit Haken und durchgestrichen.
+- **Unten rechts:** Aktionsbuttons, **rund und groß wie im Spiel**: `Benutzen`, `Melden`, bei Impostor zusätzlich `Kill` und `Sabotage`. Nicht verfügbare Buttons bleiben sichtbar, sind aber entsättigt (Cooldown-Ring). So lernt man die Positionen.
+- **Karten-Styling:** Die OSM-Basiskarte wird **abgedunkelt und entsättigt** (CSS-Filter auf der Tile-Ebene oder dunkler Style), damit Spielmarker leuchten. Straßen als helle, dünne Linien auf `--space-800`.
+- **Räume** erscheinen als halbtransparente Zonen mit hellem gestrichelten Rand. **Beschriftungen zeigen per Pfeil auf den jeweiligen Raum** (bestehendes Feature bleibt erhalten): Label als kleines Panel, Pfeil als SVG-Spitze, kollisionsarm platziert.
+- **Spielermarker:** der eigene Spieler als Avatar mit Pulsring in Crewfarbe, andere nur wenn Spielregeln es erlauben. Tote als Geister-Avatar.
+- **Aufgaben-Marker:** gelbes Ausrufezeichen-Symbol (SVG) mit leichtem Glühen, wird bei Nähe größer und aktiviert den `Benutzen`-Button.
+- **Nähe-Feedback:** ist ein Ziel in Reichweite, leuchtet der passende Aktionsbutton auf und der Marker bekommt einen Ring. Außer Reichweite: dezenter Hinweis „Zu weit weg“.
+
+### 5.5 Aufgaben / Minispiele
+- Öffnet als **Vollbild-Terminal-Panel** über der Karte (wie die Wandtablets im Spiel): dunkles Panel, heller Rand, Titel oben links, Schließen oben rechts.
+- Jedes Minispiel nutzt dieselbe Rahmenkomponente, nur der Inhalt wechselt.
+- Interaktionen **groß, griffig, mit sofortigem Feedback**: Treffer = grüner Impuls + kurzer Ton, Fehler = kurzes Rütteln + rotes Aufblitzen (Reduced-Motion: nur Farbwechsel).
+- Abschluss: Häkchen-Animation, Panel schließt, Toast „Aufgabe erledigt“, Fortschrittsbalken wächst sichtbar.
+
+### 5.6 Sabotage (Alarm)
+- **Sofortiger Moduswechsel:** roter, weich pulsierender Rahmen um den ganzen Bildschirm (`inset box-shadow`, ca. 1 Hz), oben ein Alarmbanner mit Titel, betroffenem Raum (mit Pfeil-Verweis auf der Karte) und Timer.
+- **Kritische Sabotage:** 90-Sekunden-Countdown, rot, groß, dominanter Bildschirmeintrag. Zusätzliche Anzeige, was zu tun ist („Geh zum Reaktor und halte beide Handflächen“ bzw. das tatsächliche Reparaturziel).
+- Nicht-kritische Sabotage: kleineres Banner, Rahmen nur als roter Akzent.
+- Nach Reparatur: Rahmen blendet in 600 ms aus, grünes „Repariert“-Toast.
+
+### 5.7 Meeting – Cafeteria
+- **Einleitung:** „EMERGENCY MEETING“ bzw. „Leiche gefunden“ als roter Stempel, Konturschrift, mit kurzem Impact (Scale-Bounce). Danach Wechsel zum Tisch.
+- **Cafeteria-Raum:** Hier ist der Moment, in dem das Design **hell** wird (`--meeting-bg`). Die Spieler sitzen als Avatare in einem Halbkreis oder Raster um einen runden Tisch (SVG-Ellipse als Tisch).
+- Die Meeting-Phase **führt über die Cafeteria zur Abstimmung** (so ist es im Spiel implementiert). Das UI zeigt klar die aktuelle Phase: **Treffen → Diskussion → Abstimmung**, mit Timer.
+
+### 5.8 Abstimmung
+- Raster aus **Spielerkarten** (Avatar, Name, Status). Tote Spieler ausgegraut, nicht wählbar.
+- Auswahl: Karte hebt sich, bekommt Rand in `--signal-info`, unten erscheint **Bestätigen** (✓) und **Abbrechen** (✕) als große runde Buttons. Zusätzlich Karte „Überspringen“.
+- Nach Abgabe: kleines **„Ich habe gewählt“-Abzeichen** am Avatar, nicht wer wen gewählt hat (bis zum Ergebnis).
+- **Ergebnis:** Stimmen erscheinen nacheinander als kleine Avatar-Marker an der Karte des Gewählten. Bei Mehrheit folgt die Auswurf-Sequenz.
+
+### 5.9 Auswurf-Sequenz
+Dunkler Weltraum, die Bohne treibt rotierend durchs Bild, Text darunter: „X war ein Impostor“ / „X war kein Impostor“ (je nach Server-Einstellung). Typewriter-Effekt für den Text, ca. 4 s, überspringbar.
+
+### 5.10 Spielende
+Großes Banner **„Crew gewinnt“** (Cyan-Blau) oder **„Impostor gewinnt“** (Rot), darunter alle Spieler mit enthüllter Rolle, Aufgabenstand und Kills. Primärer Button „Zurück zur Lobby“.
+
+### 5.11 Tot / Geist-Modus
+Bildschirm leicht entsättigt, kühler Ton, Geister-Avatar, Hinweisleiste „Du bist ausgeschieden. Du kannst weiter Aufgaben erledigen“ (nur, wenn die Spielregeln das erlauben). Aktionsbuttons entsprechend reduziert.
+
+---
+
+## 6. Bewegung
+
+Gesamtprinzip: **wenig, aber bedeutungsvoll.** Bewegung antwortet auf Aktionen oder markiert dramatische Spielmomente. Keine Einblend-Animation für jedes Element.
+
+| Moment | Bewegung | Dauer |
+|---|---|---|
+| Button drücken | Tiefe nach unten | 80 ms |
+| Panel öffnen | Scale 0.96→1 + Fade | 180 ms |
+| Bottom Sheet | von unten einfahren | 240 ms |
+| Aufgabe erledigt | Haken zeichnen (stroke-dashoffset) | 350 ms |
+| Fortschrittsbalken | scaleX | 400 ms |
+| Rollen-Enthüllung | gestaffelt (Hero-Moment) | ca. 3 s |
+| Meeting-Stempel | Scale-Bounce | 400 ms |
+| Sabotage-Rahmen | Puls ca. 1 Hz | Dauerschleife |
+| Auswurf | Rotation + Drift | ca. 4 s |
+
+Easing-Tokens: `--ease-out: cubic-bezier(.2,.8,.2,1)`, `--ease-bounce: cubic-bezier(.34,1.56,.64,1)`. Alles komplett abschaltbar über `prefers-reduced-motion`.
+
+---
+
+## 7. Ton und Haptik
+
+- **Sound** (optional, per Schalter, standardmäßig an, aber erst nach der ersten Nutzerinteraktion wegen Autoplay-Regeln): kurze UI-Klicks, Aufgabenfertig-Ton, Alarmton bei Sabotage, Meeting-Gong. Eigene oder lizenzfreie Sounds, **keine Original-Spielsounds**. Dateien klein (`.ogg`/`.mp3`, wenige KB), lazy geladen, im Service Worker gecacht.
+- **Vibration** (`navigator.vibrate`, nur wo unterstützt, mit Feature-Check): kurzer Impuls bei Aufgabe erledigt, Doppelimpuls bei Sabotage, langer Impuls bei Meeting. Einstellbar.
+- Beides ist **Zusatz**, nie einzige Information.
+
+---
+
+## 8. Texte (Copy)
+
+- Deutsch, du-Form, kurz, aktive Verben, Satzschreibung.
+- Button sagt, was passiert: „Aufgabe starten“, „Abstimmen“, „Lobby erstellen“. Nicht „OK“ oder „Senden“.
+- Rollen- und Statusstempel dürfen englisch bleiben, wenn sie so auch im Spiel stehen (`EMERGENCY MEETING`, `SABOTAGE`), sonst konsistent deutsch.
+- Ein Begriff pro Sache, überall gleich (z. B. immer „Aufgabe“, nie mal „Task“, mal „Auftrag“).
+- Fehlermeldungen: Was ist passiert, was tun? Keine Entschuldigungen, keine Fachbegriffe wie „Socket disconnected“. Stattdessen „Verbindung verloren. Wir verbinden dich neu.“
+- Leere Zustände geben eine Handlung vor („Noch keine Spieler. Teile den Code.“).
+
+---
+
+## 9. Responsives Verhalten und PWA
+
+- **Primär Smartphone Hochformat (360–430 px Breite).** Querformat muss benutzbar sein (Aktionsbuttons seitlich), Tablet/Desktop zentrierter Container mit max. Breite, kein unendliches Strecken.
+- Wichtige Bedienelemente im unteren Drittel (Daumenzone).
+- PWA: `manifest.webmanifest` mit `display: standalone`, `theme_color: #0B1020`, `background_color: #070A14`, Icon-Set mit eigener Bohnen-Silhouette als Maskable-Icon.
+- Statusleiste und Splash in `--space-900`, damit der Start nahtlos wirkt.
+- Wake Lock (falls schon vorhanden) und GPS-Hinweise visuell dezent, GPS-Verlust wird **sichtbar und erklärend** angezeigt (Banner, nicht nur Icon).
+- Offline/Verbindungsverlust: eigenes Banner und **Wiederverbinden-Zustand**. Räume und Sessions liegen serverseitig nur im Arbeitsspeicher; deshalb bei verlorener Sitzung klare Meldung mit Weg zurück zur Startseite.
+
+---
+
+## 10. Arbeitsweise und Abnahme
+
+### Reihenfolge
+1. `tokens.css`, Schrift lokal einbinden, `base.css`.
+2. Basiskomponenten (Panel, Button, Chip, Avatar-SVG, Fortschritt, Timer, Toast).
+3. Screens in dieser Reihenfolge: Haupt-HUD → Meeting/Abstimmung → Lobby → Sabotage → Rollen-Enthüllung → Auswurf/Ende → Rest.
+4. Zum Schluss Bewegung, Sound, Haptik, Feinschliff.
+
+### Definition of Done (jede Änderung prüfen)
+- [ ] Keine Hex-Werte und keine losen Pixel außerhalb von `tokens.css`
+- [ ] Keine Änderung an Socket-Events, Payloads oder Serverlogik
+- [ ] Alle 216 Server-Tests grün
+- [ ] Funktioniert bei 360 px Breite ohne horizontales Scrollen
+- [ ] Touch-Ziele ≥ 48 px, Fokus sichtbar
+- [ ] Spielernamen nur über `textContent`
+- [ ] `prefers-reduced-motion` getestet
+- [ ] Kein Blinken über 3 Hz
+- [ ] Keine externen Laufzeit-CDNs, neue Dateien im Service-Worker-Cache
+- [ ] Kartenscreen läuft flüssig, keine Dauerblur-Effekte
+- [ ] Alle Texte in einheitlicher Wortwahl
+- [ ] Keine Original-Assets aus Among Us verwendet
+
+### Wenn etwas unklar ist
+Triff die Entscheidung, die am ehesten zur Optik eines **dunklen Raumschiff-Terminals mit klaren Signalfarben** passt, halte sie im Code mit einem kurzen Kommentar fest, und liste am Ende deiner Arbeit alle getroffenen Annahmen auf. Frage nur dann nach, wenn eine Entscheidung Spiel- oder Netzwerklogik betrifft.
+
+---
+
+## 11. Verboten (Kurzliste)
+
+- Pixel-Fonts, 8-Bit-Optik, Retro-Sprites
+- Helle App-Oberfläche außerhalb der Meeting-Phase
+- Regenbogen- oder Neonfarbschemata
+- Emojis als UI-Icons
+- Standard-Framework-Look (Material, Bootstrap, Tailwind-Defaults)
+- Gleiche Card-Optik für alles, identischer Radius überall
+- Animierter Dauer-Hintergrund auf dem Kartenscreen
+- Original-Grafiken, -Sounds oder -Schriften aus Among Us
+- Änderungen an Server, Tests oder Spielregeln im Rahmen dieser Aufgabe

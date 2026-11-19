@@ -8,7 +8,7 @@ The server handles lobby membership and authoritative game state. It listens on 
 
 The Render Blueprint in `render.yaml` deploys the container as a Frankfurt free web service and checks `/health`. Render supports WebSockets on free web services, but they spin down after 15 minutes without inbound traffic and take about a minute to wake. The free plan is intended for hobby/testing and may be restarted; because the server has no database, active lobbies and sessions disappear on restart. Keep one instance. See [Render free service limits](https://render.com/docs/free) and [Render WebSocket behavior](https://render.com/docs/websocket).
 
-There is a Render API credential configured in the development environment, but the current workspace has no Git remote or source repository metadata. The only service visible in that Render account is an unrelated service, which was left untouched. Therefore no endpoint has been deployed. **Minimal deployment step:** publish this project to a GitHub/GitLab/Bitbucket repository, then in Render choose **New → Blueprint**, connect that repository, and apply `render.yaml`. Render will deploy and provide the public `https://…onrender.com` address. A free Render account and Git provider connection are required.
+The browser PWA runs on [Render](https://real-life-among-us-beta.onrender.com/). Changes pushed to GitHub's `main` branch are deployed by Render. Follow the [deployment checklist](docs/agent-deploy.md) to verify the live version and send the ntfy notification.
 
 ## Run locally
 
@@ -18,8 +18,14 @@ npm ci
 npm start
 ```
 
+Open [http://127.0.0.1:10000/](http://127.0.0.1:10000/) for the browser PWA. Keep the server running while you play.
+
 For Android on the same network, a debug build can use `--dart-define=SERVER_URL=http://<reachable-host>:10000`. For a release build, use the public HTTPS URL, for example `--dart-define=SERVER_URL=https://real-life-among-us-beta.onrender.com`. The client has no localhost fallback.
 
 ## Validation
 
 Run server tests with `cd server; npm test`. From `app`, run `flutter analyze`, `flutter test`, and `flutter build apk --release --dart-define=SERVER_URL=https://<your-host>`.
+
+## Agent Deploy
+
+For AI-agent-led deploys (Render + ntfy push to Divo's phone), see [docs/agent-deploy.md](docs/agent-deploy.md). It covers the full flow: syntax check → tests → commit → push → verify `?v=` + health → `scripts/notify.sh`.
