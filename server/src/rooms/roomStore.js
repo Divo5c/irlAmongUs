@@ -848,18 +848,19 @@ class RoomStore {
     room.sabotageCount = (room.sabotageCount ?? 0) + 1;
 
     const isCritical = RoomStore.SABOTAGE_META[type].critical;
-    // 30 s meltdown / depletion — enough panic, short enough for real play.
-    const deadlineMs = isCritical ? Date.now() + 30_000 : null;
+    // 90 s meltdown / depletion — IRL braucht man länger zum Fixen,
+    // aber nicht so lang dass das Meeting blockiert.
+    const deadlineMs = isCritical ? Date.now() + 90_000 : null;
     room.sabotage = {
       type,
       deadline: deadlineMs != null ? new Date(deadlineMs).toISOString() : null,
       panels: type === 'O2' ? { o2: false, admin: false } : null,
     };
-    // Cooldown for the NEXT sabotage: after a critical ends (+15 s mercy),
-    // non-critical ones self-limit with 45 s ready time.
+    // Cooldown for the NEXT sabotage: after a critical ends (+30 s mercy),
+    // non-critical ones self-limit with 60 s ready time.
     room.sabotageCooldownUntil = deadlineMs != null
-      ? deadlineMs + 15_000
-      : Date.now() + 45_000;
+      ? deadlineMs + 30_000
+      : Date.now() + 60_000;
     room.updatedAt = new Date().toISOString();
 
     return { room: this.toPublicRoom(room), type, deadline: room.sabotage.deadline };

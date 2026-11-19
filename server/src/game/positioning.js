@@ -19,7 +19,8 @@ const MAX_POSITION_AGE_MS = 5000;
 
 // Maximum speed (m/s) between consecutive updates for plausibility.
 // A person walking ~5 m/s (sprinting) is the realistic upper bound.
-const MAX_SPEED_MPS = 8.0;
+// 12 m/s erlaubt GPS-Sprünge durch Handy-Ungenauigkeit ohne False-Positives.
+const MAX_SPEED_MPS = 12.0;
 
 // Cafeteria meeting table obstruction (Divo: der Tisch ist ein physisches
 // Objekt). Radius scales with the room's bounding box so it fits small maps.

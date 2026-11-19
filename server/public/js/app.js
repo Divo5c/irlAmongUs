@@ -2901,11 +2901,15 @@ const App = (() => {
     if (table) {
       const [cx, cy] = toPx(table.x, table.y);
       const rp = table.r * scale; // Radius auf der Canvas in Pixel
-      // Feldlog-1.11: bei Mini-Canvas (z.B. Bildschirm klein/verborgen)
-      // kann scale <= 0 fallen — negative arc-Radien werfen IndexSizeError.
-      // Tisch einfach überspringen, wenn er nicht sinnvoll zeichnbar ist.
       if (Number.isFinite(rp) && rp > 2) {
         drawMeetingTable(ctx, cx, cy, rp);
+        // Cafeteria-Label direkt unter dem Tisch, immer sichtbar.
+        const pressable = emergencyBlockedReason() === null;
+        ctx.fillStyle = pressable ? '#ffe9e9' : 'rgba(255,255,255,0.8)';
+        ctx.font = 'bold 11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('CAFETERIA', cx, cy + rp + 14);
+        ctx.textAlign = 'left';
       }
     }
 
@@ -2988,21 +2992,21 @@ const App = (() => {
         [tx, ty] = toPx(wedge.x + (taskIdx % 3) * 6, wedge.y);
       }
       const icon = TASK_ICONS[task.type] ?? '\u{1F4DD}';
-      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
-      ctx.fillStyle = `rgba(255,209,102,${0.35 + 0.25 * pulse})`;
+      // Task-Marker dezent: kleiner, kein Pulsieren (lenkt ab und überdeckt Namen).
+      ctx.fillStyle = 'rgba(255,209,102,0.35)';
       ctx.beginPath();
-      ctx.arc(tx, ty, 16, 0, Math.PI * 2);
+      ctx.arc(tx, ty, 10, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#ffd166';
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(tx, ty, 11, 0, Math.PI * 2);
+      ctx.arc(tx, ty, 7, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.font = '13px system-ui';
+      ctx.font = '11px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText(icon, tx, ty + 4.5);
+      ctx.fillText(icon, tx, ty + 3.5);
       ctx.textAlign = 'left';
       taskHits.push({ x: tx, y: ty, task });
     }
