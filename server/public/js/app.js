@@ -1824,13 +1824,10 @@ const App = (() => {
 
   // ---------------------------------------------------------------- game //
 
-  let roleDismissTimer;
   function showRoleOverlay(payload) {
     const overlay = $('role-overlay');
     const impostor = payload.role === 'IMPOSTOR';
-    clearTimeout(roleDismissTimer);
     overlay.onclick = () => {
-      clearTimeout(roleDismissTimer);
       overlay.onclick = null;
       overlay.classList.add('hidden');
       $('btn-settings').focus({ preventScroll: true });
@@ -1851,7 +1848,6 @@ const App = (() => {
     $('role-card-detail').replaceChildren(element('p', 'pixel-sub', description), row);
     $('role-continue').textContent = langActive() === 'en' ? 'Continue' : 'Weiter';
     $('role-continue').focus({ preventScroll: true });
-    roleDismissTimer = setTimeout(() => overlay.onclick?.(), 3000);
     $('role-banner').classList.add('hidden');
     renderRole(payload);
   }

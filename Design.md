@@ -214,7 +214,7 @@ Für jeden Screen gilt: ein klarer Hauptzweck, eine primäre Aktion, Rest zurüc
 Kurze, dramatische Sequenz, **die eine Hero-Animation der App**:
 - Schwarzer Bildschirm, Titel „Du bist ein Crewmate“ bzw. „Impostor“, die Hintergrundfarbe wechselt (Crew: kühles Cyan-Blau-Licht, Impostor: Rot).
 - Avatare erscheinen gestaffelt. Bei Impostor werden Mit-Impostor rot hervorgehoben.
-- Dauer ca. 3 s, überspringbar per Tippen. Danach Wechsel zum HUD.
+- Die Rollenanzeige bleibt bis zur Bestätigung stehen. Tippen oder „Weiter“ öffnet das HUD.
 - Bei `prefers-reduced-motion`: statisches Bild mit Einblendung.
 
 ### 5.4 Haupt-HUD mit Karte (der wichtigste Screen)
