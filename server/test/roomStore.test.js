@@ -1451,6 +1451,31 @@ test('admin table: anonymous alive room counts; dead vanish; COMMS blocks', () =
 });
 
 describe('Divo-Meeting-Upgrade: meeting kind + unfound deaths (v19.14)', () => {
+  test('stale GPS and rejected kills leave the death ledger untouched', (t) => {
+    const store = new RoomStore();
+    createRoomWithPlayers(store, 4, 'ABC234', { killCooldownMs: 0 });
+    const { assignments } = beginGame(store);
+    const impostor = impostorsOf(assignments)[0];
+    const [victim] = crewmatesOf(assignments);
+    let now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    placeNear(store, [victim]);
+    now += 8001;
+    placeNear(store, [impostor]);
+    assert.deepEqual(store.getKillTargetsFor('ABC234', impostor), []);
+    assertGameError(() => store.killPlayer('ABC234', impostor, victim), 'POSITION_STALE');
+    assert.deepEqual(store.getRoom('ABC234').undiscoveredDeaths, []);
+
+    placeNear(store, [victim], 80);
+    assertGameError(() => store.killPlayer('ABC234', impostor, victim), 'TARGET_TOO_FAR');
+    assert.deepEqual(store.getRoom('ABC234').undiscoveredDeaths, []);
+
+    store.updatePosition('ABC234', victim, { x: 20, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
+    assert.ok(store.getKillTargetsFor('ABC234', impostor).some(({ playerId }) => playerId === victim));
+    store.killPlayer('ABC234', impostor, victim);
+    assert.deepEqual(store.getRoom('ABC234').undiscoveredDeaths, [victim]);
+  });
+
   test('emergency reveals unfound kills; reporting counts bodies as found', () => {
     const store = new RoomStore();
     createRoomWithPlayers(store, 5);

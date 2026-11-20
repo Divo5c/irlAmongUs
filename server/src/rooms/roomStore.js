@@ -22,6 +22,11 @@ const {
 const { canKill } = require('../game/proximity');
 
 const roomCodePattern = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
+const POSITION_FRESHNESS_MS = 8000;
+
+function isFreshPosition(position, now) {
+  return position && now - position.updatedAt <= POSITION_FRESHNESS_MS;
+}
 
 /** Server-side code issuance: same alphabet as the client display allows. */
 function generateRoomCode() {
@@ -367,19 +372,23 @@ class RoomStore {
         : {}),
       ...(room.meeting.votingEndsAt ? { votingDeadline: room.meeting.votingEndsAt } : {}),
       votedCount: Object.keys(room.meeting.votes).length,
-      ...(room.meeting.emergency === undefined ? {} : { meetingAdminCount: room.meeting.meetingAdminCount ?? 0 }),
+      meetingAdminCount: room.meeting.meetingAdminCount ?? 0,
+      meetingLivingCount: room.meeting.meetingLivingCount ?? 0,
       meetingConfirmed: room.meeting.confirmed ?? false,
     };
   }
 
-  /** v19.15: lebende Spieler aktuell im Cafeteria-Raum (Admin-Zaehler). */
-  #meetingAdminCount(room) {
+  #meetingAttendance(room) {
     const positions = this.#positions.get(room.code) ?? new Map();
-    let count = 0;
-    for (const [residentId] of positions) {
-      if (this.#playerRoomIdByType(room.code, residentId, 'CAFETERIA')) count += 1;
+    const now = Date.now();
+    let meetingAdminCount = 0;
+    let meetingLivingCount = 0;
+    for (const { id, isAlive } of room.players) {
+      if (!isFreshPosition(positions.get(id), now) || !this.#playerRoomIdByType(room.code, id, 'CAFETERIA')) continue;
+      meetingAdminCount += 1;
+      if (isAlive) meetingLivingCount += 1;
     }
-    return count;
+    return { meetingAdminCount, meetingLivingCount };
   }
 
   #publicKillInfo(room) {
@@ -1012,7 +1021,7 @@ class RoomStore {
       votes: {},
       emergency: true,
       confirmed: false, // v19.15.1: Host-Bestaetigung (Reconnect-Schutz fuer alle)
-      meetingAdminCount: this.#meetingAdminCount(room),
+      ...this.#meetingAttendance(room),
     };
     delete room.sabotage; // a meeting resets soft sabotages (Among Us rule)
     room.status = getEnumValue(RoomStatus, 'MEETING');
@@ -1052,7 +1061,7 @@ class RoomStore {
       discussionEndsAt: new Date(now + room.config.discussionDurationMs).toISOString(),
       votingEndsAt: null,
       votes: {},
-      meetingAdminCount: this.#meetingAdminCount(room),
+      ...this.#meetingAttendance(room),
     };
     // Die gemeldeten Leichen counten als GEFUNDEN — sie tauchen nicht mehr
     // im "gestorben, ohne gefunden"-Reveal des Meeting-Intros auf.
@@ -1292,13 +1301,6 @@ class RoomStore {
       throw new GameError('INVALID_TARGET', 'The impostor cannot kill themselves.');
     }
 
-    // Divo-Meeting-Upgrade: Kills ohne gefundene Leiche tauchen im
-    // Meeting-Intro auf ("gestorben, ohne gefunden zu werden").
-    room.undiscoveredDeaths ??= [];
-    if (!room.undiscoveredDeaths.includes(target.id)) {
-      room.undiscoveredDeaths.push(target.id);
-    }
-
     // Real-life kill: the impostor must PHYSICALLY be at the target
     // (both GPS positions verified by the server, radius configurable).
     const killPositions = this.#positions.get(code);
@@ -1310,6 +1312,10 @@ class RoomStore {
         'Der Kill braucht GPS-Positionen von dir und dem Ziel.',
         { field: 'positions' },
       );
+    }
+    const now = Date.now();
+    if (!isFreshPosition(killerPos, now) || !isFreshPosition(targetPos, now)) {
+      throw new GameError('POSITION_STALE', 'Der Kill braucht aktuelle GPS-Positionen von dir und dem Ziel.');
     }
     const check = canKill({
       killerPos,
@@ -1327,7 +1333,9 @@ class RoomStore {
     }
 
     target.isAlive = false;
-    room.lastKillAt = Date.now();
+    room.lastKillAt = now;
+    room.undiscoveredDeaths ??= [];
+    room.undiscoveredDeaths.push(target.id);
 
     // Corpse stays exactly where it was killed; EVERY role that ends up on
     // the same street can discover and report it (self-report possible).
@@ -1637,11 +1645,12 @@ class RoomStore {
   updatePosition(code, playerId, rawEstimate, { skipPlausibilityCheck = false } = {}) {
     const room = this.getRequiredRoom(code);
 
-    // Position updates allowed in MAP_READY and IN_GAME
-    if (room.status !== STATUS_MAP_READY && room.status !== STATUS_IN_GAME) {
+    const meetingArrival = room.status === STATUS_MEETING
+      && room.meeting?.phase === 'DISCUSSION' && !room.meeting.confirmed;
+    if (room.status !== STATUS_MAP_READY && room.status !== STATUS_IN_GAME && !meetingArrival) {
       throw new GameError(
         'POSITION_NOT_ALLOWED',
-        'Position updates are only allowed when the map is ready or the game is running.',
+        'Position updates are only allowed before play, during play or on arrival at a meeting.',
         { currentStatus: room.status },
       );
     }
@@ -1707,6 +1716,26 @@ class RoomStore {
     roomPositions.set(playerId, positionState);
     room.updatedAt = new Date().toISOString();
 
+    const confirmed = {
+      position: {
+        x: positionState.x,
+        y: positionState.y,
+        heading: positionState.heading,
+        confidence: positionState.confidence,
+        source: positionState.source,
+        timestamp: positionState.timestamp,
+      },
+      roomId: positionState.roomId,
+      onCorridor: positionState.onCorridor,
+    };
+    if (meetingArrival) {
+      const attendance = this.#meetingAttendance(room);
+      const meetingCountChanged = attendance.meetingAdminCount !== room.meeting.meetingAdminCount
+        || attendance.meetingLivingCount !== room.meeting.meetingLivingCount;
+      Object.assign(room.meeting, attendance);
+      return { ...confirmed, meetingArrival, meetingCountChanged };
+    }
+
     const bodies = this.visibleCorpses(code, playerId);
 
     // Boundary watch: how far outside every selected street is the player?
@@ -1759,16 +1788,7 @@ class RoomStore {
     this.#boundaryStrikes.set(boundaryKey, strikes);
 
     return {
-      position: {
-        x: positionState.x,
-        y: positionState.y,
-        heading: positionState.heading,
-        confidence: positionState.confidence,
-        source: positionState.source,
-        timestamp: positionState.timestamp,
-      },
-      roomId: positionState.roomId,
-      onCorridor: positionState.onCorridor,
+      ...confirmed,
       bodies,
       boundary: {
         outOfBounds: isOut,
@@ -1796,7 +1816,8 @@ class RoomStore {
     }
     const positions = this.#positions.get(code);
     const own = positions?.get(playerId);
-    if (!own) return [];
+    const now = Date.now();
+    if (!isFreshPosition(own, now)) return [];
     const maxDistance = room.config.killRadiusM;
     const targets = [];
     for (const player of room.players) {
@@ -1804,7 +1825,7 @@ class RoomStore {
         continue;
       }
       const targetPos = positions.get(player.id);
-      if (!targetPos) continue;
+      if (!isFreshPosition(targetPos, now)) continue;
       const check = canKill({
         killerPos: { x: own.x, y: own.y, confidence: own.confidence },
         targetPos: { x: targetPos.x, y: targetPos.y, confidence: targetPos.confidence },

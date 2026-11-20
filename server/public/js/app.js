@@ -568,10 +568,10 @@ const App = (() => {
           startMeetingIntroLate();
         }
       }
-      // GPS-Sender nur während des echten Spiels (Kill-Gates brauchen Positionen).
-      if (room.status === 'IN_GAME') ensureGpsLoop();
+      if (shouldSendPosition(room)) ensureGpsLoop();
       else stopGpsLoop();
       tryRestoreAnchor(room);
+      rememberSavedMap(room);
       renderTeamProgress(room);
       if (meetingIntroActive && meetingAwaitActive()) renderMeetingAwaitContent();
       drawGameMap();
@@ -595,7 +595,8 @@ const App = (() => {
             map: {
               version: cached.version + 1, nodes: cached.nodes,
               corridors: cached.corridors, rooms: cached.rooms ?? [],
-              connections: [],
+              connections: cached.connections ?? [],
+              ...(cached.anchor ? { anchor: cached.anchor } : {}),
               ...(cached.cal ? { cal: cached.cal } : {}),
             },
           });
@@ -604,7 +605,8 @@ const App = (() => {
             map: {
               version: cached.version + 2, nodes: cached.nodes,
               corridors: cached.corridors, rooms: cached.rooms ?? [],
-              connections: [],
+              connections: cached.connections ?? [],
+              ...(cached.anchor ? { anchor: cached.anchor } : {}),
               ...(cached.cal ? { cal: cached.cal } : {}),
             },
           });
@@ -1072,12 +1074,13 @@ const App = (() => {
           if (nextStage) {
             task.roomId = nextStage.roomId;
             task.roomName = nextStage.roomName;
+            task.roomType = nextStage.roomType;
             task.x = nextStage.x;
             task.y = nextStage.y;
           }
           showToast(`Stufe fertig! N\u00e4chster Schritt: ${task.roomName ?? 'unbekannt'}`);
           const li = $('task-list').querySelector(`[data-task-id="${advancedTaskId}"] small`);
-          if (li) li.textContent = task.roomName ?? '';
+          if (li) li.textContent = `${task.roomName ?? ''} · ${t('tasks.stage')} ${task.stageIndex + 1}`;
         }
         beep(660);
         vibrate(40);
@@ -1384,6 +1387,30 @@ const App = (() => {
     }
   }
 
+  function sameMapNodes(a, b) {
+    return a?.nodes?.length === b?.nodes?.length && a?.nodes?.every((node, index) => {
+      const other = b.nodes[index];
+      return node.id === other.id && node.x === other.x && node.y === other.y;
+    });
+  }
+
+  function rememberSavedMap(room) {
+    if (!state.isHost || !['MAP_READY', 'IN_GAME'].includes(room.status) || !room.map?.nodes?.length) return;
+    if (state.savedMapSnapshot === room.map) return;
+    state.savedMapSnapshot = room.map;
+    const previous = readSavedLocalMap();
+    const map = { ...room.map };
+    if (sameMapNodes(previous, map)) {
+      map.anchor ??= previous.anchor;
+      map.cal ??= previous.cal;
+    }
+    const { savedAt, ...previousMap } = previous ?? {};
+    if (JSON.stringify(map) === JSON.stringify(previousMap)) return;
+    try {
+      localStorage.setItem(SAVED_MAP_KEY, JSON.stringify({ ...map, savedAt: new Date().toISOString() }));
+    } catch { /* Storage can be unavailable or full. */ }
+  }
+
   function refreshCachedMapButton() {
     const cached = readSavedLocalMap();
     const editorButton = $('btn-load-cached');
@@ -1443,7 +1470,8 @@ const App = (() => {
       map: {
         ...working,
         rooms: editor.rooms,
-        connections: [],
+        connections: cached.connections ?? [],
+        ...(cached.anchor ? { anchor: cached.anchor } : {}),
         ...(cached.cal ? { cal: cached.cal } : {}),
       },
     });
@@ -1657,28 +1685,8 @@ const App = (() => {
     }
     ensureSocket().emit('map:save', {
       code: state.code,
-      map: { ...working, rooms: editor.rooms, connections: [] },
+      map: { ...working, rooms: editor.rooms, connections: [], ...(editor.anchor ? { anchor: editor.anchor } : {}) },
     });
-    // Local copy for the next round: skip Overpass entirely.
-    // v19.13.4: cal MIT ins Cache — sonst verliert JEDER neue Raum die
-    // 2-Punkt-Kalibrierung (Divo 3.11: "anscheinend die map nicht
-    // kalibriert" bei 4°C in Schlappen — nie wieder).
-    try {
-      localStorage.setItem(
-        SAVED_MAP_KEY,
-        JSON.stringify({
-          version: working.version,
-          nodes: working.nodes,
-          corridors: working.corridors,
-          rooms: editor.rooms,
-          anchor: editor.anchor,
-          cal: state.room?.map?.cal ?? null,
-          savedAt: new Date().toISOString(),
-        }),
-      );
-    } catch {
-      // Private mode / quota: server save still worked, just no cache.
-    }
     alert('Karte gespeichert! Zur\u00fcck in die Lobby \u2014 dann Spiel starten.');
     show('lobby');
   });
@@ -2608,11 +2616,15 @@ const App = (() => {
     return best && bestDist <= 12 ? best : null;
   }
 
+  function shouldSendPosition(room) {
+    return room?.status === 'IN_GAME'
+      || (room?.status === 'MEETING' && room.meetingPhase === 'DISCUSSION' && !room.meetingConfirmed);
+  }
+
   setInterval(() => {
     const room = state.room;
-    // Nur im Spiel senden — sonst stoppen (Fix für NOT_IN_ROOM-Spam
-    // aus dem Fehler-Tagebuch: Nach Rundenende flippte die Schleife).
-    if (!room || room.status !== 'IN_GAME' || !state.gpsFixAt) return;
+    if (!shouldSendPosition(room) || !state.gpsFixAt) return;
+    if (room.status === 'MEETING' && meetingRevealStarted) return;
     if (Date.now() - state.gpsFixAt > 10000) return;
     if (!state.socket?.connected) return;
     const proj = projectorFor();
@@ -3980,14 +3992,15 @@ const App = (() => {
     if (!['MAP_READY', 'IN_GAME'].includes(room?.status)) return;
     // Kalibrierte Karte: 2-Punkt-Projektor reicht vollständig aus.
     if (room.map?.cal?.p1 && room.map?.cal?.p2) return;
-    if (state.anchorRestoreTried) return;
+    if (state.anchorRestoreTried === room.code) return;
     if (!room?.map?.nodes?.length) return;
-    if (Number.isFinite(room.map.anchor?.lat)) return;
     const cached = readSavedLocalMap();
-    if (!cached?.nodes || cached.nodes.length !== room.map.nodes.length) return;
-    const keyOf = (nodes) => nodes.map((n) => `${n.id}:${Math.round(n.x)}:${Math.round(n.y)}`).join('|');
-    if (keyOf(cached.nodes) === keyOf(room.map.nodes) && Number.isFinite(cached.anchor?.lat)) {
-      state.anchorRestoreTried = true;
+    if (!sameMapNodes(cached, room.map)) return;
+    if (cached.cal?.p1 && cached.cal?.p2) {
+      state.anchorRestoreTried = room.code;
+      ensureSocket().emit('map:cal', { code: state.code, cal: cached.cal });
+    } else if (!Number.isFinite(room.map.anchor?.lat) && Number.isFinite(cached.anchor?.lat)) {
+      state.anchorRestoreTried = room.code;
       ensureSocket().emit('map:anchor', {
         code: state.code,
         anchor: cached.anchor,
@@ -4212,7 +4225,7 @@ const App = (() => {
     const inCafe = roomIdContains('CAFETERIA');
     const isHost = self?.isHost === true;
     const walking = !inCafe && self?.isAlive !== false;
-    const count = state.room?.meeting?.meetingAdminCount ?? 0;
+    const count = state.room?.meetingLivingCount ?? state.room?.meetingAdminCount ?? 0;
     const totalAlive = players.filter((p) => p.isAlive !== false).length;
     const ghosts = players.length - totalAlive;
     const key = [walking, isHost, count, totalAlive, ghosts].join(':');

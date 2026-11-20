@@ -357,30 +357,61 @@ describe('socket flow security & gameplay', () => {
       assert.ok(impostorSlot !== -1);
       const impostorClient = clients[impostorSlot];
 
+      const task = crew.assignment.tasks.find(({ stages }) => (stages?.length ?? 0) <= 1);
+      assert.ok(task, 'expected a single-stage task');
       const progressSeen = waitForEvent(impostorClient, 'task:progress');
       // Stand at the task spot first (wire proximity gate).
       crew.client.emit('position:update', {
         code,
-        x: crew.assignment.tasks[0].x,
-        y: crew.assignment.tasks[0].y,
+        x: task.x,
+        y: task.y,
         confidence: 1,
       });
       crew.client.emit('task:complete', {
         code,
-        taskId: crew.assignment.tasks[0].id,
+        taskId: task.id,
       });
 
       const progress = await progressSeen;
       assert.equal(progress.progress.completed, 1);
-      assert.equal(progress.completedTaskId, crew.assignment.tasks[0].id);
+      assert.equal(progress.completedTaskId, task.id);
       assert.equal(progress.tasks, undefined);
 
       // Completing someone else's task is impossible: ids are owner-scoped.
       // (The impostor tries the crewmate's first task id.)
       const errorSeen = waitForEvent(impostorClient, 'room:error');
-      impostorClient.emit('task:complete', { code, taskId: crew.assignment.tasks[0].id });
+      impostorClient.emit('task:complete', { code, taskId: task.id });
       const error = await errorSeen;
       assert.equal(error.code, 'TASK_NOT_FOUND');
+    } finally {
+      for (const client of clients) client.disconnect();
+    }
+  });
+
+  test('a multi-stage task sends the next stage only to its owner', async () => {
+    const { clients, code } = await createRoomWithNPlayers(3);
+    try {
+      await makeMapReadyOverWire(clients[0], code);
+      const assignments = clients.map((client) => waitForEvent(client, 'game:role_assigned'));
+      clients[0].emit('game:start', { code });
+      const roles = await Promise.all(assignments);
+      const ownerIndex = roles.findIndex(({ role }) => role === 'CREWMATE');
+      const owner = clients[ownerIndex];
+      const ownerId = roles[ownerIndex].playerId;
+      const task = roomStore.getRoom(code).tasks.find(({ assignedTo }) => assignedTo === ownerId);
+      task.stages = [{ x: 20, y: 50 }, { x: 80, y: 50 }];
+      task.stageIndex = 0;
+      placeOnStreet(roomStore, code, ownerId, 20, 50);
+      const observer = clients.find((client) => client !== owner);
+      const observerSawTask = waitForNoEvent(observer, 'task:progress', 150);
+      const next = waitForEvent(owner, 'task:progress');
+      owner.emit('task:complete', { code, taskId: task.id });
+      const advance = await next;
+      assert.equal(advance.advancedTaskId, task.id);
+      assert.equal(advance.stageIndex, 1);
+      assert.equal(task.stageIndex, 1);
+      assert.equal(task.completed, false);
+      assert.equal(await observerSawTask, false);
     } finally {
       for (const client of clients) client.disconnect();
     }
@@ -658,6 +689,36 @@ describe('socket flow security & gameplay', () => {
       player.off('room:error', dump);
       host.disconnect();
       player.disconnect();
+    }
+  });
+
+  test('a reported meeting counts living arrivals until the host confirms', async () => {
+    const { clients, code } = await createRoomWithNPlayers(3, { discussionDurationMs: 15000 });
+    const [host, guest] = clients;
+    try {
+      await makeMapReadyOverWire(host, code);
+      const started = waitForRoomWhere(host, ({ status }) => status === 'IN_GAME');
+      host.emit('game:start', { code });
+      await started;
+
+      placeOnStreet(roomStore, code, 'host-1');
+      plantCorpseNear(roomStore, code, 'player-3');
+      const meeting = waitForRoomWhere(host, ({ status }) => status === 'MEETING');
+      host.emit('game:report', { code });
+      assert.equal((await meeting).meetingAdminCount, 0);
+
+      const arrived = waitForRoomWhere(host, ({ meetingAdminCount }) => meetingAdminCount === 1);
+      guest.emit('position:update', { code, x: 21, y: 80, confidence: 1 });
+      assert.equal((await arrived).meetingLivingCount, 1);
+
+      const confirmed = waitForRoomWhere(guest, ({ meetingConfirmed }) => meetingConfirmed === true);
+      host.emit('game:meeting_confirm', { code });
+      await confirmed;
+      const rejected = waitForEvent(guest, 'position:error');
+      guest.emit('position:update', { code, x: 21, y: 80, confidence: 1 });
+      assert.equal((await rejected).code, 'POSITION_NOT_ALLOWED');
+    } finally {
+      for (const client of clients) client.disconnect();
     }
   });
 

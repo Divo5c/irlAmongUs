@@ -288,6 +288,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
         const room = roomStore.getRequiredRoom(code);
         if (room.meeting) room.meeting.confirmed = true; // v19.15.1: Reconnect-Schutz
         io.to(code).emit('game:meeting_confirmed', { code });
+        if (room.meeting) io.to(code).emit('room:updated', roomStore.toPublicRoom(room));
       } catch (error) {
         emitRoomError(socket, error);
       }
@@ -370,11 +371,17 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
         const result = roomStore.completeTask(code, socket.data.playerId, taskId);
 
         io.to(code).emit('room:updated', result.room);
-        io.to(code).emit('task:progress', {
-          code,
-          completedTaskId: result.completedTaskId,
-          progress: result.progress,
-        });
+        if (result.advancedTaskId) {
+          socket.emit('task:progress', {
+            code, advancedTaskId: result.advancedTaskId, stageIndex: result.stageIndex, progress: result.progress,
+          });
+        } else {
+          io.to(code).emit('task:progress', {
+            code,
+            completedTaskId: result.completedTaskId,
+            progress: result.progress,
+          });
+        }
 
         if (result.winner) {
           broadcastGameOver(io, code, result.winner);
@@ -577,6 +584,13 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
           onCorridor: result.onCorridor,
         });
 
+        if (result.meetingArrival) {
+          if (result.meetingCountChanged) {
+            io.to(code).emit('room:updated', roomStore.toPublicRoom(roomStore.getRequiredRoom(code)));
+          }
+          return;
+        }
+
         // Discovered corpses (same street): these light up the Report
         // button and are drawn on the in-game map.
         if (result.bodies?.length) {
@@ -617,13 +631,6 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
         // targets (impostor sees names of the closest candidates).
         const killTargets = roomStore.getKillTargetsFor(code, socket.data.playerId);
         socket.emit('game:kill_targets', { code, targets: killTargets });
-
-        // v19.15: live Cafeteria-Zaehler waehrend des Meeting-Await — der
-        // Host sieht den Stand der Anwesenden, ohne selbst im Admin-Raum
-        // stehen zu muessen.
-        if (roomStore.getRequiredRoom(code).status === 'MEETING') {
-          io.to(code).emit('room:updated', roomStore.toPublicRoom(roomStore.getRequiredRoom(code)));
-        }
 
         // Broadcast to admin room if any admin is tracking
         if (roomStore.isAdmin(code, socket.data.playerId) || io.sockets.adapter.rooms.has(`admin:${code}`)) {
