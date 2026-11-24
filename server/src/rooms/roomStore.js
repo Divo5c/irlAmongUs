@@ -1666,10 +1666,11 @@ class RoomStore {
     const roomPositions = this.#positions.get(code);
     const previous = roomPositions.get(playerId) || null;
 
-    // Temporal/spatial plausibility check
+    // Vergleiche die Eingabepunkte vor der Korrektur am Meeting-Tisch.
+    const rawPoint = { x: estimate.x, y: estimate.y };
     const plausibility = skipPlausibilityCheck
       ? { valid: true }
-      : isPositionPlausible(estimate, previous);
+      : isPositionPlausible(estimate, previous?.rawPoint ? { ...previous, ...previous.rawPoint } : previous);
     if (!plausibility.valid) {
       throw new GameError(
         plausibility.reason,
@@ -1699,6 +1700,7 @@ class RoomStore {
     const positionState = {
       x: estimate.x,
       y: estimate.y,
+      rawPoint,
       heading: estimate.heading,
       confidence: estimate.confidence,
       source: estimate.source,

@@ -509,6 +509,34 @@ describe('RoomStore.updatePosition', () => {
       assert.notEqual(pos.x, 22);
     });
 
+  test('slow GPS movement near the meeting table uses the uncorrected baseline', (t) => {
+    const store = makeReadyStore();
+    let now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    const first = store.updatePosition('ABC234', 'host-1', { x: 22, y: 80 });
+    now += 50;
+    const second = store.updatePosition('ABC234', 'host-1', { x: 22.1, y: 80 });
+    assert.equal(second.roomId, 'r-cafeteria');
+    assert.equal(second.position.x, first.position.x);
+  });
+
+  test('a rejected jump reports when a new fix can re-enter the Cafeteria', (t) => {
+    const store = makeReadyStore();
+    let now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    const first = store.updatePosition('ABC234', 'host-1', { x: 21, y: 50 });
+    assert.equal(first.roomId, null);
+    now += 100;
+    const enterCafeteria = () => store.updatePosition('ABC234', 'host-1', { x: 21, y: 75 });
+    let retryAfterMs;
+    assert.throws(enterCafeteria, (err) => {
+      retryAfterMs = err.details?.retryAfterMs;
+      return err.code === 'POSITION_UNREALISTIC' && retryAfterMs > 0;
+    });
+    now += retryAfterMs;
+    assert.equal(enterCafeteria().roomId, 'r-cafeteria');
+  });
+
   test('position plausibility check rejects speed hack', () => {
     const store = makeReadyStore();
     // Two updates with same timestamp won't trigger speed check (dtMs=0).

@@ -44,6 +44,7 @@ const App = (() => {
       'gps.unavailable': 'Kein GPS-Empfang — geh nach draußen oder warte.',
       'gps.waiting': 'Warte auf GPS-Signal …',
       'gps.lost': 'GPS-Signal verloren …',
+      'gps.recovering': 'GPS-Position wird neu abgeglichen …',
       'gps.noapi': 'Dein Browser kennt keinen Standort (GPS) — du siehst deinen Marker nicht.',
       'gps.noanchor': 'Karte noch nicht kalibriert: \u2699\ufe0e Zahnrad \u2192 „Karte kalibrieren“ \u2014 2 Stra\u00dfenecken abgehen (einmalig, gilt f\u00fcr immer).',
       'map.waiting': 'Warte auf GPS …',
@@ -155,6 +156,7 @@ const App = (() => {
       'gps.unavailable': 'No GPS reception — go outside or wait.',
       'gps.waiting': 'Waiting for GPS signal …',
       'gps.lost': 'GPS signal lost …',
+      'gps.recovering': 'Resyncing GPS position …',
       'gps.noapi': 'Your browser has no location support — you will not see your marker.',
       'gps.noanchor': 'Map not calibrated yet: \u2699\ufe0e gear \u2192 "Calibrate map" \u2014 visit 2 clear points (one time, stored forever).',
       'map.waiting': 'Waiting for GPS …',
@@ -755,13 +757,14 @@ const App = (() => {
     socket.on('position:confirmed', (pos) => {
       state.selfPos = pos;
       if (meetingIntroActive && meetingAwaitActive()) renderMeetingAwaitContent();
-      state._posRejectCount = 0;
-      state._posHoldUntil = 0;
-      state.anchorOk = !!pos.onCorridor || !!pos.onRoom;
+      const wasRetrying = state.positionRetryAt > 0;
+      state.positionRetryAt = 0;
+      state.anchorOk = Boolean(pos.onCorridor || pos.roomId);
       // Zurück im Spielfeld -> Warnbanner ausblenden.
-      if (state.selfPos.onCorridor || state.selfPos.onRoom) {
+      if (state.anchorOk) {
         $('boundary-banner').classList.add('hidden');
       }
+      if (wasRetrying) renderGpsStatus();
       drawGameMap();
       renderGameHud();
     });
@@ -775,21 +778,20 @@ const App = (() => {
     socket.on('game:toast', ({ text }) => {
       if (text) showToast(text);
     });
-    socket.on('position:error', ({ code, message }) => {
+    socket.on('position:error', ({ code, message, details }) => {
       if (code === 'POSITION_NOT_ALLOWED') return; // Meeting etc. – ruhig ignorieren
-      // Jitter-Sturm (Fehler-Tagebuch 28.10): Nach einer Ablehnung senden
-      // wir erst nach 3s wieder — gleiches Rezept für alle POSITION_*.
-      state._posHoldUntil = Date.now() + 3000;
-      state._posRejectStreak = (state._posRejectStreak ?? 0) + 1;
-      if (state._posRejectStreak >= 3) {
-        // 3x in Folge abgelehnt -> der vergangene Anker ist Soup-Kurs,
-        // Neuanker: nächster Fix klatt ohne Vergleich.
-        state.posSmooth = null;
-        state.lastSentPos = null;
-        state._posRejectStreak = 0;
-      }
+      const retryAfterMs = details?.retryAfterMs;
+      const delay = code === 'POSITION_UNREALISTIC'
+        ? (Number.isFinite(retryAfterMs) ? Math.max(300, retryAfterMs) : 4250)
+        : 3000;
+      state.positionRetryAt = Date.now() + delay;
+      state.posSmooth = null;
+      state.gpsTrail = [];
+      state.gpsPrevFix = null;
+      state.velEst = null;
+      state.lastSentPos = null;
       logAppError('position', `${code}: ${message ?? ''}`);
-      $('game-phase-hint').textContent = `Position abgelehnt: ${code}`;
+      renderGpsStatus();
     });
     socket.on('game:boundary_warning', ({ distanceM, limitM, escalationLevel }) => {
       const banner = $('boundary-banner');
@@ -2542,13 +2544,14 @@ const App = (() => {
     else if (!state.gpsFixAt) msg = t('gps.waiting');
     else if (!proj) msg = t('gps.noanchor');
     else if (Date.now() - state.gpsFixAt > 10000) msg = t('gps.lost');
+    else if (state.positionRetryAt > 0) msg = t('gps.recovering');
     if (msg) {
       if (el.dataset.message !== msg) {
         el.dataset.message = msg;
         el.replaceChildren(icon('pin'), ' ', msg);
       }
       el.classList.remove('gps-status--ok');
-      if (renderGpsStatus.lastMsg !== msg && msg !== t('gps.waiting')) {
+      if (renderGpsStatus.lastMsg !== msg && msg !== t('gps.waiting') && msg !== t('gps.recovering')) {
         // Diagnose für das RLAUS-Log: warum der Projektor fehlt.
         const diag = state.room?.map?.cal?.p1
           ? 'cal-present-proj-null'
@@ -2573,43 +2576,7 @@ const App = (() => {
   function stopGpsLoop() {
     // Watcher bleibt billig aktiv; der Sendetakt prüft den Status selbst.
     state.nearbyBodies = [];
-  }
-
-  /**
-   * Straßen-Daten: das SAVED map hat nodes+corridors aus den geladenen
-   * OSM-Straßen — genau die Segmente gelten im Spiel als begehbar.
-   * Wir schnappen die Position an das naheste korridor-Segment, sofern
-   * wir NICHT in einem Raum stehen (drin gilt exakte GPS-Wahrheit).
-   * Resultat: der Pin klebt draußen an der Straße statt im Gebüsch,
-   * und Position/-Abstände stimmen mit der Server-Logik überein.
-   */
-  function snapToStreets(x, y) {
-    const map = state.room?.map;
-    const corridors = map?.corridors ?? [];
-    if (!map?.nodes?.length || !corridors.length) return null;
-    const nodeById = new Map(map.nodes.map((n) => [n.id, n]));
-    let best = null;
-    let bestDist = Infinity;
-    for (const corridor of corridors) {
-      const a = nodeById.get(corridor.a);
-      const b = nodeById.get(corridor.b);
-      if (!a || !b) continue;
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const lenSq = dx * dx + dy * dy;
-      const t = lenSq
-        ? Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / lenSq))
-        : 0;
-      const px = a.x + dx * t;
-      const py = a.y + dy * t;
-      const d = Math.hypot(x - px, y - py);
-      if (d < bestDist) {
-        bestDist = d;
-        best = [px, py];
-      }
-    }
-    // Nur nah genug (12m) darf ziehen — weit Draußen bleibt ehrlich Draußen.
-    return best && bestDist <= 12 ? best : null;
+    state.positionRetryAt = 0;
   }
 
   function shouldSendPosition(room) {
@@ -2621,7 +2588,8 @@ const App = (() => {
     const room = state.room;
     if (!shouldSendPosition(room) || !state.gpsFixAt) return;
     if (room.status === 'MEETING' && meetingRevealStarted) return;
-    if (Date.now() - state.gpsFixAt > 10000) return;
+    const nowMs = Date.now();
+    if (nowMs - state.gpsFixAt > 10000 || nowMs < (state.positionRetryAt ?? 0)) return;
     if (!state.socket?.connected) return;
     const proj = projectorFor();
     if (!proj) return;
@@ -2632,7 +2600,6 @@ const App = (() => {
     // wandert der Marker aufs Fenster-Zentrum (keine Tisch-Reise), bei
     // Bewegung folgt er schnell (alpha nach Genauigkeit) + Dead-Reckoning-
     // Gleit zwischen den GPS-Fixes, damit das Ganze fließt statt ruckt.
-    const nowMs = Date.now();
     const raw = proj.project(state.gpsFix.latitude, state.gpsFix.longitude);
     const accuracy = state.gpsFix.accuracy ?? 30;
     const smooth = state.posSmooth ?? { x: raw[0], y: raw[1] };
@@ -2697,36 +2664,18 @@ const App = (() => {
       smooth.y += state.velEst.vy * 0.28;
       if (jump > 30) { smooth.x = raw[0]; smooth.y = raw[1]; }
     }
-    // Straßen-Fixierung außerhalb von Räumen: Der Pin "liegt" auf der
-    // Straße. In Räumen bleibt exakte GPS-Wahrheit (Task/Kill-Nähe).
-    const snap = !state.selfPos?.roomId ? snapToStreets(smooth.x, smooth.y) : null;
-    state.snapped = snap ?? false;
-    const [tx, ty] = snap ?? [smooth.x, smooth.y];
+    // Der Server ordnet den geglätteten Fix einem Raum oder Korridor zu.
     state.posSmooth = smooth;
-    // Meeting-Tisch-Kollision (v19.12): clientseitig rausschieben, damit
-    // der Pin nicht "im Tisch" stehen bleibt, bis der Server korrigiert.
-    const tablePush = pushOutOfTable(smooth.x, smooth.y, cafeteriaTableOf(state.room?.map));
-    const [wx, wy] = tablePush ? [tablePush.x, tablePush.y] : [smooth.x, smooth.y];
-    state.displayPos = { x: state.snapped ? tx : wx, y: state.snapped ? ty : wy };
     const confidence = Math.min(1, Math.max(0, (60 - accuracy) / 60));
     const moved = state.lastSentPos
-      ? Math.hypot(state.displayPos.x - state.lastSentPos.x, state.displayPos.y - state.lastSentPos.y)
+      ? Math.hypot(smooth.x - state.lastSentPos.x, smooth.y - state.lastSentPos.y)
       : Infinity;
-    const sinceSend = Date.now() - (state.lastSent?.at ?? 0);
-    // Nach POSITION_UNREALISTIC erst beruhigen (3s) statt Sturm spammen.
-    if (Date.now() < (state._posHoldUntil ?? 0)) return;
-    // Bestätigte Position nochmal senden, bis der Server sie annimmt —
-    // der vergleicht gegen sie, dann läuft der Anker wieder sauber an.
-    if ((state._posRejectStreak ?? 0) > 0 && state.selfPos?.x != null) {
-      emitPosition({ x: state.selfPos.x, y: state.selfPos.y,
-        confidence: state.selfPos.confidence ?? 0.5 });
-      return;
-    }
+    const sinceSend = nowMs - (state.lastSent?.at ?? 0);
     // Bewegen sich wir >1,5m -> so schnell wie sinnvoll (>=600ms);
     // stehen wir -> nur alle 2s (Batterie + Serverlast).
     if (moved > 1.5 && sinceSend < 600) return;
     if (moved <= 1.5 && sinceSend < 2000) return;
-    emitPosition({ x: state.displayPos.x, y: state.displayPos.y, confidence });
+    emitPosition({ x: smooth.x, y: smooth.y, confidence });
   }, 300);
 
   function emitPosition({ x, y, confidence }) {
@@ -2748,9 +2697,7 @@ const App = (() => {
 
   // -------------------------------------------------------- live map draw //
 
-  // Spiegelbild zur Server-Physik (positioning.js): Cafeteria-Tischkreis
-  // mit Radius aus der RaumboundingBox. Client rechnet VOR dem Senden,
-  // der Server erzwingt es nochmal autoritativ.
+  // Cafeteria-Tischkreis für die Kartenansicht, passend zur Server-Physik.
   const TABLE_RADIUS_MIN_M = 1.6;
   const TABLE_RADIUS_MAX_M = 3.2;
   const TABLE_RADIUS_ROOM_FRACTION = 0.24;
@@ -2772,16 +2719,6 @@ const App = (() => {
       r: Math.max(TABLE_RADIUS_MIN_M, Math.min(TABLE_RADIUS_MAX_M,
         minSide * TABLE_RADIUS_ROOM_FRACTION)),
     };
-  }
-
-  function pushOutOfTable(px, py, table) {
-    if (!table) return null;
-    const dx = px - table.x;
-    const dy = py - table.y;
-    const dist = Math.hypot(dx, dy);
-    if (!Number.isFinite(dist) || dist >= table.r || dist === 0) return null;
-    const grow = (table.r - dist) / dist;
-    return { x: px + dx * grow, y: py + dy * grow };
   }
 
   /** Zeichnet den Meeting-Tisch (nur bei rp > 2 aufgerufen). */

@@ -327,7 +327,8 @@ function isPositionPlausible(current, previous) {
   // Verdacht. Wenn der Server die alte Position seit > N ms NICHT mehr
   // gesehen hat, zählt die reale Wegstrecke dazwischen: akzeptieren.
   const staleMs = Number(process.env.RLAUS_STALE_BASELINE_MS ?? 4000);
-  if (previous.updatedAt && Date.now() - previous.updatedAt > staleMs) {
+  const baselineAge = previous.updatedAt ? Date.now() - previous.updatedAt : 0;
+  if (previous.updatedAt && baselineAge > staleMs) {
     return { valid: true };
   }
 
@@ -348,7 +349,11 @@ function isPositionPlausible(current, previous) {
       return {
         valid: false,
         reason: 'POSITION_UNREALISTIC',
-        details: { speed, maxSpeed: MAX_SPEED_MPS },
+        details: {
+          speed,
+          maxSpeed: MAX_SPEED_MPS,
+          retryAfterMs: Math.max(0, staleMs - baselineAge + 1),
+        },
       };
     }
   }
