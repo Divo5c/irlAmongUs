@@ -320,6 +320,7 @@ const App = (() => {
   // ------------------------------------------------------------- helpers //
 
   function show(name) {
+    if (name !== 'game' && document.body.dataset.screen === 'game') closeGameDialogs();
     document.body.dataset.screen = name;
     if (name !== 'game') hideEmergencyPanel();
   }
@@ -523,6 +524,7 @@ const App = (() => {
     if (state.socket) return state.socket;
     const socket = io();
     socket.on('room:updated', (room) => {
+      if (state.room?.status === 'IN_GAME' && room.status !== 'IN_GAME') closeGameDialogs();
       state.room = room;
       if (room.code) state.code = room.code;
       state.isHost = room.hostId === state.playerId;
@@ -868,7 +870,7 @@ const App = (() => {
       state.adminTableLast = { blocked, counts: counts ?? {} };
       drawAdminTable();
     });
-    socket.on('game:meeting_started', (payload) => closeAdminTable() || startMeetingIntro(payload));
+    socket.on('game:meeting_started', startMeetingIntro);
     // Host rematch or round abort: land everyone in the lobby screen.
     socket.on('game:reset_done', ({ aborted }) => {
       if (!aborted) return;
@@ -1037,7 +1039,7 @@ const App = (() => {
     });
     socket.on('game:over', ({ winner, players, reason }) => {
       stopGpsLoop();
-      closeAdminTable();
+      closeGameDialogs();
       endMeetingIntro();
       state.meetingIntroSynced = false; // v19.15.1: Meeting beendet, nächster Sync moeglich
       sfx(winner === 'CREWMATE' ? 'victory_crew' : 'victory_impostor');
@@ -1130,6 +1132,14 @@ const App = (() => {
 
   function hideOverlaysNot() {
     $('gameover-overlay').classList.add('hidden');
+  }
+
+  function closeGameDialogs() {
+    window.RlausTasks?.close();
+    $('sabotage-picker')?.remove();
+    $('settings-menu').classList.add('hidden');
+    closeAdminTable();
+    hideEmergencyPanel();
   }
 
 
@@ -2278,6 +2288,7 @@ const App = (() => {
       return;
     }
     const overlay = document.createElement('div');
+    overlay.id = 'sabotage-picker';
     overlay.className = 'task-overlay';
     const card = document.createElement('div');
     card.className = 'task-card sabotage-select';
@@ -4079,11 +4090,14 @@ const App = (() => {
 
   function meetingIntroShow(condition) {
     meetingIntroActive = true;
-    $('meeting-intro').classList.remove('hidden');
+    const intro = $('meeting-intro');
+    intro.classList.toggle('meeting-intro--await', condition === 'AWAIT');
+    intro.classList.remove('hidden');
     $('meeting-intro-card').className = 'meeting-intro-card meeting-intro-' + condition.toLowerCase();
   }
 
   function startMeetingIntro(payload) {
+    closeGameDialogs();
     clearMeetingIntroTimers();
     endMeetingIntro();
     meetingIntroActive = true;
@@ -4128,6 +4142,7 @@ const App = (() => {
    * Springt direkt zum Await-Schritt — der Flash ist bei spätestem Einstieg
    * ohnehin schon vorbei. Alle sehen denselben Zähler und denselben Screen. */
   function startMeetingIntroLate() {
+    closeGameDialogs();
     clearMeetingIntroTimers();
     endMeetingIntro();
     meetingIntroActive = true;
@@ -4283,6 +4298,7 @@ const App = (() => {
   // ------------------------------------------------------ meeting UI //
 
   function renderMeeting({ phase, reporterId, discussionDeadline }) {
+    closeGameDialogs();
     // Sting/Notfall-Hupe spielt das Meeting-INTRO (startMeetingIntro);
     // dieser Screen baut nur die Konferenz-Tafel.
     $('gameover-overlay').classList.add('hidden');

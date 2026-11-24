@@ -164,6 +164,12 @@
   #btn-map-zoom {
     background: var(--space-900); border-color: var(--panel-border-dim);
   }
+  .screen-game:has(> .meeting-intro--await:not(.hidden)) #btn-map-zoom {
+    z-index: calc(var(--layer-240) + 1);
+  }
+  .meeting-intro--await { padding-top: var(--game-notice-top); }
+  .meeting-intro--await .meeting-intro-card { max-height: 100%; overflow: auto; }
+  #meeting-overlay, #gameover-overlay { z-index: var(--layer-60); }
   .game-dock { margin-top: auto; display: grid; gap: var(--space-2); }
   .game-actions {
     display: flex; justify-content: flex-end; gap: var(--space-2); margin: 0; flex-wrap: nowrap;
@@ -339,6 +345,20 @@
     .screen-game .game-actions { display: grid; grid-template-columns: repeat(2, auto); }
     .game-dock { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
     .task-list { max-height: 30dvh; }
+  }
+  @media (orientation: landscape) and (min-width: 30rem) and (max-height: 25rem) {
+    .game-dock {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: minmax(0, 1fr);
+      align-items: end;
+      min-height: var(--touch-target);
+    }
+    .game-dock .taskbox { max-height: 100%; overflow: auto; }
+    .game-dock .task-list { max-height: none; overflow: visible; }
+    .screen-game .game-actions { display: flex; }
+    .game-dock .round-btn.icon-btn {
+      width: clamp(var(--touch-target), 10vw, var(--size-3p65rem));
+    }
   }
 }
 
