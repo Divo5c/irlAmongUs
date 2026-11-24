@@ -2498,35 +2498,50 @@ const App = (() => {
 
   document.addEventListener('pointerdown', () => attachMotionSensors(), { once: true });
 
+  const GPS_FIX_MAX_AGE_MS = 10000;
+
+  function isFreshGpsFix(timestamp, now = Date.now()) {
+    return timestamp > 0 && now - timestamp <= GPS_FIX_MAX_AGE_MS;
+  }
+
+  function acceptGpsFix(pos) {
+    state.gpsFix = pos.coords;
+    state.gpsFixAt = pos.timestamp;
+    state.gpsError = null;
+    state.gpsAccM = pos.coords.accuracy ?? null;
+    state.gpsHeading = (pos.coords.speed ?? 0) > 0.5 && Number.isFinite(pos.coords.heading)
+      ? pos.coords.heading : null;
+  }
+
+  function useGpsFallback(now = Date.now()) {
+    const fix = state.gpsFallbackFix;
+    if (state.gpsError === 'denied' || isFreshGpsFix(state.gpsPreciseFixAt, now)) return;
+    if (fix && fix.timestamp > (state.gpsFixAt ?? 0) && isFreshGpsFix(fix.timestamp, now)) {
+      acceptGpsFix(fix);
+    }
+  }
+
   ensureGpsLoop.started = false;
   function ensureGpsLoop() {
     if (!('geolocation' in navigator) || ensureGpsLoop.started) return;
     ensureGpsLoop.started = true;
     attachMotionSensors();
     navigator.geolocation.watchPosition((pos) => {
-      state.gpsFix = pos.coords;
-      state.gpsFixAt = Date.now();
-      state.gpsError = null;
-      // Für Genauigkeits-Kreis + Richtungs-Pfeil auf der Karte.
-      state.gpsAccM = pos.coords.accuracy ?? null;
-      state.gpsHeading = (pos.coords.speed ?? 0) > 0.5
-        && typeof pos.coords.heading === 'number' && !Number.isNaN(pos.coords.heading)
-        ? pos.coords.heading : null;
+      if (!isFreshGpsFix(pos.timestamp) || pos.timestamp < (state.gpsFixAt ?? 0)) return;
+      state.gpsPreciseFixAt = pos.timestamp;
+      acceptGpsFix(pos);
     }, (err) => {
       // Kein stillschweigendes Schlucken mehr: der Spieler sieht WARUM
       // sein Marker fehlt (Berechtigung verweigert / kein Fix / Timeout).
       state.gpsError = err?.code === 1 ? 'denied'
         : err?.code === 2 ? 'unavailable' : 'waiting';
     }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 });
-    // Grobe Rucksack-Quelle: falls High-Accuracy h\u00e4ngt, liefert der
-    // Coarse-Watcher sp\u00e4testens f\u00fcr die Marker-Position etwas.
+    // Den letzten groben Fix für den Wechsel bereithalten.
     navigator.geolocation.watchPosition((pos) => {
-      if (Date.now() - (state.gpsFixAt ?? 0) > 20000) {
-        state.gpsFix = pos.coords;
-        state.gpsFixAt = Date.now();
-        state.gpsError ??= null;
-      }
-    }, () => {}, { enableHighAccuracy: false, maximumAge: 15000, timeout: 30000 });
+      if (pos.timestamp <= (state.gpsFallbackFix?.timestamp ?? 0) || !isFreshGpsFix(pos.timestamp)) return;
+      state.gpsFallbackFix = pos;
+      useGpsFallback();
+    }, () => {}, { enableHighAccuracy: false, maximumAge: GPS_FIX_MAX_AGE_MS, timeout: 30000 });
   }
 
   /** GPS-Hinweiszeile im Spiel: nur sichtbar, wenn etwas nicht stimmt. */
@@ -2540,10 +2555,10 @@ const App = (() => {
     let msg = null;
     if (!('geolocation' in navigator)) msg = t('gps.noapi');
     else if (state.gpsError === 'denied') msg = t('gps.denied');
-    else if (state.gpsError === 'unavailable') msg = t('gps.unavailable');
+    else if (state.gpsError === 'unavailable' && !isFreshGpsFix(state.gpsFixAt)) msg = t('gps.unavailable');
     else if (!state.gpsFixAt) msg = t('gps.waiting');
     else if (!proj) msg = t('gps.noanchor');
-    else if (Date.now() - state.gpsFixAt > 10000) msg = t('gps.lost');
+    else if (!isFreshGpsFix(state.gpsFixAt)) msg = t('gps.lost');
     else if (state.positionRetryAt > 0) msg = t('gps.recovering');
     if (msg) {
       if (el.dataset.message !== msg) {
@@ -2586,10 +2601,11 @@ const App = (() => {
 
   setInterval(() => {
     const room = state.room;
-    if (!shouldSendPosition(room) || !state.gpsFixAt) return;
+    if (!shouldSendPosition(room)) return;
     if (room.status === 'MEETING' && meetingRevealStarted) return;
     const nowMs = Date.now();
-    if (nowMs - state.gpsFixAt > 10000 || nowMs < (state.positionRetryAt ?? 0)) return;
+    useGpsFallback(nowMs);
+    if (!isFreshGpsFix(state.gpsFixAt, nowMs) || nowMs < (state.positionRetryAt ?? 0)) return;
     if (!state.socket?.connected) return;
     const proj = projectorFor();
     if (!proj) return;
