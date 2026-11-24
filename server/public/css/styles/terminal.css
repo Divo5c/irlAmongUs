@@ -138,15 +138,22 @@
   .editor-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--size-8p25rem)), 1fr)); }
   .map-frame { min-height: clamp(var(--size-17rem), 45dvh, var(--size-30rem)); }
   .map-canvas { position: absolute; inset: 0; }
-  .map-controls .round, .btn-map-zoom, .gear-btn { min-width: var(--touch-target); min-height: var(--touch-target); }
+  .map-controls .round, .gear-btn { min-width: var(--touch-target); min-height: var(--touch-target); }
+  [data-screen="game"] {
+    --game-header-top: max(var(--space-4), env(safe-area-inset-top));
+    --game-notice-top: calc(var(--game-header-top) + var(--touch-target) + var(--space-2));
+  }
   .screen-game {
     isolation: isolate; position: relative; min-height: 100dvh; height: 100dvh; max-width: none;
-    overflow: hidden; background: var(--space-800); gap: var(--space-2);
+    overflow: hidden; background: var(--space-800); gap: var(--space-2); padding-top: var(--game-header-top);
   }
-  .screen-game > .topbar { flex-wrap: nowrap; justify-content: flex-end; margin-bottom: 0; pointer-events: none; }
+  .screen-game > .topbar {
+    flex: none; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-end;
+    margin-bottom: 0; pointer-events: none;
+  }
   .screen-game > .topbar button { pointer-events: auto; }
   .game-phase-hint {
-    margin: 0 auto 0 0; min-width: 0; overflow-wrap: anywhere;
+    margin: 0 auto 0 0; min-width: 0; overflow-wrap: anywhere; align-self: center;
     text-shadow: var(--shadow-1);
   }
   .screen-game > .topbar .gear-btn { flex: none; margin-left: 0; }
@@ -154,9 +161,7 @@
     position: absolute; inset: 0; z-index: -1; height: 100%; min-height: 0;
     width: 100%; border: 0; border-radius: 0; background: var(--space-800);
   }
-  .screen-game .btn-map-zoom {
-    top: max(var(--size-9rem), calc(env(safe-area-inset-top) + var(--size-7p75rem)));
-    right: max(var(--space-3), env(safe-area-inset-right));
+  #btn-map-zoom {
     background: var(--space-900); border-color: var(--panel-border-dim);
   }
   .game-dock { margin-top: auto; display: grid; gap: var(--space-2); }
@@ -175,7 +180,7 @@
     --ui-art-width: var(--ui-art-action-size);
     --ui-art-height: var(--ui-art-action-size);
   }
-  .gear-btn:active:enabled, .btn-map-zoom:active:enabled, .task-close:active:enabled {
+  .gear-btn:active:enabled, .task-close:active:enabled {
     transform: translateY(var(--line-3));
   }
   .round-btn.icon-btn.on-cooldown {
@@ -255,6 +260,10 @@
   }
   .connection-status:not(.hidden) + .toast-region { top: max(var(--size-4p5rem), calc(env(safe-area-inset-top) + var(--size-3p75rem))); }
   .connection-status { border-color: var(--signal-warn); }
+  [data-screen="game"] > :is(.connection-status, .toast-region) { top: var(--game-notice-top); }
+  [data-screen="game"] > .connection-status:not(.hidden) + .toast-region {
+    top: calc(var(--game-notice-top) + var(--size-4p5rem));
+  }
   .meeting-overlay { background: var(--overlay-scrim); }
   .vote-tablet, .vote-results-card {
     background: var(--meeting-panel); color: var(--meeting-ink); width: min(100%, var(--layout-max));
@@ -322,7 +331,9 @@
     .screen-game { padding-inline: max(var(--space-4), calc((100vw - var(--layout-max)) / 2)); }
     .player-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .game-dock { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
-    .screen-game .btn-map-zoom { right: max(var(--space-4), calc((100vw - var(--layout-max)) / 2)); }
+  }
+  @media (min-width: 43.75rem) {
+    [data-screen="game"] { --game-header-top: max(var(--size-40px), env(safe-area-inset-top)); }
   }
   @media (orientation: landscape) and (min-width: 36rem) {
     .screen-game .game-actions { display: grid; grid-template-columns: repeat(2, auto); }

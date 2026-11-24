@@ -88,11 +88,6 @@
   animation: sab-pulse var(--duration-1s) infinite; }
 .sabotage-banner.reactor-war { background: var(--tone-215-38-61-0p95); }
 .sabotage-banner.o2-war { background: var(--tone-202-138-4-0p95); }
-/* Zoom-Toggle: kleiner Icon-Knopf rechts oben IN der Karte */
-.btn-map-zoom { position: absolute; top: var(--size-8px); right: var(--size-8px); z-index: var(--layer-6);
-  width: var(--size-34px); height: var(--size-34px); border-radius: var(--size-10px); border: var(--size-1px) solid var(--tone-255-255-255-0p2);
-  background: var(--tone-10-12-20-0p65); color: var(--tone-fff); font-size: var(--fs-base);
-  cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .taskbox summary { cursor: pointer; font-weight: 600; color: var(--tone-255-255-255-0p85); }
 .taskbox { padding: var(--size-8px) var(--size-12px); background: var(--tone-255-255-255-0p04);
   border: var(--size-1px) solid var(--tone-255-255-255-0p08); border-radius: var(--size-12px); }

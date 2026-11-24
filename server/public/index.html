@@ -193,6 +193,7 @@
   <section id="screen-game" class="screen screen-game">
     <div class="topbar">
       <span class="hint game-phase-hint" id="game-phase-hint"></span>
+      <button id="btn-map-zoom" class="gear-btn" aria-label="Karten-Zoom"><span class="ui-art ui-art--map" aria-hidden="true"></span></button>
       <button id="btn-abort" class="gear-btn hidden btn-abort" aria-label="Runde abbrechen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#flag"></use></svg></button>
       <button id="btn-settings" class="gear-btn btn-settings" aria-label="Haupt-Einstellungen"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
     </div>
@@ -229,7 +230,6 @@
     <div class="sabotage-banner-line" id="sabotage-banner-line"><div id="sabotage-banner" class="hidden sabotage-banner"></div></div>
     <div class="live-map-wrap" id="live-map-wrap">
       <canvas class="game-map" id="game-map"></canvas>
-      <button class="btn-map-zoom" id="btn-map-zoom" aria-label="Karten-Zoom"><span class="ui-art ui-art--map" aria-hidden="true"></span></button>
       <div id="boundary-banner" class="hidden boundary-banner">Geh zur&uuml;ck ins Spielfeld!</div>
     </div>
     <div class="game-dock">
@@ -407,9 +407,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.17.7"></script>
-  <script src="/js/mapEditor.js?v=19.17.7"></script>
-  <script type="module" src="/js/tasks.js?v=19.17.7"></script>
-  <script type="module" src="/js/app.js?v=19.17.7"></script>
+  <script src="/js/osm.js?v=19.17.8"></script>
+  <script src="/js/mapEditor.js?v=19.17.8"></script>
+  <script type="module" src="/js/tasks.js?v=19.17.8"></script>
+  <script type="module" src="/js/app.js?v=19.17.8"></script>
 </body>
 </html>
