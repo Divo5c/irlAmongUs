@@ -4,264 +4,34 @@
  * protocol as the Flutter client. UI language: German.
  */
 import { avatar, buttonArt, element, icon } from './ui.js';
+import { langActive, localText, roomErrorText, roomLabel, t, taskStageLabel, taskTitle } from './i18n.js';
 
 const App = (() => {
   const $ = (id) => document.getElementById(id);
 
   // ------------------------------------------------------- i18n (DE/EN) //
-  const I18N = {
-    de: {
-      // Rollen-Karte
-      'role.crew.title': 'CREWMATE',
-      'role.crew.line1': 'Erledige alle Tasks',
-      'role.crew.and': 'und finde den Impostor!',
-      'role.imp.title': 'IMPOSTOR',
-      'role.imp.line1': 'Sabotiere und töte heimlich.',
-      'role.tap': 'Tippe zum Fortfahren',
-      'game.partner': 'Partner',
-      'banner.crew': 'DU BIST CREWMATE',
-      'banner.imp': 'DU BIST IMPOSTOR',
-      // Spielstatus
-      'phase.prepare': 'Lobby',
-      'phase.in_game': 'Runde läuft',
-      'phase.meeting': 'Meeting',
-      'phase.game_over': 'Spiel vorbei',
-      // Buttons
-      'btn.report': 'Melden',
-      'btn.use': 'Benutzen',
-      'btn.sabotage': 'Sabotage',
-      'btn.kill': 'Kill',
-      'btn.emergency': 'NOTFALL',
-      'btn.leave': 'Runde verlassen',
-      'settings.title': 'Haupt-Einstellungen',
-      'settings.sound': 'Sounds & Klingeltöne',
-      'settings.vibration': 'Vibration',
-      'settings.bots': 'Bot-Positionen anzeigen',
-      'settings.lang': 'Sprache',
-      'settings.note': 'Verlassen beendet die Verbindung. Die Lobby läuft weiter.',
-      // GPS / Karte
-      'gps.denied': 'Standort ist blockiert! Erlaube GPS für diese Seite (Browser-Einstellungen), sonst siehst du dich nicht.',
-      'gps.unavailable': 'Kein GPS-Empfang — geh nach draußen oder warte.',
-      'gps.waiting': 'Warte auf GPS-Signal …',
-      'gps.lost': 'GPS-Signal verloren …',
-      'gps.recovering': 'GPS-Position wird neu abgeglichen …',
-      'gps.noapi': 'Dein Browser kennt keinen Standort (GPS) — du siehst deinen Marker nicht.',
-      'gps.noanchor': 'Karte noch nicht kalibriert: \u2699\ufe0e Zahnrad \u2192 „Karte kalibrieren“ \u2014 2 Stra\u00dfenecken abgehen (einmalig, gilt f\u00fcr immer).',
-      'map.waiting': 'Warte auf GPS …',
-      'map.you': 'DU',
-      'map.noTasks': 'Aktiv gerade keine Task',
-      // Tasks
-      'tasks.summary': 'Deine Aufgaben',
-      'comms.down': 'Kommunikation gest\u00f6rt \u2014 keine Taskdaten!',
-      'tasks.done': 'erledigt',
-      'tasks.stage': 'Stufe',
-      'tasks.next': 'Danach',
-      'tasks.open': 'Tippe auf den Marker auf der Karte',
-      // Meeting
-      'meeting.title': 'Notfall-Meeting',
-      'meeting.voteTitle': 'Abstimmung',
-      'meeting.vote': 'Auf wen stimmst du?',
-      'meeting.skip': 'Überspringen',
-      'meeting.count': 'Abstimmen:',
-      // v19.15 Meeting-Intro (Divo)
-      'meeting.flash.report': 'LEICHE GEFUNDEN',
-      'meeting.flash.report_body': 'Eine Leiche wurde gefunden.',
-      'meeting.flash.report_action': 'Begib dich umgehend zur Cafeteria.',
-      'meeting.flash.emergency': 'NOTFALL-MEETING',
-      'meeting.flash.emergency_body': 'Der Notfallknopf wurde betätigt.',
-      'meeting.flash.emergency_action': 'Begib dich umgehend zur Cafeteria.',
-      'meeting.await.title': 'Sitzung einberufen',
-      'meeting.await.waiting': 'Warten auf Bestätigung von Admin…',
-      'meeting.await.walk': 'Begib dich zur Cafeteria.',
-      'meeting.await.host': 'ALLE IN DER CAFETERIA?',
-      'meeting.await.confirm': 'BESTÄTIGEN',
-      'meeting.await.confirm_armed': 'WIRKLICH ALLE DA? NOCHMAL TIPPEN',
-      'meeting.await.confirmed': 'Bestätigt — los',
-      'meeting.reveal.reporter': 'hat die Leiche entdeckt',
-      'meeting.reveal.reporter_emergency': 'hat den NOTFALLKNOPF gedrückt',
-      'meeting.reveal.reporter_you': 'Du hast die Leiche entdeckt',
-      'meeting.reveal.reporter_you_emergency': 'Du hast den NOTFALLKNOPF gedrückt',
-      'meeting.reveal.unfound': 'GESTORBEN — NICHT GEFUNDEN',
-      'meeting.reveal.first': 'REPORTER DARF ZUERST REDEN',
-      'meeting.reveal.first_sub': 'Dann diskutiert alle zusammen',
-      'meeting.counts.living': 'in der Cafeteria',
-      'meeting.counts.ghosts': 'Geister',
-      'meeting.beacon': 'CAFETERIA',
-      // v19.16: Voting Results (Among Us Stil)
-      'meeting.results.title': 'Stimmenauszählung',
-      'meeting.results.title_en': 'Voting Results',
-      'meeting.results.proceeding': 'Weiter in',
-      'meeting.results.skipped': 'Übersprungen',
-      'meeting.results.skipped_en': 'Skipped',
-      'meeting.results.voted': 'hat gevotet',
-      'meeting.results.voted_en': 'voted',
-      'meeting.results.anonymous': 'Anonyme Stimmen:',
-      'meeting.results.anonymous_en': 'Anonymous votes:',
-      // Gameover
-      'over.title': 'Spiel vorbei',
-      // Toasts
-      'toast.outside': 'Du bist außerhalb des Spielfelds! Komm zurück, sonst zählt die Runde nicht.',
-      'toast.taskdone': 'Task erledigt!',
-      'toast.stageNext': 'Nächster Stufenort:',
-      'toast.taskNear': 'Task-Marker in Reichweite',
-      'toast.noMoveYet': 'Beweg dich erst, dann kannst du reporten.',
-      'game.out': 'Du bist raus',
-      'game.ejected': 'wurde rausgewählt.',
-      'eject.was': '{name} wurde rausgeworfen.',
-      'eject.wasImp': '{name} war ein Impostor.',
-      'eject.wasNotImp': '{name} war kein Impostor.',
-      'eject.remain': '{n} Impostor(s) übrig.',
-      'game.ejectedSkip': 'Niemand wurde rausgewählt (Skip).',
-      'map.back': 'Geh zurück aufs Spielfeld!',
-      'map.warning': 'Warnung',
-      'map.adminOut': 'ist so weit draußen:',
-      'game.youKilled': 'Du wurdest eliminiert! Als Geist kannst du Tasks weiter machen und beobachten.',
-      'game.aborted': 'Runde abgebrochen \u2014 alle sind zur\u00fcck in der Lobby.',
-      'game.killLanded': 'Kill gelandet! Lauft weiter und haltet den Cooldown ein.',
-      'game.someoneKilled': 'Jemand wurde eliminiert. Halte die Augen offen!',
-      'game.alive': 'Lebende Spieler:',
-      'game.someoneKilled': 'Jemand wurde eliminiert. Halte die Augen offen!',
-      'sab.reactor': '2 Crewmates müssen zusammen im Reactor fixen!',
-      'sab.o2': 'Sauerstoff! Fix in O2',
-      'sab.lights': 'Lichter aus — Leichen werden nicht gefunden. Fix in ELECTRICAL!',
-      'sab.comms': 'COMMS gestört — Taskliste deaktiviert. Fix in COMMUNICATIONS!',
-    },
-    en: {
-      'role.crew.title': 'CREWMATE',
-      'role.crew.line1': 'Complete all your tasks',
-      'role.crew.and': 'and find the impostor!',
-      'role.imp.title': 'IMPOSTOR',
-      'role.imp.line1': 'Sabotage and kill secretly.',
-      'role.tap': 'Tap to continue',
-      'game.partner': 'Partner',
-      'banner.crew': 'YOU ARE A CREWMATE',
-      'banner.imp': 'YOU ARE THE IMPOSTOR',
-      'phase.prepare': 'Lobby',
-      'phase.in_game': 'Round in progress',
-      'phase.meeting': 'Meeting',
-      'phase.game_over': 'Game over',
-      'btn.report': 'Report',
-      'btn.use': 'Use',
-      'btn.sabotage': 'Sabotage',
-      'btn.kill': 'Kill',
-      'btn.emergency': 'EMERGENCY',
-      'btn.leave': 'Leave round',
-      'settings.title': 'Main settings',
-      'settings.sound': 'Sounds & ringtones',
-      'settings.vibration': 'Vibration',
-      'settings.bots': 'Show bot positions',
-      'settings.lang': 'Language',
-      'settings.note': 'Leaving ends your connection. The lobby keeps running.',
-      'gps.denied': 'Location is blocked! Allow GPS for this page (browser settings), otherwise you will not see yourself.',
-      'gps.unavailable': 'No GPS reception — go outside or wait.',
-      'gps.waiting': 'Waiting for GPS signal …',
-      'gps.lost': 'GPS signal lost …',
-      'gps.recovering': 'Resyncing GPS position …',
-      'gps.noapi': 'Your browser has no location support — you will not see your marker.',
-      'gps.noanchor': 'Map not calibrated yet: \u2699\ufe0e gear \u2192 "Calibrate map" \u2014 visit 2 clear points (one time, stored forever).',
-      'map.waiting': 'Waiting for GPS …',
-      'map.you': 'YOU',
-      'map.noTasks': 'No active task right now',
-      'tasks.summary': 'Your tasks',
-      'comms.down': 'Communications sabotaged \u2014 no task data!',
-      'tasks.done': 'completed',
-      'tasks.stage': 'Stage',
-      'tasks.next': 'Next',
-      'tasks.open': 'Tap the marker on the map',
-      'meeting.title': 'Emergency meeting',
-      'meeting.voteTitle': 'Vote',
-      'meeting.vote': 'Who do you vote for?',
-      'meeting.skip': 'Skip vote',
-      'meeting.count': 'Voting:',
-      // v19.15 Meeting-Intro (Divo)
-      'meeting.flash.report': 'BODY FOUND',
-      'meeting.flash.report_body': 'A body has been reported.',
-      'meeting.flash.report_action': 'Head to the Cafeteria immediately.',
-      'meeting.flash.emergency': 'EMERGENCY MEETING',
-      'meeting.flash.emergency_body': 'The emergency button was pressed.',
-      'meeting.flash.emergency_action': 'Head to the Cafeteria immediately.',
-      'meeting.await.title': 'Meeting called',
-      'meeting.await.waiting': 'Waiting for Admin confirmation…',
-      'meeting.await.walk': 'Head to the Cafeteria.',
-      'meeting.await.host': 'EVERYONE IN THE CAFETERIA?',
-      'meeting.await.confirm': 'CONFIRM',
-      'meeting.await.confirm_armed': 'REALLY ALL THERE? TAP AGAIN',
-      'meeting.await.confirmed': 'Confirmed — go',
-      'meeting.reveal.reporter': 'found the body',
-      'meeting.reveal.reporter_emergency': 'pressed the EMERGENCY BUTTON',
-      'meeting.reveal.reporter_you': 'You found the body',
-      'meeting.reveal.reporter_you_emergency': 'You pressed the EMERGENCY BUTTON',
-      'meeting.reveal.unfound': 'DIED — NOT FOUND',
-      'meeting.reveal.first': 'REPORTER SPEAKS FIRST',
-      'meeting.reveal.first_sub': 'Then discuss all together',
-      'meeting.counts.living': 'in the Cafeteria',
-      'meeting.counts.ghosts': 'Ghosts',
-      'meeting.beacon': 'CAFETERIA',
-      // v19.16: Voting Results (Among Us Stil)
-      'meeting.results.title': 'Stimmenauszählung',
-      'meeting.results.title_en': 'Voting Results',
-      'meeting.results.proceeding': 'Weiter in',
-      'meeting.results.proceeding_en': 'Proceeding in',
-      'meeting.results.skipped': 'Übersprungen',
-      'meeting.results.skipped_en': 'Skipped',
-      'meeting.results.voted': 'hat gevotet',
-      'meeting.results.voted_en': 'voted',
-      'meeting.results.anonymous': 'Anonyme Stimmen:',
-      'meeting.results.anonymous_en': 'Anonymous votes:',
-      'over.title': 'Game over',
-      'toast.outside': 'You are outside the play area! Come back or the round will not count.',
-      'toast.taskdone': 'Task completed!',
-      'toast.stageNext': 'Next stage location:',
-      'toast.taskNear': 'Task marker within range',
-      'toast.noMoveYet': 'Move first before you can report.',
-      'game.out': 'You are out',
-      'game.ejected': 'was voted out.',
-      'eject.was': '{name} was ejected.',
-      'eject.wasImp': '{name} was An Impostor.',
-      'eject.wasNotImp': '{name} was not An Impostor.',
-      'eject.remain': '{n} Impostor{s} remain.',
-      'game.ejectedSkip': 'Nobody was voted out (skipped).',
-      'map.back': 'Back to the play area!',
-      'map.warning': 'Warning',
-      'map.adminOut': 'is this far outside:',
-      'game.youKilled': 'You were eliminated! As a ghost you can still finish tasks and spectate.',
-      'game.aborted': 'Round aborted \u2014 everyone is back in the lobby.',
-      'game.killLanded': 'Kill landed! Keep moving and respect the cooldown.',
-      'game.someoneKilled': 'Someone was eliminated. Keep your eyes open!',
-      'game.alive': 'Players alive:',
-      'game.someoneKilled': 'Someone was eliminated. Keep your eyes open!',
-      'sab.reactor': '2 crewmates must fix it together in the reactor!',
-      'sab.o2': 'Oxygen! Fix at O2',
-      'sab.lights': 'Lights out — bodies will not be found. Fix in ELECTRICAL!',
-      'sab.comms': 'COMMS sabotaged — task list disabled. Fix in COMMUNICATIONS!',
-    },
-  };
-
-  function langActive() {
-    return localStorage.getItem('rlaus_lang') === 'en' ? 'en' : 'de';
-  }
-  /** Übersetzung: fehlt ein Key, fällt EN auf DE zurück (nie leeres UI). */
-  function t(key) {
-    const lang = langActive();
-    // Bei EN: erst den normalen Key, dann den _en Suffix (für Keys die als
-    // de/en-Paar definiert sind), dann auf de zurückfallen.
-    if (lang === 'en') {
-      return I18N.en[key] ?? I18N.en[key + '_en'] ?? I18N.de[key] ?? key;
-    }
-    return I18N.de[key] ?? I18N.en[key] ?? key;
-  }
   /** Statische Texte im HTML tauschen (data-i18n Attribute). */
   function applyStaticI18n() {
+    document.documentElement.lang = langActive();
     document.querySelectorAll('[data-i18n]').forEach((el) => {
       el.textContent = t(el.dataset.i18n);
     });
     document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
       el.placeholder = t(el.dataset.i18nPh);
     });
+    document.querySelectorAll('[data-i18n-aria]').forEach((el) => {
+      el.setAttribute('aria-label', t(el.dataset.i18nAria));
+    });
+    document.querySelectorAll('#room-type-grid [data-room-type]').forEach((button) => {
+      button.textContent = roomLabel(button.dataset.roomType);
+    });
   }
   function setLang(lang) {
     localStorage.setItem('rlaus_lang', lang === 'en' ? 'en' : 'de');
     applyStaticI18n();
+    if (state.role) renderRole(state.role);
+    if (state.room) renderLobbyPlayers(state.room);
+    refreshCachedMapButton();
     renderGameHud();
     drawGameMap();
   }
@@ -302,9 +72,10 @@ const App = (() => {
   }
 
   const editor = new MapEditor($('map-canvas'), {
+    displayRoomName: roomLabel,
     onSelectionChanged: (count) => {
       $('btn-build-streets').disabled = count === 0;
-      $('map-status').textContent = `${count} Abschnitte ausgew\u00E4hlt`;
+      $('map-status').textContent = localText(`${count} Abschnitte ausgew\u00E4hlt`, `${count} sections selected`);
     },
     onRoomsChanged: (removed) => {
       // Rooms geaendert: direkt an den Server spiegeln (Lobby-Update folgt).
@@ -312,7 +83,7 @@ const App = (() => {
         code: state.code,
         map: { ...editor.working, rooms: editor.rooms, connections: [] },
       });
-      showToast(`Raum "${removed?.name ?? '?'}" gel\u00f6scht (${editor.rooms.length} übrig).`);
+      showToast(localText(`Raum "${removed?.name ?? '?'}" gel\u00f6scht (${editor.rooms.length} übrig).`, `Removed “${removed?.name ?? '?'}” (${editor.rooms.length} remaining).`));
       beep(300);
     },
   });
@@ -401,7 +172,7 @@ const App = (() => {
     if (event.target.closest('#btn-error-copy')) {
       const box = $('error-log-box');
       box.select();
-      const done = () => showToast('Fehler-Log kopiert! Einfach an Divo schicken.');
+      const done = () => showToast(localText("Fehlerprotokoll kopiert.", "Error log copied."));
       if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(box.value).then(done).catch(() => {
           document.execCommand('copy');
@@ -414,7 +185,7 @@ const App = (() => {
     } else if (event.target.closest('#btn-error-clear')) {
       localStorage.removeItem(ERROR_LOG_KEY);
       renderErrorLogBox();
-      showToast('Fehler-Log gelöscht.');
+      showToast(localText("Fehlerprotokoll gelöscht.", "Error log cleared."));
     }
   });
 
@@ -431,7 +202,7 @@ const App = (() => {
         .filter((line) => /app\.js|tasks\.js|mapEditor\.js|osm\.js/.test(line))
         .map((line) => line.trim())
         .filter(Boolean)[0];
-      chip.textContent = `App-Fehler: ${(error?.message ?? String(error)).slice(0, 110)}` +
+      chip.textContent = localText(`App-Fehler: ${(error?.message ?? String(error)).slice(0, 110)}`, `App error: ${(error?.message ?? String(error)).slice(0, 110)}`) +
         (stackLine ? ` @ ${stackLine.slice(-100)}` : '');
       chip.classList.remove('hidden');
       window.clearTimeout(showJsError._t);
@@ -577,7 +348,8 @@ const App = (() => {
       tryRestoreAnchor(room);
       rememberSavedMap(room);
       renderTeamProgress(room);
-      if (meetingIntroActive && meetingAwaitActive()) renderMeetingAwaitContent();
+      if (meetingIntroActive && room.meetingConfirmed && room.meetingPhase === 'DISCUSSION') runMeetingReveal();
+      else if (meetingIntroActive && meetingAwaitActive()) renderMeetingAwaitContent();
       drawGameMap();
       updateEmergencyPanel();
       // MAP_READY: the host may go back to the lobby and start the game.
@@ -585,9 +357,9 @@ const App = (() => {
       const canStart = room.status === 'MAP_READY' && state.isHost;
       startGame.disabled = !canStart;
       if (room.status === 'MAP_READY') {
-        startGame.textContent = 'Spiel starten';
+        startGame.textContent = t('lobby.start');
       } else if (state.isHost) {
-        startGame.textContent = room.status === 'LOBBY' ? 'Erst Karte laden' : 'Karte wird gebaut\u2026';
+        startGame.textContent = room.status === 'LOBBY' ? localText('Erst Karte laden', "Load the map first") : localText('Karte wird gebaut\u2026', "Preparing map…");
       }
       if (room.status === 'MAP_SETUP' && state.pendingCachedLoad) {
         state.pendingCachedLoad = false;
@@ -614,9 +386,9 @@ const App = (() => {
               ...(cached.cal ? { cal: cached.cal } : {}),
             },
           });
-          showToast('Gespeicherte Karte \u00fcbernommen.');
+          showToast(localText('Gespeicherte Karte \u00fcbernommen.', "Saved map loaded."));
         } else {
-          showToast('Keine gespeicherte Karte auf dem Ger\u00e4t \u2014 Stra\u00dfen laden.');
+          showToast(localText('Keine gespeicherte Karte auf dem Ger\u00e4t \u2014 Stra\u00dfen laden.', "No saved map on this device. Load streets first."));
         }
       } else if (room.status === 'MAP_SETUP' && state.autoCachedMap) {
         // Cache-only-Fall (kein Server-Map): NACH dem MAP_SETUP-ACK laden,
@@ -680,7 +452,7 @@ const App = (() => {
       if (errorCode === 'HOST_DEVICE_REQUIRED') {
         state.canHost = false;
         $('btn-host').hidden = true;
-        errorHome('Dieser Browser ist fürs Erstellen von Lobbys noch nicht freigeschaltet.');
+        errorHome(localText('Dieser Browser ist fürs Erstellen von Lobbys noch nicht freigeschaltet.', "This browser is not authorized to create lobbies yet."));
         return;
       }
       if (errorCode === 'AUTH_FAILED') {
@@ -692,7 +464,7 @@ const App = (() => {
         state.sessionAttached = false;
         localStorage.removeItem('rlaus_session');
         show('home');
-        errorHome('Die Sitzung ist abgelaufen. Tritt mit einem gültigen Code erneut bei.');
+        errorHome(localText('Die Sitzung ist abgelaufen. Tritt mit einem gültigen Code erneut bei.', "The session expired. Rejoin with a valid code."));
         return;
       }
       if (errorCode === 'NOT_IN_ROOM') {
@@ -707,14 +479,19 @@ const App = (() => {
         return;
       }
       const friendly = {
-        MAP_LOCKED: 'Karte kann nicht ge\u00e4ndert werden \u2014 falls die Runde l\u00e4uft gilt der alte Stand.',
-        MAP_MISSING: 'Keine Karte im Spiel \u2014 Host muss erst eine speichern.',
-        MAP_ANCHOR_INVALID: 'Der Setz-Punkt war ung\u00fcltig \u2014 nochmal mit GPS-Signal versuchen.',
-        CONFIG_INVALID: 'Eine Regel hatte einen unm\u00f6glichen Wert \u2014 bitte neu einstellen.',
-        INVALID_PHASE: 'Das geht in dieser Spielphase nicht.',
+        MAP_LOCKED: localText('Die Karte ist während der Runde gesperrt.', 'The map is locked during the round.'),
+        MAP_MISSING: localText('Keine Karte im Spiel \u2014 Host muss erst eine speichern.', "The host needs to save a map before starting."),
+        MAP_ANCHOR_INVALID: localText('Der Setz-Punkt war ung\u00fcltig \u2014 nochmal mit GPS-Signal versuchen.', "The reference point was invalid. Try again with a GPS fix."),
+        CONFIG_INVALID: localText('Eine Regel hatte einen unm\u00f6glichen Wert \u2014 bitte neu einstellen.', "A game setting is invalid. Adjust it and try again."),
+        INVALID_PHASE: localText('Das geht in dieser Spielphase nicht.', "This action is unavailable in the current phase."),
+        NOT_IN_MEETING: t('meeting.await.expired'),
+        NOT_ROOM_HOST: t('meeting.await.hostOnly'),
         POSITION_NOT_ALLOWED: null, // still \u2014 normal in Meetings
       }[errorCode];
-      const text = friendly ?? message ?? 'Aktion fehlgeschlagen.';
+      const text = friendly ?? roomErrorText(errorCode) ?? localText(
+        `Aktion fehlgeschlagen (${errorCode ?? 'unbekannt'}).`,
+        `Action failed (${errorCode ?? 'unknown'}).`,
+      );
       if (text == null) return;
       if (document.body.dataset.screen === 'home') {
         errorHome(text);
@@ -729,7 +506,7 @@ const App = (() => {
       beep(520);
     });
     socket.on('game:kill_targets', ({ targets }) => {
-      state.killTargets = targets ?? [];
+      state.killTargets = (targets ?? []).filter(({ playerId }) => !isImpostorPartner(playerId));
       renderGameHud();
     });
     socket.on('game:sabotage_started', ({ code: _code, type, deadline }) => {
@@ -801,9 +578,9 @@ const App = (() => {
       // hart "Kehre sofort zurück!", Stufe 3 = Host wurde gealarmiert.
       banner.classList.toggle('escalate', (escalationLevel ?? 1) >= 2);
       if (escalationLevel >= 2) {
-        banner.textContent = `KEHRE SOFORT ZURÜCK! (±${Math.round(distanceM)}m)`;
+        banner.textContent = localText(`KEHRE SOFORT ZURÜCK! (±${Math.round(distanceM)}m)`, `RETURN NOW! (±${Math.round(distanceM)} m)`);
       } else {
-        banner.textContent = `Geh zurück ins Spielfeld! (${Math.round(distanceM)}m > ${Math.round(limitM)}m)`;
+        banner.textContent = localText(`Geh zurück ins Spielfeld! (${Math.round(distanceM)}m > ${Math.round(limitM)}m)`, `Back to the play area! (${Math.round(distanceM)} m > ${Math.round(limitM)} m)`);
       }
       banner.classList.remove('hidden');
       if (Date.now() - (state._bdVibrateAt ?? 0) > 4000) {
@@ -820,7 +597,7 @@ const App = (() => {
       // Daueralarm (nicht 10s-Toast): Host-Banner bleibt bis game:
       // boundary_back andkommt.
       const banner = $('boundary-banner');
-      banner.textContent = `ADMIN: ${name} ist ${Math.round(distanceM)}m draußen und WEIGERT sich!`;
+      banner.textContent = localText(`ADMIN: ${name} ist ${Math.round(distanceM)}m draußen und WEIGERT sich!`, `HOST: ${name} is ${Math.round(distanceM)} m outside the play area.`);
       banner.classList.add('escalate');
       banner.classList.remove('hidden');
       if (Date.now() - (state._adVibrateAt ?? 0) > 4000) {
@@ -831,7 +608,8 @@ const App = (() => {
     socket.on('game:role_assigned', (payload) => {
       state.role = payload;
       state.killReadyAt = payload.killReadyAt ?? 0;
-      state.teammates = payload.teammates ?? [];
+      state.teammates = payload.role === 'IMPOSTOR' ? payload.teammates ?? [] : [];
+      document.querySelectorAll('#vote-list .vote-card').forEach((row) => refreshVoteAffiliation(row));
       // Neue Runde = neuer Notfallknopf (Zähler lebt serverseitig).
       state._emergencyUsedThisRound = 0;
       sfx('round_start');
@@ -884,14 +662,12 @@ const App = (() => {
     });
     socket.on('game:voting_started', ({ votingDeadline }) => {
       state.votingDeadline = votingDeadline ?? 0;
-      startVoteCountdown(state.votingDeadline, 'Voting endet in');
       // Divo-Intro läuft noch (Host-Check dauert)? Voting ist da -> Intro
       // überspringen und sofort zur Abstimmung.
       if (meetingIntroActive) finalizeMeetingForVoting();
-      else renderMeeting({ phase: 'VOTING', reporterId: state.room?.reporterId ?? null });
+      else renderMeeting({ phase: 'VOTING', reporterId: state.room?.reporterId ?? null, votingDeadline });
       $('meeting-title').textContent = t('meeting.voteTitle');
       $('meeting-title').classList.add('pixel-title');
-      if (!state.voted) $('meeting-hint').textContent = langActive() === 'en' ? 'Choose a player.' : 'Wähle, für wen du abstimmst.';
       // 10s-Bedenkklackern wie im Original (arbeitsspeicherfreundlich: 1
       // Timer). ISO-String parsen — string minus Zahl war NaN (Log 18).
       window.clearTimeout(state.votingWarnTimer);
@@ -911,17 +687,14 @@ const App = (() => {
       const list = $('vote-results-list');
       const proceeding = $('vote-results-proceeding');
       const isAnon = anonymous === true;
-      const lang = langActive();
-      title.textContent = lang === 'en'
-        ? t('meeting.results.title_en')
-        : t('meeting.results.title');
+      title.textContent = t('meeting.results.title');
       proceeding.textContent = '';
       list.replaceChildren();
       overlay.classList.remove('hidden');
       $('meeting-overlay').classList.add('hidden');
-      const skipLabel = lang === 'en' ? t('meeting.results.skipped_en') : t('meeting.results.skipped');
+      const skipLabel = t('meeting.results.skipped');
       if (isAnon || !votes?.length) {
-        const label = isAnon ? t(lang === 'en' ? 'meeting.results.anonymous_en' : 'meeting.results.anonymous') : skipLabel;
+        const label = isAnon ? t('meeting.results.anonymous') : skipLabel;
         const count = votes?.length || state.room?.votedIds?.length || 0;
         const row = element('li', 'vote-results-item anonymous');
         row.append(avatar('gray'), element('span', 'name', label), element('span', 'target', count));
@@ -932,8 +705,8 @@ const App = (() => {
           const row = element('li', 'vote-results-item');
           row.append(
             avatar(vote.voterColorId),
-            element('span', 'name', vote.voterName ?? '?'),
-            element('span', 'target', skipped ? skipLabel : '→ ' + (vote.targetName ?? '?')),
+            voteName(vote.voterId, vote.voterName ?? '?', 'name'),
+            voteName(vote.targetId, skipped ? skipLabel : '→ ' + (vote.targetName ?? '?'), 'target'),
           );
           list.append(row);
         }
@@ -947,7 +720,7 @@ const App = (() => {
           overlay.classList.add('hidden');
           proceeding.textContent = '';
         } else {
-          proceeding.textContent = `${lang === 'en' ? t('meeting.results.proceeding_en') : t('meeting.results.proceeding')}: ${Math.ceil(remaining / 1000)}s`;
+          proceeding.textContent = `${t('meeting.results.proceeding')}: ${Math.ceil(remaining / 1000)}s`;
         }
       };
       tick();
@@ -970,7 +743,7 @@ const App = (() => {
       for (const id of votedIds) {
         const card = [...$('vote-list').children].find((row) => row.dataset.playerId === id);
         if (!card || card.querySelector('.voted-chip')) continue;
-        const chip = buttonArt('voted', 'Hat abgestimmt');
+        const chip = buttonArt('voted', t('meeting.votedBadge'));
         chip.classList.add('voted-chip');
         card.appendChild(chip);
       }
@@ -1010,7 +783,7 @@ const App = (() => {
       bean.style.animation = '';
       let ejectLine;
       if (ejectedPlayerId == null) {
-        ejectLine = 'Niemand wurde rausgeworfen (Skipped).';
+        ejectLine = t('game.ejectedSkip');
       } else if (!confirmEjects) {
         const en = String(ejectedPlayerName ?? '?');
         ejectLine = t('eject.was').replace('{name}', en);
@@ -1020,9 +793,7 @@ const App = (() => {
           ? t('eject.wasImp').replace('{name}', en)
           : t('eject.wasNotImp').replace('{name}', en);
         const remain = Number.isInteger(impostorsRemaining)
-          ? t('eject.remain')
-            .replace('{n}', String(impostorsRemaining))
-            .replace('{s}', langActive() === 'en' && impostorsRemaining !== 1 ? 's' : '')
+          ? t('eject.remain', { n: impostorsRemaining })
           : '';
         ejectLine = remain ? `${line}\n${remain}` : line;
       }
@@ -1054,13 +825,13 @@ const App = (() => {
       $('gameover-overlay').querySelector('.card')
         ?.setAttribute('data-win', winner === 'CREWMATE' ? 'crew' : 'imp');
       const reasonText = {
-        TASKS_COMPLETE: 'Alle Aufgaben sind erledigt.',
-        IMPOSTORS_DEAD: 'Kein Impostor mehr am Leben.',
-        IMPOSTOR_PARITY: 'Impostor in \u00dcberzahl (h\u00e4tten Crew nicht mehr stoppen k\u00f6nnen).',
-        SABOTAGE_EXPIRED: 'Die Zeit für die Reparatur ist abgelaufen.',
+        TASKS_COMPLETE: localText('Alle Aufgaben sind erledigt.', "All tasks are complete."),
+        IMPOSTORS_DEAD: localText('Kein Impostor mehr am Leben.', "No impostors are alive."),
+        IMPOSTOR_PARITY: localText("Die Impostoren haben zur Crew aufgeschlossen.", "The impostors have caught up with the crew."),
+        SABOTAGE_EXPIRED: localText('Die Zeit für die Reparatur ist abgelaufen.', "The repair timer expired."),
       }[reason];
       const progress = state.room?.taskProgress;
-      const taskSummary = progress?.total ? progress.completed + '/' + progress.total + ' Aufgaben erledigt' : '';
+      const taskSummary = progress?.total ? progress.completed + '/' + progress.total + localText(' Aufgaben erledigt', " tasks completed") : '';
       $('gameover-detail').textContent = [reasonText, taskSummary].filter(Boolean).join(' · ');
       $('gameover-roster').replaceChildren(...(players ?? []).map((player) =>
         playerCard(player, player.role === 'IMPOSTOR' ? 'Impostor' : 'Crewmate')));
@@ -1082,7 +853,9 @@ const App = (() => {
             task.x = nextStage.x;
             task.y = nextStage.y;
           }
-          showToast(`Stufe fertig! N\u00e4chster Schritt: ${task.roomName ?? 'unbekannt'}`);
+          showToast(task.roomName
+            ? localText(`Stufe erledigt. Nächstes Ziel: ${roomLabel(task.roomName)}.`, `Stage complete. Next location: ${roomLabel(task.roomName)}.`)
+            : localText('Stufe erledigt.', 'Stage complete.'));
           const li = $('task-list').querySelector(`[data-task-id="${advancedTaskId}"] small`);
           if (li) li.textContent = taskLocationLabel(task);
         }
@@ -1096,7 +869,7 @@ const App = (() => {
       if (ownList.some((t) => t.id === completedTaskId)) {
         const task = ownList.find((t) => t.id === completedTaskId);
         if (task) task.completed = true;
-        showToast(task?.isFake ? 'Fake-Task abgehakt (kein Fortschritt \u2014 t\u00e4usche weiter!).' : 'Task erledigt!');
+        showToast(task?.isFake ? localText('Scheinaufgabe erledigt.', 'Fake task complete.') : t('toast.taskdone'));
         sfx('task_done');
         vibrate(50);
         const li = $('task-list').querySelector(`[data-task-id="${completedTaskId}"]`);
@@ -1110,12 +883,12 @@ const App = (() => {
       renderGameHud();
     });
     socket.on('connect', () => connectionStatus());
-    socket.on('connect_error', () => connectionStatus('Verbindung verloren. Wir verbinden dich neu.'));
+    socket.on('connect_error', () => connectionStatus(localText('Verbindung verloren. Wir verbinden dich neu.', "Connection lost. Reconnecting…")));
     socket.on('disconnect', (reason) => {
       const wasAttached = state.sessionAttached;
       state.sessionAttached = false;
       if (reason === 'io client disconnect') return;
-      connectionStatus('Verbindung verloren. Wir verbinden dich neu.');
+      connectionStatus(localText('Verbindung verloren. Wir verbinden dich neu.', "Connection lost. Reconnecting…"));
       if (!wasAttached) return;
       rememberSession();
       socket.once('connect', () => {
@@ -1226,13 +999,13 @@ const App = (() => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token }),
         });
-        if (response.status !== 204) errorHome('Dieser Freischaltlink ist ungültig.');
+        if (response.status !== 204) errorHome(localText('Dieser Freischaltlink ist ungültig.', "This access link is invalid."));
       }
       const response = await fetch('/host-access', { cache: 'no-store' });
       state.canHost = response.ok && (await response.json()).canHost === true;
       $('btn-host').hidden = !state.canHost;
     } catch {
-      if (token) errorHome('Die Freischaltung ist gerade nicht erreichbar. Öffne den Link erneut, sobald du online bist.');
+      if (token) errorHome(localText('Die Freischaltung ist gerade nicht erreichbar. Öffne den Link erneut, sobald du online bist.', "Access activation is unavailable. Open the link again when you are online."));
     }
   }
 
@@ -1254,7 +1027,7 @@ const App = (() => {
     } else {
       const code = $('join-code').value.trim().toUpperCase();
       if (!/^[A-Z2-9]{6}$/.test(code)) {
-        errorHome('Code hat 6 Zeichen (Buchstaben/Zahlen, ohne l/I/O/1).');
+        errorHome(localText('Code hat 6 Zeichen (Buchstaben/Zahlen, ohne l/I/O/1).', "Lobby codes use six characters, excluding I, O and 1."));
         return;
       }
       state.playerId = uuid();
@@ -1274,8 +1047,8 @@ const App = (() => {
   $('btn-join').addEventListener('click', () => joinRoom({ asHost: false }));
   $('btn-share').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(state.code); } catch (_) {}
-    $('btn-share').textContent = 'Kopiert!';
-    setTimeout(() => ($('btn-share').textContent = 'Code kopieren'), 1200);
+    $('btn-share').textContent = localText('Kopiert!', "Copied!");
+    setTimeout(() => ($('btn-share').textContent = t('home.copyCode')), 1200);
   });
   $('btn-bot-add').addEventListener('click', () => {
     ensureSocket().emit('game:bot_add', { code: state.code, count: 1 });
@@ -1325,14 +1098,14 @@ const App = (() => {
     ) {
       state.autoMapReloaded = room.code;
       state.pendingCachedLoad = true;
-      showToast('Gespeicherte Karte wird automatisch geladen\u2026');
+      showToast(localText('Gespeicherte Karte wird automatisch geladen\u2026', "Loading saved map automatically…"));
       ensureSocket().emit('map:start', { code: room.code });
     }
   }
 
   function renderLobbyPlayers(room) {
     $('lobby-players').replaceChildren(...room.players.map((player) =>
-      playerCard(player, player.id === room.hostId ? '★ Host' : player.isBot ? 'Bot' : 'Bereit')));
+      playerCard(player, player.id === room.hostId ? '★ Host' : player.isBot ? 'Bot' : localText('Bereit', "Ready"))));
   }
 
   function playerCard(player, label) {
@@ -1349,7 +1122,7 @@ const App = (() => {
   $('btn-edit-map').addEventListener('click', () => {
     if (!state.room) return;
     if (state.room.status !== 'LOBBY') {
-      showToast('Karte bearbeiten geht nur in der Lobby (Runde verlassen oder neu laden).');
+      showToast(localText('Karte bearbeiten geht nur in der Lobby (Runde verlassen oder neu laden).', "You can edit the map from the lobby."));
       return;
     }
     ensureSocket().emit('map:start', { code: state.code });
@@ -1364,18 +1137,18 @@ const App = (() => {
       editor.setRooms(roomMap.rooms ?? []);
       if (Number.isFinite(roomMap.anchor?.lat)) editor.setAnchor(roomMap.anchor.lat, roomMap.anchor.lon);
       state.autoCachedMap = false;
-      $('map-status').textContent = `Karte geladen (${roomMap.nodes.length} Knoten) \u2014 erweitern oder speichern`;
+      $('map-status').textContent = localText(`Karte geladen (${roomMap.nodes.length} Knoten) \u2014 erweitern oder speichern`, `Map loaded (${roomMap.nodes.length} points). Edit or save it.`);
     } else {
       editor.setRooms(state.room?.map?.rooms ?? []);
       // Cache-only: nach MAP_SETUP-ACK reinladen (map:update braucht den Status).
       state.autoCachedMap = !!readSavedLocalMap()?.nodes?.length;
-      $('map-status').textContent = state.autoCachedMap ? 'Lade gespeicherte Karte\u2026' : 'Position suchen\u2026';
+      $('map-status').textContent = state.autoCachedMap ? localText('Lade gespeicherte Karte\u2026', "Loading saved map…") : localText('Position suchen\u2026', "Finding your location…");
     }
   });
   $('btn-map-back').addEventListener('click', () => show(state.room.status === 'MAP_READY' || state.room.status === 'MAP_SETUP' ? 'lobby' : 'home'));
   $('btn-start-game').addEventListener('click', () => {
     if (!state.room?.map) {
-      alert('Erst eine Karte speichern!');
+      alert(localText('Speichere zuerst eine Karte.', 'Save a map first.'));
       return;
     }
     ensureSocket().emit('game:start', { code: state.code });
@@ -1432,8 +1205,9 @@ const App = (() => {
       lobbyButton.hidden = true;
       return;
     }
-    const date = new Date(cached.savedAt).toLocaleDateString('de-DE');
-    const label = `\u2913 Gespeicherte Karte laden (${cached.nodes.length} Knoten, ${date})`;
+    const date = new Date(cached.savedAt).toLocaleDateString(localText('de-DE', 'en-GB'));
+    const label = localText(`⤓ Gespeicherte Karte laden (${cached.nodes.length} Punkte, ${date})`,
+      `⤓ Load saved map (${cached.nodes.length} points, ${date})`);
     editorButton.hidden = false;
     editorButton.textContent = label;
     lobbyButton.hidden = false;
@@ -1447,7 +1221,7 @@ const App = (() => {
     if (Number.isFinite(cached.anchor?.lat)) {
       editor.setAnchor(cached.anchor.lat, cached.anchor.lon);
     } else {
-      showToast('Karte ohne GPS-Anker \u2014 im Spiel evtl. keine Positionsdaten.');
+      showToast(localText("Die Karte hat keinen GPS-Bezugspunkt. Dein Standort ist eventuell nicht verfügbar.", "This map has no GPS reference point. Location may be unavailable in the game."));
     }
     // Einer pro Sorte (Divo): alte Duplikate aus dem Cache raus, sonst
     // streicht sie der Server und der Broadcast w\u00e4scht die R\u00e4ume weg.
@@ -1460,7 +1234,8 @@ const App = (() => {
     });
     if (cachedRooms.length !== (cached.rooms ?? []).length) {
       window.setTimeout(() => showToast(
-        `Duplikate bereinigt: ${cachedRooms.length} von ${(cached.rooms ?? []).length} R\u00e4umen \u00fcbrig (1 pro Sorte).`,
+        localText(`Doppelte Räume entfernt. ${cachedRooms.length} Räume bleiben.`,
+          `Removed duplicate rooms. ${cachedRooms.length} rooms remain.`),
       ), 100);
     }
     const working = {
@@ -1487,14 +1262,14 @@ const App = (() => {
         ...(cached.cal ? { cal: cached.cal } : {}),
       },
     });
-    $('map-status').textContent = `Gespeicherte Karte geladen (${working.nodes.length} Knoten) \u2014 erweitern oder speichern`;
+    $('map-status').textContent = localText(`Gespeicherte Karte geladen (${working.nodes.length} Knoten) \u2014 erweitern oder speichern`, `Saved map loaded (${working.nodes.length} points). Edit or save it.`);
   }
 
   // Lobby shortcut: skips the editor entirely (map:start -> MAP_SETUP -> load+save).
   $('btn-load-cached-lobby').addEventListener('click', () => {
     state.pendingCachedLoad = true;
     ensureSocket().emit('map:start', { code: state.code });
-    showToast('Lade gespeicherte Karte\u2026');
+    showToast(localText('Lade gespeicherte Karte\u2026', "Loading saved map…"));
   });
 
   $('btn-load-cached').addEventListener('click', () => {
@@ -1503,12 +1278,12 @@ const App = (() => {
 
   $('btn-load-streets').addEventListener('click', async () => {
     if (!('geolocation' in navigator)) {
-      $('map-status').textContent = 'Kein GPS auf diesem Ger\u00e4t.';
+      $('map-status').textContent = localText('Kein GPS auf diesem Ger\u00e4t.', "Location services are unavailable on this device.");
       return;
     }
     $('btn-load-streets').disabled = true;
     $('map-spinner').classList.remove('hidden');
-    $('map-status').textContent = 'GPS-Fix wird gesucht\u2026';
+    $('map-status').textContent = localText('GPS-Fix wird gesucht\u2026', "Finding a GPS position…");
     try {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -1518,7 +1293,7 @@ const App = (() => {
         });
       });
       const { latitude, longitude } = position.coords;
-      $('map-status').textContent = `\u00b1${Math.round(position.coords.accuracy)}m Genauigkeit \u2014 Stra\u00DFen laden (dauert 10\u201340s, Bildschirm offen halten)\u2026`;
+      $('map-status').textContent = localText(`\u00b1${Math.round(position.coords.accuracy)}m Genauigkeit \u2014 Stra\u00DFen laden (dauert 10\u201340s, Bildschirm offen halten)\u2026`, `±${Math.round(position.coords.accuracy)} m accuracy. Loading streets (10–40 s)…`);
       editor.setAnchor(latitude, longitude);
       const radius = Number($('map-radius').value);
       // Browser fetches Overpass directly (Render egress is unreliable);
@@ -1529,8 +1304,8 @@ const App = (() => {
       for (let attempt = 1; attempt <= 3 && !streets; attempt++) {
         $('map-status').textContent =
           attempt === 1
-            ? 'Stra\u00DFen laden (dauert 10\u201340\u2009s, Bildschirm offen halten)\u2026'
-            : `Versuch ${attempt}: Overpass ist \u00fcberlastet, nochmal\u2026`;
+            ? localText('Straßen werden geladen. Bitte lass den Bildschirm an.', 'Loading streets. Keep your screen on.')
+            : localText(`Versuch ${attempt}: Straßen werden erneut geladen …`, `Attempt ${attempt}: Retrying street download…`);
         try {
           streets = await OSM.fetchStreets(latitude, longitude, radius);
         } catch (error) {
@@ -1549,10 +1324,10 @@ const App = (() => {
       // tapping picks street blocks instead of an entire through street.
       const pieces = OSM.splitCandidatesAtJunctions(candidates);
       editor.setCandidates(pieces);
-      $('map-status').textContent = `${pieces.length} Abschnitte aus ${candidates.length} Stra\u00DFen geladen \u2014 antippen zum Ausw\u00e4hlen`;
-      if (!pieces.length) $('map-status').textContent = 'Keine Stra\u00DFen gefunden \u2014 Radius erh\u00f6hen?';
+      $('map-status').textContent = localText(`${pieces.length} Abschnitte aus ${candidates.length} Stra\u00DFen geladen \u2014 antippen zum Ausw\u00e4hlen`, `Loaded ${pieces.length} sections from ${candidates.length} streets. Tap to select.`);
+      if (!pieces.length) $('map-status').textContent = localText('Keine Stra\u00DFen gefunden \u2014 Radius erh\u00f6hen?', "No streets found. Try a larger radius.");
     } catch (error) {
-      $('map-status').textContent = `Fehler: ${error.message}`;
+      $('map-status').textContent = localText(`Fehler: ${error.message}`, `Error: ${error.message}`);
     } finally {
       $('btn-load-streets').disabled = false;
       $('map-spinner').classList.add('hidden');
@@ -1574,7 +1349,7 @@ const App = (() => {
     });
     const nodeCount = working.nodes.length;
     const corridorCount = working.corridors.length;
-    $('map-status').textContent = `${nodeCount} Knoten, ${corridorCount} Verbindungen \u2014 weiter antippen oder speichern`;
+    $('map-status').textContent = localText(`${nodeCount} Knoten, ${corridorCount} Verbindungen \u2014 weiter antippen oder speichern`, `${nodeCount} points, ${corridorCount} corridors. Select more or save.`);
     editor.selected.clear();
     $('btn-build-streets').disabled = true;
   });
@@ -1645,7 +1420,7 @@ const App = (() => {
   editor.onRoomDraft = (polygonPts) => {
     if (polygonPts.length < 3) {
       editor.discardRoom();
-      showToast('Raum braucht mindestens 3 Punkte.');
+      showToast(localText('Raum braucht mindestens 3 Punkte.', "A room needs at least three points."));
       return;
     }
     const type = state.editorRoomType ?? 'CAFETERIA';
@@ -1655,11 +1430,11 @@ const App = (() => {
       code: state.code,
       map: { ...editor.working, rooms: editor.rooms, connections: [] },
     });
-    showToast(`Raum "${room.name}" angelegt (${editor.rooms.length} total).`);
+    showToast(localText(`Raum „${room.name}“ angelegt (${editor.rooms.length} insgesamt).`, `Room “${room.name}” added (${editor.rooms.length} total).`));
     beep(880);
     $('room-type-picker').classList.add('hidden');
     $('btn-room-mode').classList.remove('primary');
-    $('btn-room-mode').textContent = 'Raum zeichnen';
+    $('btn-room-mode').textContent = localText('Raum zeichnen', "Draw room");
   };
 
   $('room-type-grid').addEventListener('click', (event) => {
@@ -1667,7 +1442,7 @@ const App = (() => {
     if (!btn) return;
     state.editorRoomType = btn.dataset.roomType;
     highlightRoomType();
-    showToast(`Raum-Typ: ${ROOM_NAME_BY_TYPE[state.editorRoomType]} — jetzt zeichnen.`);
+    showToast(localText(`Raum-Typ: ${roomLabel(state.editorRoomType)} — jetzt zeichnen.`, `Room type: ${roomLabel(state.editorRoomType)}. Draw its outline.`));
     beep(660);
   });
 
@@ -1680,11 +1455,12 @@ const App = (() => {
     }
     $('btn-room-mode').classList.toggle('primary', editor.roomMode);
     $('btn-room-mode').textContent = editor.roomMode
-      ? 'Raummodus beenden'
-      : 'Raum zeichnen';
+      ? localText('Raummodus beenden', 'Exit room drawing')
+      : localText('Raum zeichnen', "Draw room");
     $('map-hint').textContent = editor.roomMode
-      ? 'Typ oben antippen, dann Punkte zeichnen. Ersten Punkt ANtippen schliesst. Bestehenden Raum LONG-TIPPEN (0,5s) = l\u00f6schen.'
-      : 'Tippe eine Stra\u00dfe an, um sie auszuw\u00e4hlen.';
+      ? localText('Setze Eckpunkte und tippe zum Speichern erneut auf den ersten Punkt. Halte einen Raum gedrückt, um ihn zu löschen.',
+        'Place the corners and tap the first point again to save. Press and hold a room to delete it.')
+      : t('map.pickStreet');
   });
 
   $('btn-room-undo').addEventListener('click', () => editor.undoRoomPoint());
@@ -1692,26 +1468,27 @@ const App = (() => {
   $('btn-map-save').addEventListener('click', () => {
     const working = editor.working;
     if (!working.nodes.length) {
-      $('map-status').textContent = 'Map ist leer \u2014 erst Stra\u00DFen laden und \u00fcbernehmen.';
+      $('map-status').textContent = localText("Die Karte ist leer. Lade zuerst Straßen und übernimm eine Auswahl.", "The map is empty. Load and select streets first.");
       return;
     }
     ensureSocket().emit('map:save', {
       code: state.code,
       map: { ...working, rooms: editor.rooms, connections: [], ...(editor.anchor ? { anchor: editor.anchor } : {}) },
     });
-    alert('Karte gespeichert! Zur\u00fcck in die Lobby \u2014 dann Spiel starten.');
+    alert(localText('Karte gespeichert. Du kannst die Runde in der Lobby starten.',
+      'Map saved. You can start the round from the lobby.'));
     show('lobby');
   });
 
   $('btn-map-clear').addEventListener('click', () => {
-    if (!confirm('Alle Stra\u00DFen und Knoten l\u00f6schen?')) return;
+    if (!confirm(localText('Alle Stra\u00DFen und Knoten l\u00f6schen?', "Remove all streets and points?"))) return;
     editor.clearWorking();
     editor.setRooms([]);
     ensureSocket().emit('map:update', {
       code: state.code,
       map: { version: 1, nodes: [], corridors: [], rooms: [], connections: [] },
     });
-    $('map-status').textContent = 'Karte entleert.';
+    $('map-status').textContent = localText('Karte entleert.', "Map cleared.");
   });
 
   $('btn-zoom-in').addEventListener('click', () => editor.zoomBy(1.4));
@@ -1782,7 +1559,8 @@ const App = (() => {
       config: collectLobbyConfig(),
     });
     beep(660);
-    showToast(`Gespeichert: ${event.target.closest('label')?.firstChild?.textContent?.trim() ?? 'Einstellung'}`);
+    const label = event.target.closest('label')?.querySelector('span')?.textContent;
+    showToast(label ? localText(`Gespeichert: ${label}`, `Saved: ${label}`) : localText('Gespeichert', 'Saved'));
   });
 
   /**
@@ -1810,14 +1588,14 @@ const App = (() => {
         option.value = `${n}`;
         option.textContent = max >= n
           ? `${n}`
-          : `${n} \u2014 braucht ${Math.min(2 * n + 1, 10)} Spieler`;
+          : localText(`${n} — ab ${Math.min(2 * n + 1, 10)} Spielern`, `${n} — requires ${Math.min(2 * n + 1, 10)} players`);
         option.disabled = max < n;
         select.appendChild(option);
       }
     }
     if (current > max) {
       select.value = `${max}`;
-      showToast(`Bei ${count} Spielern sind maximal ${max} Impostoren möglich (mindestens die Hälfte muss Crew bleiben).`);
+      showToast(localText(`Bei ${count} Spielern sind maximal ${max} Impostoren möglich (mindestens die Hälfte muss Crew bleiben).`, `${count} players can have at most ${max} impostors.`));
     } else if (select.value !== `${current}` && !select.querySelector('option:checked')?.disabled) {
       select.value = `${current}`;
     }
@@ -1829,8 +1607,8 @@ const App = (() => {
     if (!option?.disabled) return;
     const count = state.room?.players?.length ?? 1;
     const max = maxImpostorsForClient(count);
-    showToast(`${option.value} Impostoren gehen erst ab ${Math.min(2 * Number(option.value) + 1, 10)}`
-      + ` Spielern — aktuell ${count} (max ${max}).`);
+    showToast(localText(`Bei ${count} Spielern sind höchstens ${max} Impostoren möglich.`,
+      `With ${count} players, at most ${max} may be impostors.`));
     beep(300);
   });
 
@@ -1858,7 +1636,7 @@ const App = (() => {
     }
     const description = impostor ? t('role.imp.line1') : t('role.crew.line1') + ' ' + t('role.crew.and');
     $('role-card-detail').replaceChildren(element('p', 'pixel-sub', description), row);
-    $('role-continue').textContent = langActive() === 'en' ? 'Continue' : 'Weiter';
+    $('role-continue').textContent = t('btn.continue');
     $('role-continue').focus({ preventScroll: true });
     $('role-banner').classList.add('hidden');
     renderRole(payload);
@@ -1872,7 +1650,7 @@ const App = (() => {
     const teammates = $('teammates');
     if (teammates) {
       if (impostor && payload.teammates?.length) {
-        teammates.textContent = `Impostor-Partner: ${payload.teammates.map((t) => t.name).join(', ')}`;
+        teammates.textContent = `${t('meeting.impostorPartner')}: ${payload.teammates.map(({ name }) => name).join(', ')}`;
         teammates.classList.remove('hidden');
       } else {
         teammates.classList.add('hidden');
@@ -1888,8 +1666,7 @@ const App = (() => {
       li.dataset.taskId = task.id;
       const button = element('button', 'task-item__button');
       button.disabled = Boolean(task.completed);
-      const title = task.type === 'swipe_card' && langActive() !== 'en' ? 'Crew-Ausweis durchziehen' : task.title;
-      const copy = element('span', 'task-item__copy', title);
+      const copy = element('span', 'task-item__copy', taskTitle(task));
       const location = taskLocationLabel(task);
       if (location) copy.append(element('small', '', location));
       button.append(icon(task.completed ? 'check' : 'task'), copy);
@@ -1897,7 +1674,7 @@ const App = (() => {
       li.append(button);
       list.append(li);
     }
-    if (!payload.tasks?.length) list.append(element('li', '', 'Keine Aufgaben'));
+    if (!payload.tasks?.length) list.append(element('li', '', localText('Keine Aufgaben', "No tasks")));
     state.tasks = payload.tasks ?? [];
     const countEl = $('task-count');
     if (countEl) countEl.textContent = `${payload.tasks?.length ?? 0}`;
@@ -1906,8 +1683,10 @@ const App = (() => {
 
   function taskLocationLabel(task) {
     const index = task.stageIndex ?? 0;
-    const stage = task.stages?.length > 1 ? task.stageLabels?.[index] ?? `${t('tasks.stage')} ${index + 1}` : null;
-    return [task.roomName, stage].filter(Boolean).join(' · ');
+    const stage = task.stages?.length > 1
+      ? taskStageLabel(task.stageLabels?.[index]) ?? `${t('tasks.stage')} ${index + 1}`
+      : null;
+    return [roomLabel(task.roomName), stage].filter(Boolean).join(' · ');
   }
 
   /** Team-Fortschritt im Live-Map-Header (aus room.taskProgress). */
@@ -1978,7 +1757,7 @@ const App = (() => {
           if (killLabel) killLabel.textContent = `${Math.ceil(cooldownLeft / 1000)}s`;
         } else {
           killBtn.disabled = !targets.length;
-          if (killLabel) killLabel.textContent = 'Kill';
+          if (killLabel) killLabel.textContent = t('btn.kill');
         }
         setActionCooldown(killBtn, cooldownLeft, room.config?.killCooldownMs ?? 20000);
         killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
@@ -2000,42 +1779,42 @@ const App = (() => {
   /** \u00d6ffnet das Task-Minigame, wenn N\u00e4he + Regeln passen. */
   function openTask(task) {
     if (!state.room || state.room.status !== 'IN_GAME') {
-      showToast('Tasks gehen nur im Spiel.');
+      showToast(localText("Aufgaben sind während der Runde verfügbar.", "Tasks are available during a round."));
       return;
     }
     // Divo (v19.13.7): tote CREW darf als Geist weiter tasken (Among-Us-
     // Regel, Server-Gate erlaubt CREWMATE). Kein Client-Block mehr — der
     // Server sagt im Zweifel PLAYER_DEAD für tote Nebel-Tasks.
     if (task.completed) {
-      showToast('Dieser Task ist schon fertig.');
+      showToast(localText("Diese Aufgabe ist bereits erledigt.", "You already completed this task."));
       return;
     }
     if (state.room?.sabotage?.type === 'COMMS') {
-      showToast('Kein Netz \u2014 Communications sind sabotiert!');
+      showToast(localText("Die Kommunikation wurde sabotiert. Repariere sie, um Aufgaben zu öffnen.", "Communications are down. Restore them to access tasks."));
       return;
     }
     // Impostoren erledigen keine Tasks (nur anzeigen, nicht interaktiv).
     if (state.role?.role === 'IMPOSTOR') {
-      showToast(langActive() === 'en' ? 'Impostors cannot do tasks.' : 'Impostoren erledigen keine Tasks.');
+      showToast(localText('Impostoren können keine Aufgaben erledigen.', 'Impostors cannot complete tasks.'));
       beep(220);
       return;
     }
     if (!taskNear(task)) {
       showToast(task.roomName
-        ? `Zu weit weg \u2014 geh nach ${task.roomName}.`
-        : 'Zu weit weg \u2014 geh zum Task-Marker.');
+        ? localText(`Zu weit weg \u2014 geh nach ${roomLabel(task.roomName)}.`, `Too far away. Go to ${roomLabel(task.roomName)}.`)
+        : localText("Zu weit weg. Geh zum Aufgabenpunkt.", "Too far away. Go to the task marker."));
       beep(220);
       return;
     }
     if (!window.RlausTasks) {
-      showToast('Aufgaben konnten nicht geladen werden. Lade die App neu und tritt der Runde erneut bei.');
+      showToast(localText('Aufgaben konnten nicht geladen werden. Lade die App neu und tritt der Runde erneut bei.', "Tasks could not load. Reload the app and rejoin the round."));
       return;
     }
     const code = state.code;
     window.RlausTasks.launch(task, () => {
       if (state.room?.status !== 'IN_GAME' || state.code !== code) return;
       if (!state.socket?.connected) {
-        showToast('Keine Verbindung. Wiederhole die Aufgabe, sobald du wieder verbunden bist.');
+        showToast(localText('Keine Verbindung. Wiederhole die Aufgabe, sobald du wieder verbunden bist.', "No connection. Retry the task after reconnecting."));
         return;
       }
       state.socket.emit('task:complete', { code, taskId: task.id });
@@ -2050,43 +1829,43 @@ const App = (() => {
     const roomId = state.selfPos?.roomId;
     if (sab) {
       if (sab.type === 'REACTOR' && roomIdContains('REACTOR')) {
-        return { label: 'Fix', kind: 'FIX', panel: 'REACTOR' };
+        return { label: localText("Reparieren", "Repair"), kind: 'FIX', panel: 'REACTOR' };
       }
       if (sab.type === 'O2') {
         if (!sab.panels?.o2 && roomIdContains('O2')) {
-          return { label: 'Fix O2', kind: 'FIX', panel: 'o2' };
+          return { label: localText("Sauerstoff", "Repair O2"), kind: 'FIX', panel: 'o2' };
         }
         if (!sab.panels?.admin && roomIdContains('ADMIN')) {
-          return { label: 'Fix Admin', kind: 'FIX', panel: 'admin' };
+          return { label: localText("Admin reparieren", "Repair Admin panel"), kind: 'FIX', panel: 'admin' };
         }
       }
       if (sab.type === 'LIGHTS' && roomIdContains('ELECTRICAL')) {
-        return { label: 'Licht Fix', kind: 'FIX', panel: 'LIGHTS' };
+        return { label: localText("Licht reparieren", "Restore lights"), kind: 'FIX', panel: 'LIGHTS' };
       }
       if (sab.type === 'COMMS' && roomIdContains('COMMUNICATIONS')) {
-        return { label: 'Comms Fix', kind: 'FIX', panel: 'COMMS' };
+        return { label: localText("Kommunikation", "Restore communications"), kind: 'FIX', panel: 'COMMS' };
       }
       // Sabotage aktiv: in der Cafeteria das (blockierte) Meeting-Feld
       // anbieten — der Knopf am Tisch zeigt BLOCKIERT (Among Us-Regel).
       if (roomIdContains('CAFETERIA')) {
-        return { label: 'Notfall', kind: 'EMERGENCY' };
+        return { label: localText('Notfall', "Emergency"), kind: 'EMERGENCY' };
       }
       return null;
     }
     const task = nearestIncompleteTask();
     if (task) {
-      return { label: task.title, kind: 'TASK', task };
+      return { label: taskTitle(task), kind: 'TASK', task };
     }
     // Divo (4.11): Among-Us-Admin-Tisch — im ADMIN-Raum öffnet Use die
     // anonyme Raumbesetzung (graue Bohnen, keine Namen/Positionen).
     if (roomIdContains('ADMIN')) {
-      return { label: 'Admin-Map', kind: 'ADMIN_TABLE' };
+      return { label: localText("Adminkarte", "Admin map"), kind: 'ADMIN_TABLE' };
     }
     // Divo (v19.12): in der Cafeteria öffnet Use IMMER den Meeting-Tisch —
     // der rote Knopf steckt im Feld, mit BLOCKIERT-Kappe wenn keine
     // Meetings mehr / kritische Sabotage.
     if (roomIdContains('CAFETERIA')) {
-      return { label: 'Notfall', kind: 'EMERGENCY' };
+      return { label: localText('Notfall', "Emergency"), kind: 'EMERGENCY' };
     }
     return null;
   }
@@ -2197,8 +1976,9 @@ const App = (() => {
       const me = state.room?.players?.find((p) => p.id === state.playerId);
       const who = me?.name ?? me?.id ?? '???';
       const left = Math.max(0, emergencyLeft());
-      status.textContent = reason === 'sabotage' ? 'EMERGENCY MEETING BLOCKED\nCRITICAL SABOTAGE'
-        : `CREWMEMBER ${who} HAS ${left} EMERGENCY\nMEETING${left === 1 ? '' : 'S'} LEFT`;
+      status.textContent = reason === 'sabotage'
+        ? localText('Notfallmeeting gesperrt. Sabotage läuft.', 'Emergency meeting unavailable. Sabotage is active.')
+        : localText(`${who}: Notfallmeetings übrig: ${left}.`, `${who}: emergency meetings left: ${left}.`);
     }
   }
 
@@ -2206,7 +1986,7 @@ const App = (() => {
     const btn = $('btn-emergency');
     if (btn.disabled) {
       sfx('ui_select', 0.4);
-      showToast('Knopf geht nicht \u2014 Sabotage l\u00e4uft oder keine Meetings mehr.');
+      showToast(localText('Knopf geht nicht \u2014 Sabotage l\u00e4uft oder keine Meetings mehr.', "You cannot call a meeting while sabotage is active or after using all your meetings."));
       return;
     }
     if (!(roomIdContains('CAFETERIA') && emergencyLeft() > 0)) return;
@@ -2268,7 +2048,7 @@ const App = (() => {
         const left = Math.max(0, Math.ceil((Date.parse(sab.deadline) - Date.now()) / 1000));
         setSabLabel(`${sab.type} ${left}s`);
       } else {
-        setSabLabel('L\u00e4uft');
+        setSabLabel(localText('L\u00e4uft', "Active"));
       }
       sabBtn.disabled = false;
       sabBtn.classList.add('sabotage-active');
@@ -2297,7 +2077,7 @@ const App = (() => {
   function openSabotageSelect() {
     const types = sabotageTypesAvailable();
     if (!types.length) {
-      showToast('Keine Sabotage f\u00fcr diese Karte verf\u00fcgbar.');
+      showToast(localText('Keine Sabotage f\u00fcr diese Karte verf\u00fcgbar.', "No sabotage is available on this map."));
       return;
     }
     const overlay = document.createElement('div');
@@ -2307,13 +2087,13 @@ const App = (() => {
     card.className = 'task-card sabotage-select';
     const title = document.createElement('div');
     title.className = 'task-title';
-    title.textContent = 'Sabotage w\u00e4hlen';
+    title.textContent = localText('Sabotage w\u00e4hlen', "Choose sabotage");
     card.appendChild(title);
     const meta = {
-      REACTOR: { label: 'Reactor Meltdown', hint: '2 Crew im Reactor \u2014 90 Sekunden' },
-      O2: { label: 'O2 D\u00e4mpfung', hint: 'Fix an O2 UND Admin \u2014 90 Sekunden' },
-      LIGHTS: { label: 'Lichter aus', hint: 'Niemand sieht Leichen \u2014 Fix in Electrical' },
-      COMMS: { label: 'Comms gest\u00f6rt', hint: 'Taskliste weg \u2014 Fix in Communications' },
+      REACTOR: { label: localText('Reaktorschmelze', 'Reactor meltdown'), hint: t('sab.reactor') },
+      O2: { label: localText('Sauerstoffausfall', 'Oxygen failure'), hint: localText('Reparatur in O₂ und Admin.', 'Repair in O₂ and Admin.') },
+      LIGHTS: { label: localText('Lichtausfall', 'Lights out'), hint: t('sab.lights') },
+      COMMS: { label: localText('Kommunikationsausfall', 'Communications down'), hint: t('sab.comms') },
     };
     for (const type of types) {
       const btn = document.createElement('button');
@@ -2332,7 +2112,7 @@ const App = (() => {
     }
     const cancel = document.createElement('button');
     cancel.className = 'ghost';
-    cancel.textContent = 'Abbrechen';
+    cancel.textContent = localText('Abbrechen', "Cancel");
     cancel.addEventListener('click', () => overlay.remove());
     card.appendChild(cancel);
     overlay.appendChild(card);
@@ -2602,7 +2382,7 @@ const App = (() => {
       }
     } else {
       const accuracy = Math.round(state.gpsAccM ?? 0);
-      const label = accuracy ? 'GPS ±' + accuracy + ' m' : 'GPS bereit';
+      const label = accuracy ? 'GPS ±' + accuracy + ' m' : localText('GPS bereit', "GPS ready");
       if (el.dataset.message !== label) {
         el.dataset.message = label;
         el.replaceChildren(icon('pin'), ' ', label);
@@ -2932,7 +2712,8 @@ const App = (() => {
         const ly = minY + offsetY;
         let [plx, ply] = toPx(lx, ly);
         ctx.font = '700 12px Nunito, sans-serif';
-        const labelWidth = Math.min(ctx.measureText(r.name).width + 14, 112);
+        const roomName = roomLabel(r.name);
+        const labelWidth = Math.min(ctx.measureText(roomName).width + 14, 112);
         plx = Math.max(labelWidth / 2 + 8, Math.min(width - labelWidth / 2 - 8, plx));
         for (let attempt = 0; attempt < 4; attempt += 1) {
           const overlaps = roomLabels.some((label) =>
@@ -2972,7 +2753,7 @@ const App = (() => {
         ctx.stroke();
         ctx.fillStyle = '#f2f6ff';
         ctx.textAlign = 'center';
-        ctx.fillText(r.name, plx, ply + 4, labelWidth - 10);
+        ctx.fillText(roomName, plx, ply + 4, labelWidth - 10);
         ctx.textAlign = 'left';
       }
     }
@@ -3201,7 +2982,7 @@ const App = (() => {
       ctx.fillStyle = '#f2f6ff';
       ctx.font = '700 11px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText('DU', sx, sy - 16);
+      ctx.fillText(localText('DU', "YOU"), sx, sy - 16);
       ctx.textAlign = 'left';
     }
 
@@ -3216,7 +2997,7 @@ const App = (() => {
       ctx.fillStyle = 'rgba(250, 204, 21, 0.75)';
       ctx.font = '600 13px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText('Licht aus · Geh zu Electrical', w / 2, h / 2);
+      ctx.fillText(localText("Licht ausgefallen · Geh zur Stromversorgung", "Lights out · Go to Electrical"), w / 2, h / 2);
       ctx.textAlign = 'left';
     }
   }
@@ -3239,7 +3020,7 @@ const App = (() => {
     } else {
       state.abortArmed = true;
       target.classList.add('abort-armed');
-      showToast('Nochmal dr\u00fccken: Runde WIRKLICH abbrechen? Alle zur\u00fcck in die Lobby.');
+      showToast(localText('Nochmal dr\u00fccken: Runde WIRKLICH abbrechen? Alle zur\u00fcck in die Lobby.', "Tap again to end the round and return everyone to the lobby."));
       setTimeout(() => {
         state.abortArmed = false;
         target.classList.remove('abort-armed');
@@ -3344,14 +3125,14 @@ const App = (() => {
     const status = $('admin-table-status');
     if (data.blocked) {
       // Comms-Sabotage: grauer Plan, keine Spielerdaten (Among-Us-Regel).
-      status.textContent = 'COMMS SABOTAGED';
+      status.textContent = localText("KOMMUNIKATION GESTÖRT", "COMMUNICATIONS DOWN");
       status.style.color = '#9aa4b2';
     } else {
       const total = Object.values(data.counts).reduce((s, c) => s + c, 0);
+      const alive = (state.room?.players ?? []).filter((p) => p.isAlive).length;
       status.textContent = total > 0
-        ? `R\u00e4ume mit sichtbaren Crews: ${total}/${
-          (state.room?.players ?? []).filter((p) => p.isAlive).length}`
-        : 'Kein Crew in erfassten R\u00e4umen \u2014 alle in G\u00e4ngen?';
+        ? localText(`Spieler in erfassten Räumen: ${total}/${alive}`, `Players in tracked rooms: ${total}/${alive}`)
+        : localText('Keine Spieler in erfassten Räumen.', 'No players in tracked rooms.');
       status.style.color = '#dff7e6';
     }
 
@@ -3378,7 +3159,7 @@ const App = (() => {
       const cy = poly.reduce((s, p) => s + p.y, 0) / poly.length;
       const [sx, sy] = toPx(cx, cy);
       ctx.fillStyle = 'rgba(220, 255, 230, 0.85)';
-      ctx.fillText(r.name, sx, sy - 8);
+      ctx.fillText(roomLabel(r.name), sx, sy - 8);
       // Graue anonyme Bohnen (Among-Us-Tabellen-Optik): Anzahl als Punkte.
       const count = data.blocked ? 0 : (data.counts[r.id] ?? 0);
       const shown = Math.min(count, 6);
@@ -3410,10 +3191,10 @@ const App = (() => {
     status.classList.toggle('hidden', !message);
   }
 
-  window.addEventListener('offline', () => connectionStatus('Du bist offline. Prüfe deine Verbindung.'));
+  window.addEventListener('offline', () => connectionStatus(localText('Du bist offline. Prüfe deine Verbindung.', "You’re offline. Check your connection.")));
   window.addEventListener('online', () => connectionStatus(state.socket?.disconnected
-    ? 'Verbindung verloren. Wir verbinden dich neu.' : ''));
-  if (!navigator.onLine) connectionStatus('Du bist offline. Prüfe deine Verbindung.');
+    ? localText('Verbindung verloren. Wir verbinden dich neu.', "Connection lost. Reconnecting…") : ''));
+  if (!navigator.onLine) connectionStatus(localText('Du bist offline. Prüfe deine Verbindung.', "You’re offline. Check your connection."));
 
   $('btn-report').addEventListener('click', () => {
     if (state.room?.status === 'MEETING') return;
@@ -3421,7 +3202,7 @@ const App = (() => {
     // Ghosts melden nicht (Among Us), der Button ist eh disabled.
     const self = (state.room?.players ?? []).find((p) => p.id === state.playerId);
     if (self?.isAlive === false) {
-      showToast('Geister k\u00f6nnen nicht melden.');
+      showToast(localText('Geister k\u00f6nnen nicht melden.', "Ghosts cannot report bodies."));
       return;
     }
     ensureSocket().emit('game:report', { code: state.code });
@@ -3429,13 +3210,13 @@ const App = (() => {
   });
 
   $('btn-kill').addEventListener('click', () => {
-    const targets = state.killTargets ?? [];
+    const targets = (state.killTargets ?? []).filter(({ playerId }) => !isImpostorPartner(playerId));
     if (!targets.length) {
-      showToast('Kein Opfer in Reichweite \u2014 geh n\u00e4her ran!');
+      showToast(localText("Kein Crewmitglied in Reichweite.", "No crewmate in range. Move closer."));
       return;
     }
     if (Date.now() < state.killReadyAt) {
-      showToast(`Kill bereit in ${Math.ceil((state.killReadyAt - Date.now()) / 1000)}s`);
+      showToast(localText(`Ausschalten in ${Math.ceil((state.killReadyAt - Date.now()) / 1000)} s bereit.`, `Elimination ready in ${Math.ceil((state.killReadyAt - Date.now()) / 1000)} s`));
       return;
     }
     // Nearest victim wins: no extra pick dialog needed.
@@ -3443,7 +3224,7 @@ const App = (() => {
     ensureSocket().emit('game:kill', { code: state.code, targetPlayerId: targets[0].playerId });
     $('btn-kill').disabled = true;
     const killLabel2 = $('btn-kill').querySelector('.icon-label');
-    if (killLabel2) killLabel2.textContent = 'Kill';
+    if (killLabel2) killLabel2.textContent = t('btn.kill');
   });
 
   $('btn-use').addEventListener('click', () => {
@@ -3467,7 +3248,7 @@ const App = (() => {
   $('btn-sabotage').addEventListener('click', () => {
     if (state.room?.sabotage) {
       if (state.room.sabotage.deadline == null) {
-        showToast('Sabotage l\u00e4uft \u2014 Crew muss fixen oder du w\u00e4hlst beim n\u00e4chsten Cooldown neu.');
+        showToast(localText('Sabotage l\u00e4uft \u2014 Crew muss fixen oder du w\u00e4hlst beim n\u00e4chsten Cooldown neu.', "Sabotage is active. Wait for the crew to repair it."));
       }
       return;
     }
@@ -3513,7 +3294,7 @@ const App = (() => {
   function openCal2() {
     const mapData = cal2MapSource();
     if (!mapData?.rooms?.length && !mapData?.nodes?.length) {
-      showToast('Zeichne erst etwas auf die Karte, dann kalibrieren.');
+      showToast(localText('Zeichne erst etwas auf die Karte, dann kalibrieren.', "Draw the map before calibrating."));
       return;
     }
     cal2.mapData = mapData;
@@ -3534,60 +3315,60 @@ const App = (() => {
     const btn = $('btn-cal2-sample');
     const status = $('cal2-status');
     if (cal2.step === 'sampling') {
-      status.textContent = `GPS wird gesampelt \u2026 ${Math.ceil(cal2.msLeft / 1000)}s \u2014 ruhig stehen!`;
+      status.textContent = localText(`GPS wird gesampelt \u2026 ${Math.ceil(cal2.msLeft / 1000)}s \u2014 ruhig stehen!`, `Sampling GPS… ${Math.ceil(cal2.msLeft / 1000)} s. Stand still.`);
       btn.disabled = true;
-      btn.textContent = 'Sampelt \u2026';
+      btn.textContent = localText("Wird erfasst …", "Sampling…");
       return;
     }
     if (!cal2.p1) {
-      steps.textContent = 'Punkt A: geh zur ersten Ecke (stra\u00dfenklare Position).';
-      status.textContent = gpsDa ? 'GPS da \u2714 \u2014 dr\u00fccke "Punkt A".'
-        : 'Warte auf GPS \u2014 rausgehen!';
+      steps.textContent = localText('Punkt A: geh zur ersten Ecke (stra\u00dfenklare Position).', "Point A: Go to the first landmark.");
+      status.textContent = gpsDa ? localText('GPS da \u2714 \u2014 dr\u00fccke "Punkt A".', "GPS ready ✔ — capture Point A.")
+        : t('gps.waiting');
       btn.disabled = !gpsDa;
-      btn.textContent = 'Punkt A sampeln';
+      btn.textContent = localText("Punkt A erfassen", "Capture Point A");
       return;
     }
     if (cal2.step === 'pick') {
-      steps.textContent = 'Punkt A steht \u2014 jetzt die zweite Ecke (weit weg!).';
-      status.textContent = 'Tippe auf der Karte DORT hin, wo du gerade stehst.';
+      steps.textContent = localText('Punkt A steht \u2014 jetzt die zweite Ecke (weit weg!).', "Point A saved. Go to the second landmark.");
+      status.textContent = localText('Tippe auf der Karte DORT hin, wo du gerade stehst.', "Tap your current location on the map.");
       btn.disabled = true;
-      btn.textContent = 'Karte tappen \u2026';
+      btn.textContent = localText("Auf die Karte tippen …", "Tap the map…");
       return;
     }
     if (cal2.step === 'p2pick') {
-      steps.textContent = 'Punkt B kommt: geh zur zweiten Ecke, dr\u00fccke den Knopf.';
-      status.textContent = gpsDa ? 'GPS da \u2714 \u2014 dr\u00fccke "Punkt B".'
-        : 'Warte auf GPS \u2014 rausgehen!';
+      steps.textContent = localText('Punkt B kommt: geh zur zweiten Ecke, dr\u00fccke den Knopf.', "Go to the second landmark and capture Point B.");
+      status.textContent = gpsDa ? localText('GPS da \u2714 \u2014 dr\u00fccke "Punkt B".', "GPS ready ✔ — capture Point B.")
+        : t('gps.waiting');
       btn.disabled = !gpsDa;
-      btn.textContent = 'Punkt B sampeln';
+      btn.textContent = localText("Punkt B erfassen", "Capture Point B");
       return;
     }
     if (cal2.step === 'p2-map') {
-      steps.textContent = 'Punkt A \u2014 Punkt B: tippe auf der Karte, wo du stehst.';
-      status.textContent = 'Tippe auf die zweite Ecke.';
+      steps.textContent = localText('Punkt A \u2014 Punkt B: tippe auf der Karte, wo du stehst.', "Tap Point B on the map.");
+      status.textContent = localText('Tippe auf die zweite Ecke.', "Tap the second landmark.");
       btn.disabled = true;
-      btn.textContent = 'Karte tappen \u2026';
+      btn.textContent = localText("Auf die Karte tippen …", "Tap the map…");
       return;
     }
     if (cal2.step === 'done') {
-      steps.textContent = 'Kalibriert \u2014 ab jetzt startet die Karte automatisch richtig.';
-      status.textContent = 'Speichern \u2026';
+      steps.textContent = localText('Kalibriert \u2014 ab jetzt startet die Karte automatisch richtig.', "Calibrated. The map will use these points automatically.");
+      status.textContent = localText('Speichern \u2026', "Saving…");
       btn.disabled = true;
-      btn.textContent = ' Gespeichert ';
+      btn.textContent = localText(' Gespeichert ', " Saved ");
       return;
     }
-    steps.textContent = 'Neukalibrieren \u00fcberschreibt die gespeicherten Punkte.';
-    status.textContent = gpsDa ? 'GPS da \u2714 \u2014 dr\u00fccke "Punkt A".'
-      : 'Warte auf GPS \u2014 rausgehen!';
+    steps.textContent = localText('Neukalibrieren \u00fcberschreibt die gespeicherten Punkte.', "Recalibrating replaces the saved points.");
+    status.textContent = gpsDa ? localText('GPS da \u2714 \u2014 dr\u00fccke "Punkt A".', "GPS ready ✔ — capture Point A.")
+      : t('gps.waiting');
     btn.disabled = !gpsDa;
-    btn.textContent = 'Punkt A sampeln';
+    btn.textContent = localText("Punkt A erfassen", "Capture Point A");
   }
 
   function cal2Sample() {
     const gps = currentGps();
     if (!gps) {
       cal2UpdateUi();
-      showToast('Kein GPS \u2014 raus ins Freie, dann wieder dr\u00fccken.');
+      showToast(localText('Kein GPS \u2014 raus ins Freie, dann wieder dr\u00fccken.', "No GPS signal. Go outside and try again."));
       return;
     }
     cal2.step = 'sampling';
@@ -3632,7 +3413,7 @@ const App = (() => {
       const p2 = point;
       if (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 5
         || Math.hypot(p2.lat - p1.lat, p2.lon - p1.lon) < 0.00005) {
-        showToast('Punkte sind zu dicht beieinander \u2014 nimm zwei weit entfernte Ecken.');
+        showToast(localText('Punkte sind zu dicht beieinander \u2014 nimm zwei weit entfernte Ecken.', "The points are too close together. Choose two landmarks farther apart."));
         return;
       }
       ensureSocket().emit('map:cal', {
@@ -3646,7 +3427,7 @@ const App = (() => {
       state.velEst = null;
       state.projKey = null;
       state.proj = null;
-      showToast('Kalibrierung gespeichert \u2014 gilt f\u00fcr immer (auch am Geburtstag).');
+      showToast(localText("Kalibrierung gespeichert.", "Calibration saved."));
       setTimeout(() => cal2Hide(), 1200);
     }
     cal2UpdateUi();
@@ -3737,7 +3518,7 @@ const App = (() => {
           poly.reduce((s2, p) => s2 + p.x, 0) / poly.length,
           poly.reduce((s2, p) => s2 + p.y, 0) / poly.length,
         );
-        ctx.fillText(r.name, cx2, cy2);
+        ctx.fillText(roomLabel(r.name), cx2, cy2);
       }
     }
     // GPS-Puls: mit der bisherigen Kalibrierung kann GPS zurück auf die
@@ -3778,7 +3559,7 @@ const App = (() => {
       ctx.font = '600 11px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'alphabetic';
-      ctx.fillText('Jetzt aufs Feld tippen!', info.clientWidth / 2, info.clientHeight - 6);
+      ctx.fillText(localText('Jetzt aufs Feld tippen!', "Tap your location on the map."), info.clientWidth / 2, info.clientHeight - 6);
     }
   }
 
@@ -3787,7 +3568,7 @@ const App = (() => {
     if (!map?.rooms?.length) return;
     calib.points = map.rooms;
     calib.selected = null;
-    $('btn-calib-here').textContent = 'Ich stehe hier';
+    $('btn-calib-here').textContent = localText('Ich stehe hier', "I am here");
     $('calib-overlay').classList.remove('hidden');
     clearInterval(drawCalibMap._iv);
     drawCalibMap();
@@ -3842,13 +3623,13 @@ const App = (() => {
           poly.reduce((s, p) => s + p.x, 0) / poly.length,
           poly.reduce((s, p) => s + p.y, 0) / poly.length,
         );
-        ctx.fillText(r.name, cx, cy);
+        ctx.fillText(roomLabel(r.name), cx, cy);
       }
     }
     // Fingerprint: aktueller GPS-Puls zeigt, WO der Fix denkt, dass du bist.
     $('calib-status').textContent = currentGps()
-      ? '\u00b1 GPS fix da. Tippe den Raum, in dem du stehst.'
-      : 'Kein GPS-Signal — nach drau\u00dfen gehen!';
+      ? localText('GPS bereit. Tippe auf den Raum, in dem du stehst.', 'GPS ready. Tap the room you are in.')
+      : t('gps.unavailable');
     $('btn-calib-here').disabled = !(calib.selected && currentGps());
   }
 
@@ -3890,7 +3671,7 @@ const App = (() => {
     if (!event.target.closest('#btn-calib-here')) return;
     const gpsFix = currentGps();
     if (!gpsFix) {
-      showToast('Kein GPS-Signal! Geh raus und warte, dann wieder dr\u00fccken.');
+      showToast(localText('Kein GPS-Signal! Geh raus und warte, dann wieder dr\u00fccken.', "No GPS signal. Go outside, wait for a fix, then try again."));
       return;
     }
     const chosen = calib.selected;
@@ -3908,7 +3689,7 @@ const App = (() => {
     state.posSmooth = null;
     $('calib-overlay').classList.add('hidden');
     clearInterval(drawCalibMap._iv);
-    showToast('Setz-Punkt gespeichert \u2014 dein Marker erscheint mit dem n\u00e4chsten GPS-Fix.');
+    showToast(localText('Setz-Punkt gespeichert \u2014 dein Marker erscheint mit dem n\u00e4chsten GPS-Fix.', "Reference point saved. Your marker will appear with the next GPS fix."));
   });
   document.addEventListener('click', (event) => {
     if (event.target.closest('#btn-calib-close')) {
@@ -3951,7 +3732,7 @@ const App = (() => {
     if (best) {
       calib.selected = best;
       drawCalibMap();
-      $('btn-calib-here').textContent = `Ich stehe hier: ${best.type}`;
+      $('btn-calib-here').textContent = localText(`Ich stehe hier: ${best.type}`, `I am here: ${best.type}`);
     }
   });
 
@@ -3978,7 +3759,7 @@ const App = (() => {
         code: state.code,
         anchor: cached.anchor,
       });
-      showToast('GPS-Ursprung aus deiner gespeicherten Karte wiederhergestellt.');
+      showToast(localText('GPS-Ursprung aus deiner gespeicherten Karte wiederhergestellt.', "Restored the GPS reference point from your saved map."));
     }
   }
 
@@ -3991,8 +3772,9 @@ const App = (() => {
     const hint = $('anchor-hint');
     hint.classList.toggle('hidden', !showBtn);
     hint.textContent = room?.map?.cal
-      ? ' Karte kalibriert — der Button dient nur noch als Feintuning.'
-      : 'Kalibriere ein Mal: 2 klare Punkte (z. B. Stra\u00dfenecken) abgehen, die App merkt sich das f\u00fcr immer.';
+      ? localText('Die Karte ist kalibriert. Du kannst die Punkte bei Bedarf neu erfassen.',
+        'The map is calibrated. You can recapture the points if needed.')
+      : t('map.anchorHint');
   }
 
   document.addEventListener('click', (event) => {
@@ -4077,8 +3859,6 @@ const App = (() => {
   let meetingIntroActive = false;
   let meetingRevealStarted = false;
 
-  let meetingConfirmHandler = null;
-
   function clearMeetingIntroTimers() {
     while (MEETING_INTRO_TIMERS.length) {
       window.clearTimeout(MEETING_INTRO_TIMERS.pop());
@@ -4089,10 +3869,6 @@ const App = (() => {
     if (!meetingIntroActive) return;
     meetingIntroActive = false;
     clearMeetingIntroTimers();
-    if (meetingConfirmHandler) {
-      ensureSocket().off('game:meeting_confirmed', meetingConfirmHandler);
-      meetingConfirmHandler = null;
-    }
     $('meeting-intro').classList.add('hidden');
     // Map-Beacon ausmachen, HUD wieder freigeben.
     state.meetingAwaitActive = false;
@@ -4106,6 +3882,7 @@ const App = (() => {
     const intro = $('meeting-intro');
     intro.classList.toggle('meeting-intro--await', condition === 'AWAIT');
     intro.classList.remove('hidden');
+    $('meeting-overlay').classList.add('hidden');
     $('meeting-intro-card').className = 'meeting-intro-card meeting-intro-' + condition.toLowerCase();
   }
 
@@ -4123,8 +3900,6 @@ const App = (() => {
     const kind = payload?.emergency === true ? 'EMERGENCY' : 'REPORT';
     const isReport = kind === 'REPORT';
     sfx(isReport ? 'report_body' : 'emergency_alarm');
-    meetingConfirmHandler = () => runMeetingReveal();
-    ensureSocket().once('game:meeting_confirmed', meetingConfirmHandler);
     meetingIntroShow(kind);
     const reporterName = (payload?.players ?? state.room?.players ?? [])
       .find((p) => p.id === payload?.reporterId)?.name ?? '';
@@ -4166,10 +3941,6 @@ const App = (() => {
     meetingIntroShow('AWAIT');
     renderMeetingAwaitContent(true);
 
-    // Bestätigung des Hosts auch für späte Joiner sichtbar machen.
-    meetingConfirmHandler = () => runMeetingReveal();
-    ensureSocket().once('game:meeting_confirmed', meetingConfirmHandler);
-    MEETING_INTRO_TIMERS.push(window.setTimeout(() => runMeetingReveal(), 20000));
     renderGameHud();
     drawGameMap();
   }
@@ -4178,10 +3949,6 @@ const App = (() => {
     if (!meetingIntroActive) return;
     meetingIntroShow('AWAIT');
     renderMeetingAwaitContent(true);
-    // 1s-Poll: Zaehler aktualisieren waehrend Spieler in die Cafeteria rennen.
-
-    // Failsafe: 20s nach Start laeuft das Meeting auch ohne Host-Check.
-    MEETING_INTRO_TIMERS.push(window.setTimeout(() => runMeetingReveal(), 20000));
   }
 
   function meetingIntroContent(...content) {
@@ -4200,58 +3967,69 @@ const App = (() => {
     const players = state.room?.players ?? [];
     const self = players.find((p) => p.id === state.playerId);
     const inCafe = roomIdContains('CAFETERIA');
-    const isHost = self?.isHost === true;
+    const isHost = state.isHost;
     const walking = !inCafe && self?.isAlive !== false;
     const count = state.room?.meetingLivingCount ?? state.room?.meetingAdminCount ?? 0;
     const totalAlive = players.filter((p) => p.isAlive !== false).length;
     const ghosts = players.length - totalAlive;
-    const key = [walking, isHost, count, totalAlive, ghosts].join(':');
-    if (!force && key === meetingAwaitKey) return;
-    meetingAwaitKey = key;
-
-    const title = t(isHost && !walking ? 'meeting.await.title' : 'meeting.beacon');
-    const instruction = t(walking ? 'meeting.await.walk' : 'meeting.await.waiting');
+    const key = [langActive(), !isHost && walking, isHost].join(':');
     const summary = t('meeting.counts.living') + ': ' + count + '/' + totalAlive
       + ' · ' + t('meeting.counts.ghosts') + ': ' + ghosts;
+    const currentSummary = $('meeting-arrival-summary');
+    if (!force && key === meetingAwaitKey && currentSummary) {
+      if (currentSummary.textContent !== summary) currentSummary.textContent = summary;
+      return;
+    }
+    meetingAwaitKey = key;
+
+    const title = t(isHost ? 'meeting.await.title' : 'meeting.beacon');
+    const instruction = t(isHost ? 'meeting.await.host' : walking ? 'meeting.await.walk' : 'meeting.await.waiting');
     const content = [element('div', 'intro-kicker', title)];
-    if (walking) content.push(icon('pin', 'icon intro-icon'));
-    content.push(element('div', 'intro-big', instruction), element('div', 'intro-sub', summary));
-    if (isHost && !walking) {
+    if (!isHost && walking) content.push(icon('pin', 'icon intro-icon'));
+    const arrivalSummary = element('div', 'intro-sub', summary);
+    arrivalSummary.id = 'meeting-arrival-summary';
+    content.push(element('div', 'intro-big', instruction), arrivalSummary);
+    if (isHost) {
       const button = element('button', 'intro-confirm-btn', t('meeting.await.confirm'));
       button.id = 'meeting-admin-confirm';
       content.push(button);
     }
     meetingIntroContent(...content);
-    if (isHost && !walking) setupMeetingAdminConfirm();
+    if (isHost) setupMeetingAdminConfirm();
   }
 
   function setupMeetingAdminConfirm() {
     const btn = document.getElementById('meeting-admin-confirm');
     if (!btn) return;
     let armed = false;
+    let resetTimer;
+    const reset = () => {
+      armed = false;
+      btn.classList.remove('abort-armed');
+      btn.textContent = t('meeting.await.confirm');
+    };
     btn.addEventListener('click', () => {
-      if (!meetingIntroActive || meetingRevealStarted) return;
+      if (!meetingIntroActive || meetingRevealStarted || !state.isHost) return;
+      if (!state.socket?.connected) {
+        showToast(t('meeting.await.offline'));
+        return;
+      }
       if (!armed) {
         armed = true;
         btn.classList.add('abort-armed');
         btn.textContent = t('meeting.await.confirm_armed');
-        window.setTimeout(() => {
-          armed = false;
-          if (!btn.isConnected) return;
-          btn.classList.remove('abort-armed');
-          btn.textContent = t('meeting.await.confirm');
-        }, 3200);
+        resetTimer = window.setTimeout(reset, 5000);
         return;
       }
       sfx('ui_select');
-      ensureSocket().emit('game:meeting_confirm', { code: state.code });
-      btn.disabled = true;
-      btn.textContent = t('meeting.await.confirmed');
+      window.clearTimeout(resetTimer);
+      state.socket.emit('game:meeting_confirm', { code: state.code, meetingId: state.room?.meetingId });
+      reset();
     });
   }
 
   function runMeetingReveal() {
-    if (!meetingIntroActive || meetingRevealStarted) return;
+    if (!meetingIntroActive || meetingRevealStarted || !state.room?.meetingConfirmed) return;
     meetingRevealStarted = true;
     clearMeetingIntroTimers();
     meetingIntroShow('REVEAL');
@@ -4259,11 +4037,11 @@ const App = (() => {
     const kind = payload.emergency === true ? 'EMERGENCY' : 'REPORT';
     const players = payload.players ?? state.room?.players ?? [];
     const reporterName = players.find((p) => p.id === payload.reporterId)?.name
-      ?? 'Jemand';
+      ?? t('meeting.reveal.someone');
     const me = state.playerId === payload.reporterId;
     sfx('ui_select');
     meetingIntroContent(
-      element('div', 'intro-kicker', 'Das Meeting beginnt'),
+      element('div', 'intro-kicker', t('meeting.reveal.begin')),
       icon('report', 'icon intro-icon'),
       element('div', 'intro-big', me ? t('meeting.reveal.reporter_you') : reporterName),
       element('div', 'intro-sub', me
@@ -4297,7 +4075,11 @@ const App = (() => {
     if (!meetingIntroActive) return;
     endMeetingIntro();
     state.meetingIntroDone = true;
-    renderMeeting(state.stashedMeeting);
+    renderMeeting({
+      phase: state.room.meetingPhase,
+      reporterId: state.room.reporterId,
+      discussionDeadline: state.room.discussionDeadline,
+    });
     state.stashedMeeting = null;
   }
 
@@ -4310,7 +4092,7 @@ const App = (() => {
 
   // ------------------------------------------------------ meeting UI //
 
-  function renderMeeting({ phase, reporterId, discussionDeadline }) {
+  function renderMeeting({ phase, discussionDeadline, votingDeadline }) {
     closeGameDialogs();
     // Sting/Notfall-Hupe spielt das Meeting-INTRO (startMeetingIntro);
     // dieser Screen baut nur die Konferenz-Tafel.
@@ -4318,41 +4100,37 @@ const App = (() => {
     $('eject-overlay').classList.add('hidden');
     $('meeting-overlay').classList.remove('hidden');
     endMeetingIntro();
-    state.voted = false;
+    state.voted = state.room?.votedIds?.includes(state.playerId) ?? false;
     state.myVoteTargetId = null;
     $('vote-reveal-bar').classList.add('hidden');
     $('meeting-title').textContent = phase === 'DISCUSSION' ? t('meeting.title') : t('meeting.voteTitle');
-    const players0 = state.room?.players ?? [];
-    const stillAlive0 = players0.filter((p) => p.isAlive).length;
-    const reportText = reporterId === state.playerId ? 'Du hast gemeldet!' : 'Jemand hat gemeldet';
-    $('meeting-hint').textContent = `${reportText} \u2014 ${t('game.alive')} ${stillAlive0}`;
     // Divo-Log 18: KEINE absolute Uhrzeit mehr — der Tisch tickt sekundengenau.
     if (phase === 'DISCUSSION' && discussionDeadline) {
-      startVoteCountdown(new Date(discussionDeadline).getTime(), 'Diskussion endet in');
+      startVoteCountdown(discussionDeadline, t('meeting.discussionEnds'));
     }
     if (phase === 'VOTING') {
       // Voting-Countdown für alle (auch späte Joiner, die game:voting_started
       // verpasst haben). startVoteCountdown cleart alte Timer selbst.
-      const votingEndsAt = state.room?.votingDeadline;
-      if (votingEndsAt) startVoteCountdown(votingEndsAt, 'Voting endet in');
+      const votingEndsAt = votingDeadline ?? state.room?.votingDeadline;
+      if (votingEndsAt) startVoteCountdown(votingEndsAt, t('meeting.votingEnds'));
     }
     const players = state.room?.players ?? [];
     const selfNow = players.find((p) => p.id === state.playerId);
     const ghostWatches = selfNow?.isAlive === false;
     // Diskussion: Warten, NICHT voten (sonst VOTING_NOT_OPEN-Log-Flood).
     if (phase === 'DISCUSSION') {
-      openVoteList(players, null, 'Diskussion \u2014 Voting startet gleich\u2026', true);
+      openVoteList(players, null, t('meeting.discussing'), true);
       return;
     }
     // Geister schauen zu (Among Us): kein Vote, kein Skip, kein Fehler-Spam.
     if (ghostWatches) {
-      openVoteList(players, null, 'Geister schauen zu \u2014 nur Lebende voten.', true);
+      openVoteList(players, null, t('meeting.ghostsWatch'), true);
       return;
     }
     openVoteList(
       players,
       (targetId) => voteFor(targetId),
-      'Auf wen abstimmst du?',
+      t(state.voted ? 'meeting.voteSubmitted' : 'meeting.vote'),
     );
   }
 
@@ -4377,14 +4155,14 @@ const App = (() => {
   function markMyVoteChip() {
     const row = [...$('vote-list').children].find((card) => card.dataset.playerId === state.playerId);
     if (row && !row.querySelector('.voted-chip')) {
-      const chip = buttonArt('voted', 'Hat abgestimmt');
+      const chip = buttonArt('voted', t('meeting.votedBadge'));
       chip.classList.add('voted-chip');
       row.appendChild(chip);
     }
   }
 
   function setVotedHint() {
-    $('meeting-hint').textContent = 'Stimme abgegeben \u2014 warte auf die anderen\u2026';
+    $('meeting-hint').textContent = t('meeting.voteSubmitted');
   }
 
   let voteCountdownTimer = null;
@@ -4412,7 +4190,7 @@ const App = (() => {
   /** Tablet-Karten (Farbchips) + Among-Us-Flow: Karte waehlen -> gruen/rot
       bestaetigen -> Vote gelockt.Reporter kriegt das Megafon-Piktogramm.
       isDiscussion: Karte ausgegraut (kein Vote moeglich). */
-  function openVoteList(candidates, onPick, title = 'Wen wählst du?', isDiscussion = false) {
+  function openVoteList(candidates, onPick, title, isDiscussion = false) {
     const list = $('vote-list');
     list.replaceChildren();
     $('meeting-hint').textContent = title;
@@ -4427,13 +4205,37 @@ const App = (() => {
       row.classList.toggle('pickable', pickable);
       const pick = element('button', 'vote-card__pick');
       pick.disabled = !pickable;
-      const name = player.name + (dead ? ' · Ausgeschieden' : player.id === state.playerId ? ' (Du)' : '');
-      pick.append(avatar(player.colorId, dead), element('span', 'vote-name', name));
-      pick.setAttribute('aria-label', name);
+      const name = player.name + (dead ? ` · ${t('meeting.eliminated')}` : player.id === state.playerId ? ` (${t('meeting.you')})` : '');
+      pick.append(avatar(player.colorId, dead), voteName(player.id, name, 'vote-name'));
       if (player.id === state.room?.reporterId && !dead) pick.append(icon('report', 'icon vote-megaphone'));
       row.append(pick);
+      refreshVoteAffiliation(row);
+      if (state.room?.votedIds?.includes(player.id)) {
+        const chip = buttonArt('voted', t('meeting.votedBadge'));
+        chip.classList.add('voted-chip');
+        row.append(chip);
+      }
       list.append(row);
     }
+  }
+
+  function refreshVoteAffiliation(row) {
+    const partner = isImpostorPartner(row.dataset.playerId);
+    const name = row.querySelector('.vote-name');
+    name.classList.toggle('vote-impostor-partner', partner);
+    row.querySelector('.vote-card__pick').setAttribute('aria-label',
+      partner ? `${name.textContent} · ${t('meeting.impostorPartner')}` : name.textContent);
+  }
+
+  function isImpostorPartner(playerId) {
+    return state.role?.role === 'IMPOSTOR'
+      && (state.teammates ?? []).some(({ id }) => id === playerId && id !== state.playerId);
+  }
+
+  function voteName(playerId, name, className) {
+    const label = element('span', className, name);
+    if (isImpostorPartner(playerId)) label.classList.add('vote-impostor-partner');
+    return label;
   }
 
   $('vote-list').addEventListener('click', (event) => {
@@ -4459,8 +4261,8 @@ const App = (() => {
     const confirmation = element('div', 'vote-confirm');
     const yes = element('button', 'yes');
     const no = element('button', 'no');
-    yes.setAttribute('aria-label', 'Stimme bestätigen');
-    no.setAttribute('aria-label', 'Auswahl abbrechen');
+    yes.setAttribute('aria-label', t('meeting.voteConfirm'));
+    no.setAttribute('aria-label', t('meeting.voteCancel'));
     yes.append(icon('check'));
     no.append(icon('close'));
     confirmation.append(yes, no);
@@ -4530,7 +4332,7 @@ const App = (() => {
     const saved = recentSession();
     if (state.socket || !(await checkSavedSession(saved)) || state.socket) return;
     offeredSession = saved;
-    $('rejoin-text').textContent = `Du warst in der Runde ${saved.code}. Wieder beitreten?`;
+    $('rejoin-text').textContent = localText(`Du warst in der Runde ${saved.code}. Wieder beitreten?`, `You were in round ${saved.code}. Rejoin?`);
     $('rejoin-overlay').classList.remove('hidden');
   }
   void offerRejoin();
@@ -4547,7 +4349,7 @@ const App = (() => {
     $('rejoin-overlay').classList.add('hidden');
     if (offeredSession) forgetSession(offeredSession.raw);
     offeredSession = null;
-    showToast('Runde gelassen \u2014 du kannst sp\u00e4ter \u00fcber den Code joinen.');
+    showToast(localText("Du kannst später mit dem Lobby-Code zurückkehren.", "You can rejoin later with the lobby code."));
   });
 
   return {

@@ -123,6 +123,7 @@ test('bots vote in meetings so games advance without humans', async () => {
   ];
   store.updatePosition(code, hostId, { x: 5, y: 0, confidence: 1 });
   store.reportBody(code, hostId);
+  store.confirmMeeting(code, hostId);
   store.advanceMeeting(code); // DISCUSSION -> VOTING
 
   // Divo-Log 18: live bots think 2-6s before voting; the test hook pins 0.

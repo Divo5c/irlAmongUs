@@ -441,6 +441,9 @@ describe('kill & cooldown', () => {
 
     // v19.14 round-start cooldown is active — simulate elapsed cooldown.
     store.getRoom('ABC234').lastKillAt = 0;
+    assertGameError(() => store.killPlayer('ABC234', impostorIds[0], impostorIds[1]), 'INVALID_TARGET');
+    assertGameError(() => store.killPlayer('ABC234', impostorIds[1], impostorIds[0]), 'INVALID_TARGET');
+    assert.ok(store.getRoom('ABC234').players.filter(({ id }) => impostorIds.includes(id)).every(({ isAlive }) => isAlive));
     const result = store.killPlayer('ABC234', impostorIds[0], crewmateIds[0]);
     assert.equal(result.killedPlayerId, crewmateIds[0]);
     const victim = result.room.players.find((m) => m.id === crewmateIds[0]);
@@ -561,7 +564,10 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
     assert.equal(result.phase, 'DISCUSSION');
     assert.equal(result.room.status, 'MEETING');
     assert.equal(result.room.meetingPhase, 'DISCUSSION');
-    assert.ok(result.discussionDeadline > new Date().toISOString() || true);
+    assert.equal(result.discussionDeadline, null);
+    assert.equal(result.room.meetingConfirmed, false);
+    assertGameError(() => store.advanceMeeting('ABC234'), 'MEETING_NOT_CONFIRMED');
+    assertGameError(() => store.confirmMeeting('ABC234', 'host-1', 'previous-meeting'), 'NOT_IN_MEETING');
     assert.equal(result.room.votingDeadline, undefined);
 
     assertGameError(
@@ -577,6 +583,9 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
   test('advanceMeeting moves DISCUSSION to VOTING with a deadline', () => {
     const { store } = meetingContext({ discussionDurationMs: 10000 });
 
+    const confirmed = store.confirmMeeting('ABC234', 'host-1');
+    assert.ok(Date.parse(confirmed.discussionDeadline) > Date.now());
+    assert.equal(store.confirmMeeting('ABC234', 'host-1'), null);
     const advanced = store.advanceMeeting('ABC234');
 
     assert.equal(advanced.type, 'PHASE');
@@ -588,6 +597,7 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
   test('advanceMeeting ends an expired VOTING phase (nobody voted)', () => {
     const { store } = meetingContext({ discussionDurationMs: 0 });
 
+    store.confirmMeeting('ABC234', 'host-1');
     store.advanceMeeting('ABC234'); // -> VOTING
     const ended = store.advanceMeeting('ABC234');
 
@@ -601,6 +611,7 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
     const { store, impostorIds, crewmateIds } = meetingContext({
       discussionDurationMs: 0,
     });
+    store.confirmMeeting('ABC234', 'host-1');
     store.advanceMeeting('ABC234'); // -> VOTING
 
     let last = store.castVote('ABC234', impostorIds[0], { targetId: crewmateIds[0] });
@@ -623,6 +634,7 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
         discussionDurationMs: 0,
         confirmEjects: true,
       });
+      store.confirmMeeting('ABC234', 'host-1');
       store.advanceMeeting('ABC234');
       store.castVote('ABC234', impostorIds[0], { targetId: crewmateIds[0] });
       store.castVote('ABC234', crewmateIds[1], { targetId: crewmateIds[0] });
@@ -638,6 +650,7 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
       const { store, impostorIds, crewmateIds } = meetingContext({
         discussionDurationMs: 0,
       });
+      store.confirmMeeting('ABC234', 'host-1');
       store.advanceMeeting('ABC234');
       store.castVote('ABC234', impostorIds[0], { targetId: crewmateIds[0] });
       store.castVote('ABC234', crewmateIds[0], { targetId: impostorIds[0] });
@@ -650,6 +663,7 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
       const { store, impostorIds, crewmateIds } = meetingContext({
         discussionDurationMs: 0,
       });
+      store.confirmMeeting('ABC234', 'host-1');
       store.advanceMeeting('ABC234');
       store.castVote('ABC234', impostorIds[0], { skip: true });
       store.castVote('ABC234', crewmateIds[0], { skip: true });
@@ -669,6 +683,7 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
     plantCorpse(store, impostorIds[0]);
     store.updatePosition('ABC234', crewmateIds[0], { x: 21, y: 50, confidence: 1 });
     store.reportBody('ABC234', crewmateIds[0]);
+    store.confirmMeeting('ABC234', 'host-1');
     store.advanceMeeting('ABC234');
     store.castVote('ABC234', impostorIds[0], { targetId: crewmateIds[0] });
     store.castVote('ABC234', crewmateIds[0], { targetId: crewmateIds[0] });
@@ -694,6 +709,7 @@ describe('meeting phases: report -> discussion -> voting -> result', () => {
     plantCorpse(store, 'ghost-2', 21, 50);
     store.updatePosition('ABC234', crewmateIds[1], { x: 22, y: 50, confidence: 1 });
     store.reportBody('ABC234', crewmateIds[1]);
+    store.confirmMeeting('ABC234', 'host-1');
     store.advanceMeeting('ABC234');
 
     assertGameError(
@@ -751,6 +767,7 @@ describe('rematch / reset to lobby', () => {
     store.updatePosition('ABC234', crewmateIds[1], { x: 22, y: 50, confidence: 1 }, { skipPlausibilityCheck: true });
     store.killPlayer('ABC234', impostorId, crewmateIds[0]);
     store.reportBody('ABC234', crewmateIds[1]);
+    store.confirmMeeting('ABC234', 'host-1');
     store.advanceMeeting('ABC234');
     store.castVote('ABC234', impostorId, { targetId: crewmateIds[2] });
     store.castVote('ABC234', crewmateIds[1], { targetId: crewmateIds[2] });
@@ -823,6 +840,7 @@ describe('win conditions (multi-impostor)', () => {
       plantCorpse(store, 'ghost-m', voters[0] === undefined ? 21 : 21, 50);
       store.updatePosition('ABC234', voters[0].id, { x: 21, y: 50, confidence: 1 });
       store.reportBody('ABC234', voters[0].id);
+      store.confirmMeeting('ABC234', 'host-1');
       store.advanceMeeting('ABC234');
       for (const voter of voters) {
         store.castVote('ABC234', voter.id, { targetId: target.id });
@@ -1506,6 +1524,7 @@ describe('Divo-Meeting-Upgrade: meeting kind + unfound deaths (v19.14)', () => {
     assert.ok(emergency.room.unfoundDeaths.every((death) => !!death.name));
 
     // Unanimous skips end the meeting; the list SURVIVES the result.
+    store.confirmMeeting('ABC234', 'host-1');
     store.advanceMeeting('ABC234'); // DISCUSSION -> VOTING
     store.castVote('ABC234', impostor, { skip: true });
     store.castVote('ABC234', extra, { skip: true });
@@ -1578,6 +1597,7 @@ describe('Divo-Pruefung: Leichen sterben mit dem Meeting (kein Re-Report)', () =
   }
 
   function skipMeeting(store) {
+    store.confirmMeeting('ABC234', 'host-1');
     store.advanceMeeting('ABC234'); // DISCUSSION -> VOTING
     for (const id of ['host-1']) {
       void id;

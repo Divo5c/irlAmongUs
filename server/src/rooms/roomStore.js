@@ -352,6 +352,7 @@ class RoomStore {
     }
     return {
       meetingPhase: room.meeting.phase,
+      meetingId: room.meeting.id,
       reporterId: room.meeting.reporterId,
       // Divo-Meeting-Upgrade: Intro braucht Ausloeser-Typ + Leichen-Bilanz.
       meetingKind: room.meeting.emergency ? 'EMERGENCY' : 'REPORT',
@@ -1012,11 +1013,11 @@ class RoomStore {
     used[playerId] += 1;
     room.emergencyUsed = used;
 
-    const now = Date.now();
     room.meeting = {
+      id: randomUUID(),
       reporterId: playerId,
       phase: 'DISCUSSION',
-      discussionEndsAt: new Date(now + room.config.discussionDurationMs).toISOString(),
+      discussionEndsAt: null,
       votingEndsAt: null,
       votes: {},
       emergency: true,
@@ -1054,13 +1055,14 @@ class RoomStore {
       );
     }
 
-    const now = Date.now();
     room.meeting = {
+      id: randomUUID(),
       reporterId: reportingPlayerId,
       phase: 'DISCUSSION',
-      discussionEndsAt: new Date(now + room.config.discussionDurationMs).toISOString(),
+      discussionEndsAt: null,
       votingEndsAt: null,
       votes: {},
+      confirmed: false,
       ...this.#meetingAttendance(room),
     };
     // Die gemeldeten Leichen counten als GEFUNDEN — sie tauchen nicht mehr
@@ -1082,8 +1084,26 @@ class RoomStore {
     };
   }
 
+  confirmMeeting(code, playerId, meetingId) {
+    const room = this.getRequiredRoom(code);
+    if (playerId !== room.hostId) {
+      throw new GameError('NOT_ROOM_HOST', 'Only the host can confirm a meeting.');
+    }
+    if (room.status !== STATUS_MEETING || !room.meeting
+      || (meetingId != null && meetingId !== room.meeting.id)) {
+      throw new GameError('NOT_IN_MEETING', 'There is no matching active meeting.');
+    }
+    if (room.meeting.confirmed) return null;
+    room.meeting.confirmed = true;
+    Object.assign(room.meeting, this.#meetingAttendance(room));
+    const now = Date.now();
+    room.meeting.discussionEndsAt = new Date(now + room.config.discussionDurationMs).toISOString();
+    room.updatedAt = new Date(now).toISOString();
+    return this.toPublicRoom(room);
+  }
+
   /**
-   * Moves an active meeting forward:
+   * Moves an approved meeting forward:
    * DISCUSSION -> VOTING (returns type PHASE) or VOTING -> RESULT
    * (returns type RESULT). Safe against stale/double timer fires.
    */
@@ -1095,6 +1115,9 @@ class RoomStore {
     }
 
     if (room.meeting.phase === 'DISCUSSION') {
+      if (!room.meeting.confirmed) {
+        throw new GameError('MEETING_NOT_CONFIRMED', 'The host must confirm arrival before discussion can start.');
+      }
       room.meeting.phase = 'VOTING';
       room.meeting.votingEndsAt = new Date(
         Date.now() + room.config.votingDurationMs,
@@ -1297,8 +1320,8 @@ class RoomStore {
       throw new GameError('INVALID_TARGET', 'Kill target must be an alive player.');
     }
 
-    if (target.id === killer.id) {
-      throw new GameError('INVALID_TARGET', 'The impostor cannot kill themselves.');
+    if (target.role === ROLE_IMPOSTOR) {
+      throw new GameError('INVALID_TARGET', 'Impostors cannot eliminate each other.');
     }
 
     // Real-life kill: the impostor must PHYSICALLY be at the target

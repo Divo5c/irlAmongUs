@@ -336,6 +336,22 @@ class _GameScreenState extends State<GameScreen> {
           players: players,
           playerId: widget.playerId,
           phase: (room['meetingPhase'] as String?) ?? 'VOTING',
+          awaitingHost: room['meetingConfirmed'] == false,
+          arrivedCount: (room['meetingLivingCount'] as num?)?.toInt() ?? 0,
+          onConfirmArrival: _isHost(room)
+              ? () => widget.socketClient.confirmMeeting(
+                  code: widget.roomCode,
+                  meetingId: room['meetingId'] as String?,
+                )
+              : null,
+          impostorPartnerIds: _isImpostor
+              ? {
+                  for (final partner
+                      in (_assignment?['teammates'] as List? ?? const []))
+                    if (partner is Map && partner['id'] is String)
+                      partner['id'] as String,
+                }
+              : const {},
           reporterId:
               (_meeting?['reporterId'] ?? room['reporterId']) as String?,
           discussionDeadlineMs: _deadlineMs(room, const ['discussionDeadline']),

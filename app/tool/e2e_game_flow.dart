@@ -380,6 +380,14 @@ Future<void> main(List<String> args) async {
       check(err.message.contains('voting'), 'votes blocked during discussion');
     }
 
+    if (myId == 'host-1') {
+      final awaiting = await fetchRoomUntil((r) => r['meetingConfirmed'] == false);
+      client.confirmMeeting(
+        code: code,
+        meetingId: awaiting['meetingId'] as String?,
+      );
+    }
+
     // ---------------------------------------------------------- VOTING //
     final voting = await votingF;
     check(voting['votingDeadline'] is String, 'voting opened automatically');

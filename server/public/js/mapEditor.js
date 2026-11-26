@@ -8,11 +8,12 @@
 'use strict';
 
 class MapEditor {
-  constructor(canvas, { onSelectionChanged, onRoomsChanged } = {}) {
+  constructor(canvas, { onSelectionChanged, onRoomsChanged, displayRoomName = (name) => name } = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.onSelectionChanged = onSelectionChanged ?? null;
     this.onRoomsChanged = onRoomsChanged ?? null;
+    this.displayRoomName = displayRoomName;
 
     this.anchor = null; // {lat, lon}
     this.candidates = [];
@@ -414,7 +415,7 @@ class MapEditor {
       ctx.lineWidth = 3;
       if (room.name) {
         ctx.strokeText(room.name, rx, ry);
-        ctx.fillText(room.name, rx, ry);
+        ctx.fillText(this.displayRoomName(room.name), rx, ry);
       }
       ctx.textAlign = 'left';
     }

@@ -69,6 +69,8 @@ abstract interface class RoomSocketClient {
 
   void reportBody({required String code});
 
+  void confirmMeeting({required String code, String? meetingId});
+
   void killPlayer({required String code, required String targetPlayerId});
 
   /// Casts this player's single meeting vote: either for [targetId]
@@ -305,6 +307,11 @@ class SocketClient implements RoomSocketClient {
       'code': code,
       'targetPlayerId': targetPlayerId,
     });
+  }
+
+  @override
+  void confirmMeeting({required String code, String? meetingId}) {
+    _fireAndForget('game:meeting_confirm', {'code': code, 'meetingId': ?meetingId});
   }
 
   @override

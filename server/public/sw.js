@@ -1,7 +1,7 @@
 /* App shell: install (add to home screen). Network-first so deploys land
    immediately; cache only as offline fallback. */
-const CACHE = 'rlaus-shell-v83';
-const VERSION = '19.17.10';
+const CACHE = 'rlaus-shell-v84';
+const VERSION = '19.17.11';
 const ASSETS = [
   '/',
   '/css/style.css',
@@ -18,6 +18,7 @@ const ASSETS = [
   '/css/styles/fonts/nunito-latin.woff2',
   ...['osm', 'mapEditor', 'tasks', 'app'].map((name) => `/js/${name}.js?v=${VERSION}`),
   '/js/ui.js',
+  '/js/i18n.js',
   '/socket.io/socket.io.js',
   '/manifest.webmanifest',
   '/icons/terminal.svg',

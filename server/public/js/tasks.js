@@ -12,6 +12,7 @@
  *   RlausTasks.close()                             \u2014 force-close
  */
 import { avatar, buttonArt, icon } from './ui.js';
+import { localText, roomLabel, taskStageLabel, taskTitle } from './i18n.js';
 
 (() => {
   let current = null; // { task, cleanup }
@@ -45,7 +46,7 @@ import { avatar, buttonArt, icon } from './ui.js';
     const header = el('div', 'task-head');
     const title = el('div', 'task-title', titleText);
     const closeBtn = el('button', 'task-close');
-    closeBtn.setAttribute('aria-label', 'Aufgabe schließen');
+    closeBtn.setAttribute('aria-label', localText('Aufgabe schließen', "Close task"));
     closeBtn.append(buttonArt('close'));
     header.append(title, closeBtn);
     const body = el('div', 'task-body');
@@ -251,23 +252,23 @@ import { avatar, buttonArt, icon } from './ui.js';
   function mountSwipeCard(shell, finish) {
     const { body } = shell;
     const track = el('div', 'swipe-track');
-    const reader = el('div', 'swipe-reader', 'Ziel');
+    const reader = el('div', 'swipe-reader', localText('Ziel', "End"));
     const card = el('button', 'swipe-card');
     card.type = 'button';
-    card.setAttribute('aria-label', 'Crew-Ausweis. Leertaste etwa eine Sekunde halten und loslassen.');
-    card.append(avatar('cyan'), el('span', '', 'Crew-Ausweis'));
+    card.setAttribute('aria-label', localText('Crew-Ausweis. Leertaste etwa eine Sekunde halten und loslassen.', "Crew ID. Hold Space for about a second, then release."));
+    card.append(avatar('cyan'), el('span', '', localText('Crew-Ausweis', "Crew ID")));
     const directions = el('div', 'swipe-directions');
-    directions.append(el('span', '', 'Start'), el('span', '', 'Wischrichtung →'), el('span', '', 'Leser'));
+    directions.append(el('span', '', 'Start'), el('span', '', localText('Wischrichtung →', "Swipe →")), el('span', '', localText('Leser', "Reader")));
     track.append(reader, card);
     body.append(directions, track);
     const progress = progressBar(body, 'var(--signal-ok)');
-    const status = hint(body, 'Zieh den Ausweis gleichmäßig nach rechts bis zum Leser.');
+    const status = hint(body, localText('Zieh den Ausweis gleichmäßig nach rechts bis zum Leser.', "Swipe the card steadily to the right until it reaches the reader."));
     let attempt = null;
 
     function begin(pointerId, x = 0) {
       if (attempt || card.disabled) return false;
       attempt = { pointerId, x, startedAt: performance.now() };
-      status.update('Bis zum Leser durchziehen, dann loslassen.');
+      status.update(localText('Bis zum Leser durchziehen, dann loslassen.', "Swipe all the way to the reader, then release."));
       S('card_move', 0.7);
       return true;
     }
@@ -293,9 +294,9 @@ import { avatar, buttonArt, icon } from './ui.js';
 
     function release(fraction) {
       const elapsed = performance.now() - attempt.startedAt;
-      const error = fraction < 0.94 ? 'Zu kurz. Zieh die Karte bis zum Leser am rechten Rand.'
-        : elapsed < 300 ? 'Zu schnell. Wische beim nächsten Versuch etwas langsamer.'
-        : elapsed > 2200 ? 'Zu langsam. Zieh die Karte in einer gleichmäßigen Bewegung durch.'
+      const error = fraction < 0.94 ? localText('Zu kurz. Zieh die Karte bis zum Leser am rechten Rand.', "Too short. Swipe the card to the reader on the right.")
+        : elapsed < 300 ? localText('Zu schnell. Wische beim nächsten Versuch etwas langsamer.', "Too fast. Swipe a little slower next time.")
+        : elapsed > 2200 ? localText('Zu langsam. Zieh die Karte in einer gleichmäßigen Bewegung durch.', "Too slow. Swipe the card in one steady motion.")
         : null;
       if (error) {
         S('card_deny', 0.9);
@@ -306,7 +307,7 @@ import { avatar, buttonArt, icon } from './ui.js';
       move(1);
       card.disabled = true;
       card.classList.add('accepted');
-      status.update('Ausweis akzeptiert ✓');
+      status.update(localText('Ausweis akzeptiert ✓', "Card accepted ✓"));
       S('card_accept');
       shell.delay(finish, 320);
     }
@@ -323,12 +324,12 @@ import { avatar, buttonArt, icon } from './ui.js';
       if (attempt?.pointerId === event.pointerId) release(fractionAt(event.clientX));
     });
     card.addEventListener('lostpointercapture', (event) => {
-      if (attempt?.pointerId === event.pointerId) cancel('Wischversuch unterbrochen. Versuch es noch einmal.');
+      if (attempt?.pointerId === event.pointerId) cancel(localText('Wischversuch unterbrochen. Versuch es noch einmal.', "Swipe interrupted. Try again."));
     });
     card.addEventListener('keydown', (event) => {
       if (event.code !== 'Space') return;
       event.preventDefault();
-      if (!event.repeat && begin('keyboard')) status.update('Leertaste nach etwa einer Sekunde loslassen.');
+      if (!event.repeat && begin('keyboard')) status.update(localText('Leertaste nach etwa einer Sekunde loslassen.', "Release Space after about a second."));
     });
     card.addEventListener('keyup', (event) => {
       if (event.code !== 'Space') return;
@@ -336,14 +337,14 @@ import { avatar, buttonArt, icon } from './ui.js';
       if (attempt?.pointerId === 'keyboard') release(1);
     });
     card.addEventListener('blur', () => {
-      if (attempt?.pointerId === 'keyboard') cancel('Wischversuch unterbrochen. Versuch es noch einmal.');
+      if (attempt?.pointerId === 'keyboard') cancel(localText('Wischversuch unterbrochen. Versuch es noch einmal.', "Swipe interrupted. Try again."));
     });
   }
 
   // ------------------------------------------------------------ upload data //
 
   function mountHoldToFill(shell, finish, setHint, {
-    seconds = 6, label = 'Halten', color = '#4ade80', sound = null,
+    seconds = 6, label = localText('Halten', "Hold"), color = '#4ade80', sound = null,
   } = {}) {
     const { body } = shell;
     const button = el('button', 'task-hold-btn', label);
@@ -360,7 +361,7 @@ import { avatar, buttonArt, icon } from './ui.js';
       if (cancel) {
         fraction = 0;
         progress.set(0);
-        setHint?.('Abgebrochen \u2014 halte durch!');
+        setHint?.(localText('Abgebrochen \u2014 halte durch!', "Interrupted. Keep holding to finish."));
       }
     }
     function start() {
@@ -426,7 +427,7 @@ import { avatar, buttonArt, icon } from './ui.js';
       RINGS.push({ ring, arc, dot });
     }
     RINGS[0].ring.classList.add('active');
-    const pressBtn = el('button', 'task-tap-btn', 'Kalibrieren');
+    const pressBtn = el('button', 'task-tap-btn', localText('Kalibrieren', "Calibrate"));
     body.appendChild(pressBtn);
 
     let active = true;
@@ -468,7 +469,7 @@ import { avatar, buttonArt, icon } from './ui.js';
       } else {
         ring.classList.add('miss');
         shell.delay(() => ring.classList.remove('miss'), 400);
-        setHint?.('Verfehlt \u2014 Ring ' + (round + 1) + ' nochmal!');
+        setHint?.(localText('Verfehlt \u2014 Ring ', "Missed — try ring ") + (round + 1) + localText(' nochmal!', " again!"));
       }
     });
     shell.cleanup(() => {
@@ -529,19 +530,19 @@ import { avatar, buttonArt, icon } from './ui.js';
               return;
             }
             showing = true;
-            setHint?.('Runde ' + (round + 1) + ' von 3');
+            setHint?.(localText('Runde ', "Round ") + (round + 1) + localText(' von 3', " of 3"));
             shell.delay(playSequence, 700);
           }
         } else {
           cell.classList.add('wrong');
           shell.delay(() => cell.classList.remove('wrong'), 350);
           showing = true;
-          setHint?.('Falsch! Nochmal\u2026');
+          setHint?.(localText('Falsch! Nochmal\u2026', "Wrong sequence. Try again…"));
           shell.delay(playSequence, 600);
         }
       });
     });
-    setHint?.('Runde 1 von 3');
+    setHint?.(localText('Runde 1 von 3', "Round 1 of 3"));
     playSequence();
   }
 
@@ -565,7 +566,7 @@ import { avatar, buttonArt, icon } from './ui.js';
           shell.delay(() => field.classList.remove('task-error-flash'), 400);
           expected = 1;
           for (const [, node2] of nodes) node2.classList.remove('ok');
-          setHint?.('Falsche Reihenfolge \u2014 ab 1 neu!');
+          setHint?.(localText('Falsche Reihenfolge \u2014 ab 1 neu!', "Wrong order. Start again from 1."));
           return;
         }
         node.classList.add('ok');
@@ -603,7 +604,7 @@ import { avatar, buttonArt, icon } from './ui.js';
           display.classList.add('bad');
           shell.delay(() => display.classList.remove('bad'), 500);
           typed = '';
-          setHint?.('Falscher Code \u2014 nochmal!');
+          setHint?.(localText('Falscher Code \u2014 nochmal!', "Wrong code. Try again."));
         } else if (typed.length < 5) {
           typed += key;
         }
@@ -634,7 +635,7 @@ import { avatar, buttonArt, icon } from './ui.js';
             sw.classList.remove('ok');
             sw.textContent = String(i + 1);
           });
-          setHint?.('Falsch \u2014 ab Sicherung 1 neu!');
+          setHint?.(localText('Falsch \u2014 ab Sicherung 1 neu!', "Wrong order. Start again at breaker 1."));
           return;
         }
         node.classList.add('ok');
@@ -721,7 +722,7 @@ import { avatar, buttonArt, icon } from './ui.js';
   function mountCleanO2Filter(shell, finish) {
     const { body } = shell;
     const field = el('div', 'o2field');
-    const hole = el('div', 'o2-hole', '↓ Sammelschacht');
+    const hole = el('div', 'o2-hole', localText('↓ Sammelschacht', "↓ Waste chute"));
     field.appendChild(hole);
     body.appendChild(field);
     let swept = 0;
@@ -839,22 +840,22 @@ import { avatar, buttonArt, icon } from './ui.js';
     body.appendChild(label);
     function refresh() {
       const index = Number(slider.value);
-      label.textContent = `Umleitung \u2192 ${rooms[index]}`;
+      label.textContent = localText(`Umleitung \u2192 ${roomLabel(rooms[index])}`, `Divert to → ${roomLabel(rooms[index])}`);
       label.classList.toggle('ok', rooms[index] === target);
     }
     slider.addEventListener('input', refresh);
     slider.addEventListener('change', () => S('power_switch', 0.8));
     refresh();
-    const acceptBtn = el('button', 'task-tap-btn', '\u26A1 POWER ANNEHMEN');
+    const acceptBtn = el('button', 'task-tap-btn', localText('\u26A1 POWER ANNEHMEN', "Confirm room"));
     body.appendChild(acceptBtn);
     acceptBtn.addEventListener('click', () => {
       if (rooms[Number(slider.value)] !== target) {
-        setHint?.(`Falscher Raum. Wähle ${target} und bestätige erneut.`);
+        setHint?.(localText(`Falscher Raum. Wähle ${roomLabel(target)} und bestätige erneut.`, `Wrong room. Select ${roomLabel(target)} and confirm again.`));
         return;
       }
       shell.delay(finish, 200);
     });
-    body.appendChild(el('div', 'task-hint', `Zielraum: ${target}`));
+    body.appendChild(el('div', 'task-hint', localText(`Zielraum: ${roomLabel(target)}`, `Target room: ${roomLabel(target)}`)));
   }
 
   // -------------------------------------------------- align engine output //
@@ -962,7 +963,7 @@ import { avatar, buttonArt, icon } from './ui.js';
     function spawn() {
       if (!alive) return;
       const rock = el('button', 'asteroid');
-      rock.setAttribute('aria-label', 'Asteroid treffen');
+      rock.setAttribute('aria-label', localText('Asteroid treffen', "Hit asteroid"));
       rock.append(icon('rock'));
       const startY = Math.random() * 80 + 10;
       rock.style.top = `${startY}%`;
@@ -1006,14 +1007,14 @@ import { avatar, buttonArt, icon } from './ui.js';
         active.add(index);
       }
       cell.disabled = !active.has(index);
-      cell.setAttribute('aria-label', `Schild ${index + 1}`);
+      cell.setAttribute('aria-label', localText(`Schild ${index + 1}`, `Shield ${index + 1}`));
       field.appendChild(cell);
       cell.addEventListener('click', () => {
         if (!cell.classList.contains('lit')) return;
         cell.classList.remove('lit');
         cell.classList.add('ok');
         cell.disabled = true;
-        cell.setAttribute('aria-label', `Schild ${index + 1} aktiviert`);
+        cell.setAttribute('aria-label', localText(`Schild ${index + 1} aktiviert`, `Shield ${index + 1} activated`));
         active.delete(index);
         if (active.size === 0) {
           shell.delay(finish, 280);
@@ -1033,41 +1034,41 @@ import { avatar, buttonArt, icon } from './ui.js';
     for (let index = 0; index < 5; index += 1) {
       const vial = el('button', 'sample-vial', String(index + 1));
       vial.disabled = true;
-      vial.setAttribute('aria-label', `Probe ${index + 1}`);
+      vial.setAttribute('aria-label', localText(`Probe ${index + 1}`, `Sample ${index + 1}`));
       row.appendChild(vial);
       vials.push(vial);
     }
-    const startBtn = el('button', 'task-tap-btn', '\u25B6 Analyse starten');
+    const startBtn = el('button', 'task-tap-btn', localText('\u25B6 Analyse starten', "▶ Start analysis"));
     body.appendChild(startBtn);
-    const hintNode = hint(body, 'Dr\u00fccke Start, warte auf Ergebnis.');
+    const hintNode = hint(body, localText('Dr\u00fccke Start, warte auf Ergebnis.', "Start the analysis and wait for the result."));
     let timer = null;
 
     startBtn.addEventListener('click', () => {
       startBtn.disabled = true;
       let remaining = 8;
-      hintNode.update(`Scan l\u00e4uft\u2026 ${remaining}s`);
+      hintNode.update(localText(`Scan l\u00e4uft\u2026 ${remaining}s`, `Scanning… ${remaining}s`));
       timer = setInterval(() => {
         remaining -= 1;
         if (remaining > 0) {
-          hintNode.update(`Scan l\u00e4uft\u2026 ${remaining}s`);
+          hintNode.update(localText(`Scan l\u00e4uft\u2026 ${remaining}s`, `Scanning… ${remaining}s`));
           return;
         }
         clearInterval(timer);
         timer = null;
         vials[anomaly].classList.add('anomaly');
-        vials[anomaly].setAttribute('aria-label', `Probe ${anomaly + 1}: Anomalie`);
+        vials[anomaly].setAttribute('aria-label', localText(`Probe ${anomaly + 1}: Anomalie`, `Sample ${anomaly + 1}: anomaly`));
         vials.forEach((vial) => { vial.disabled = false; });
-        hintNode.update(`Anomalie in Probe ${anomaly + 1}. Wähle die markierte Probe.`);
+        hintNode.update(localText(`Anomalie in Probe ${anomaly + 1}. Wähle die markierte Probe.`, `Anomaly in sample ${anomaly + 1}. Select the highlighted sample.`));
       }, 1000);
     });
     for (const [index, vial] of vials.entries()) {
       vial.addEventListener('click', () => {
         if (index !== anomaly) {
-          hintNode.error(`Wähle die markierte Probe ${anomaly + 1}.`);
+          hintNode.error(localText(`Wähle die markierte Probe ${anomaly + 1}.`, `Select the highlighted sample ${anomaly + 1}.`));
           return;
         }
         vials.forEach((entry) => { entry.disabled = true; });
-        hintNode.update('Anomalie bestätigt ✓');
+        hintNode.update(localText('Anomalie bestätigt ✓', "Anomaly confirmed ✓"));
         shell.delay(finish, 240);
       });
     }
@@ -1088,11 +1089,11 @@ import { avatar, buttonArt, icon } from './ui.js';
     const progress = progressBar(body, '#4ade80');
     let remaining = 12;
     let timer = null;
-    const hintNode = hint(body, `Scan l\u00e4uft\u2026 ${remaining}s`);
+    const hintNode = hint(body, localText(`Scan l\u00e4uft\u2026 ${remaining}s`, `Scanning… ${remaining}s`));
     timer = setInterval(() => {
       remaining -= 1;
       progress.set((12 - remaining) / 12);
-      hintNode.update(`Scan l\u00e4uft\u2026 ${remaining}s`);
+      hintNode.update(localText(`Scan l\u00e4uft\u2026 ${remaining}s`, `Scanning… ${remaining}s`));
       if (remaining <= 0) {
         clearInterval(timer);
         shell.delay(finish, 200);
@@ -1112,11 +1113,11 @@ import { avatar, buttonArt, icon } from './ui.js';
       shell, finish, setHint, {
         seconds: 6,
         label: (task.stageIndex ?? 0) === 0 && task.stages?.length > 1
-          ? 'Gedrückt halten zum Herunterladen' : 'Gedrückt halten zum Hochladen',
+          ? localText('Gedrückt halten zum Herunterladen', "Hold to download") : localText('Gedrückt halten zum Hochladen', "Hold to upload"),
       },
     ),
     fuel_engines: (shell, finish, setHint) => mountHoldToFill(
-      shell, finish, setHint, { seconds: 5, label: 'Gedrückt halten zum Tanken', color: '#facc15', sound: 'fuel' },
+      shell, finish, setHint, { seconds: 5, label: localText('Gedrückt halten zum Tanken', "Hold to refuel"), color: '#facc15', sound: 'fuel' },
     ),
     calibrate_distributor: mountCalibrateDistributor,
     start_reactor: mountStartReactor,
@@ -1136,30 +1137,29 @@ import { avatar, buttonArt, icon } from './ui.js';
   };
 
   const TASK_INSTRUCTIONS = {
-    fix_wiring: 'Zieh jedes Kabel links zum Anschluss mit demselben Symbol rechts.',
-    inspect_sample: 'Starte die Analyse und wähle danach die markierte Probe.',
-    calibrate_distributor: 'Tippe auf „Kalibrieren“, sobald der weiße Punkt die farbige Markierung erreicht.',
-    start_reactor: 'Merke dir die aufleuchtenden Felder und tippe sie in derselben Reihenfolge an.',
-    chart_course: 'Zieh das Schiff nacheinander durch alle Punkte der gestrichelten Route.',
-    clean_o2_filter: 'Zieh alle sechs Blätter in den Sammelschacht am unteren Rand.',
-    empty_garbage: 'Zieh den Hebel bis zum unteren Anschlag.',
-    divert_power: 'Wähle mit dem Regler den angezeigten Zielraum und bestätige.',
-    align_engine: 'Zieh den blauen Zeiger auf die waagerechte Markierung.',
-    stabilize_steering: 'Zieh das blaue Fadenkreuz in die Mitte des gestrichelten Rings.',
-    clear_asteroids: 'Tippe auf zwölf Asteroiden, bevor sie aus dem Feld fliegen.',
-    prime_shields: 'Tippe alle markierten Felder an, um sie zu aktivieren.',
-    submit_scan: 'Warte hier, bis der Scan abgeschlossen ist.',
-    unlock_manifolds: 'Tippe die Zahlen in der Reihenfolge 1 bis 10 an.',
-    enter_id_code: 'Gib den fünfstelligen Code von der Karte ein und tippe auf ✓.',
-    reset_breakers: 'Tippe die Sicherungen in der Reihenfolge 1 bis 7 an.',
+    fix_wiring: ["Zieh jedes Kabel links zum Anschluss mit demselben Symbol rechts.","Drag each wire on the left to the matching symbol on the right."],
+    inspect_sample: ["Starte die Analyse und wähle danach die markierte Probe.","Start the analysis, then select the highlighted sample."],
+    calibrate_distributor: ["Tippe auf „Kalibrieren“, sobald der weiße Punkt die farbige Markierung erreicht.","Tap “Calibrate” when the white dot reaches the colored marker."],
+    start_reactor: ["Merke dir die aufleuchtenden Felder und tippe sie in derselben Reihenfolge an.","Remember the flashing tiles, then tap them in the same order."],
+    chart_course: ["Zieh das Schiff nacheinander durch alle Punkte der gestrichelten Route.","Drag the ship through each point on the dashed route in order."],
+    clean_o2_filter: ["Zieh alle sechs Blätter in den Sammelschacht am unteren Rand.","Drag all six leaves into the waste chute at the bottom."],
+    empty_garbage: ["Zieh den Hebel bis zum unteren Anschlag.","Pull the lever all the way down."],
+    divert_power: ["Wähle mit dem Regler den angezeigten Zielraum und bestätige.","Use the slider to select the target room, then confirm."],
+    align_engine: ["Zieh den blauen Zeiger auf die waagerechte Markierung.","Drag the blue pointer onto the horizontal mark."],
+    stabilize_steering: ["Zieh das blaue Fadenkreuz in die Mitte des gestrichelten Rings.","Drag the blue crosshair into the center of the dashed ring."],
+    clear_asteroids: ["Tippe auf zwölf Asteroiden, bevor sie aus dem Feld fliegen.","Tap twelve asteroids before they leave the field."],
+    prime_shields: ["Tippe alle markierten Felder an, um sie zu aktivieren.","Tap every highlighted tile to activate it."],
+    submit_scan: ["Warte hier, bis der Scan abgeschlossen ist.","Wait here until the scan is complete."],
+    unlock_manifolds: ["Tippe die Zahlen in der Reihenfolge 1 bis 10 an.","Tap the numbers in order from 1 to 10."],
+    enter_id_code: ["Gib den fünfstelligen Code von der Karte ein und tippe auf ✓.","Enter the five-digit code from the card and tap ✓."],
+    reset_breakers: ["Tippe die Sicherungen in der Reihenfolge 1 bis 7 an.","Tap the breakers in order from 1 to 7."],
   };
 
   // ------------------------------------------------------------------- API //
 
   function launch(task, onComplete) {
     current?.close();
-    const title = task.stageLabels?.[task.stageIndex ?? 0]
-      ?? (task.type === 'swipe_card' ? 'Crew-Ausweis durchziehen' : task.title ?? 'Aufgabe');
+    const title = taskStageLabel(task.stageLabels?.[task.stageIndex ?? 0]) ?? taskTitle(task);
     const shell = openShell(title, () => {
       if (current === session) current = null;
     });
@@ -1172,14 +1172,14 @@ import { avatar, buttonArt, icon } from './ui.js';
     };
     const builder = GAME_BUILDERS[task.type];
     if (!builder) {
-      hint(shell.body, 'Bestätige den Kontrollpunkt, um die Aufgabe abzuschließen.');
-      const okBtn = el('button', 'task-tap-btn', 'Kontrollpunkt bestätigen');
+      hint(shell.body, localText('Bestätige den Kontrollpunkt, um die Aufgabe abzuschließen.', "Confirm the checkpoint to finish the task."));
+      const okBtn = el('button', 'task-tap-btn', localText('Kontrollpunkt bestätigen', "Confirm checkpoint"));
       okBtn.addEventListener('click', finish);
       shell.body.appendChild(okBtn);
       return shell;
     }
     const instructions = TASK_INSTRUCTIONS[task.type];
-    if (instructions) shell.body.appendChild(el('p', 'task-instructions', instructions));
+    if (instructions) shell.body.appendChild(el('p', 'task-instructions', localText(...instructions)));
     let feedback;
     builder(shell, finish, (message) => {
       feedback ??= hint(shell.body, '');

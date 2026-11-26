@@ -282,13 +282,13 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
     // alle physisch in der Cafeteria sind — erst dann startet das Reveal.
     socket.on('game:meeting_confirm', (payload) => {
       try {
-        const { code } = payload ?? {};
+        const { code, meetingId } = payload ?? {};
         assertSocketInRoom(socket, code);
-        assertHost(socket, code);
-        const room = roomStore.getRequiredRoom(code);
-        if (room.meeting) room.meeting.confirmed = true; // v19.15.1: Reconnect-Schutz
-        io.to(code).emit('game:meeting_confirmed', { code });
-        if (room.meeting) io.to(code).emit('room:updated', roomStore.toPublicRoom(room));
+        const room = roomStore.confirmMeeting(code, socket.data.playerId, meetingId);
+        if (!room) return;
+        io.to(code).emit('game:meeting_confirmed', { code, meetingId: room.meetingId, discussionDeadline: room.discussionDeadline });
+        io.to(code).emit('room:updated', room);
+        armNextMeetingTimer(code);
       } catch (error) {
         emitRoomError(socket, error);
       }
@@ -409,7 +409,6 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
           discussionDeadline: result.discussionDeadline,
         });
 
-        armNextMeetingTimer(code);
       } catch (error) {
         emitRoomError(socket, error);
       }
@@ -479,7 +478,6 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
           discussionDeadline: result.discussionDeadline,
           emergency: true,
         });
-        armNextMeetingTimer(code);
       } catch (error) {
         emitRoomError(socket, error);
       }
@@ -919,6 +917,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
       room.meeting.phase === 'DISCUSSION'
         ? Date.parse(room.meeting.discussionEndsAt)
         : Date.parse(room.meeting.votingEndsAt);
+    if (!Number.isFinite(target)) return;
 
     const delay = Math.max(0, target - now);
     const timer = setTimeout(() => {

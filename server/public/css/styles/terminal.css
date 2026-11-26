@@ -292,7 +292,7 @@
   }
   .vote-countdown { color: var(--timer-ink); background: var(--timer-bg); }
   .skip-vote-btn { color: var(--meeting-ink); background: var(--meeting-bg); border: var(--line-1) solid var(--panel-border-dim); padding: var(--space-1) var(--space-3); }
-  .vote-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vote-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--size-9rem)), 1fr)); }
   .vote-grid .vote-card {
     position: relative; display: grid; flex-wrap: unset; grid-template-columns: minmax(0, 1fr) auto;
     min-height: var(--touch-target); gap: var(--space-1); padding: var(--space-1);
@@ -308,6 +308,12 @@
   .vote-card__pick:disabled { opacity: 1; }
   .vote-card .crew-avatar, .vote-results-item .crew-avatar { width: var(--avatar-s); height: var(--avatar-s); }
   .vote-card .vote-name { color: var(--meeting-ink); }
+  .vote-card .vote-name, .vote-results-item .target {
+    min-width: 0; white-space: normal; overflow-wrap: anywhere;
+  }
+  .vote-card .vote-impostor-partner, .vote-results-item .vote-impostor-partner {
+    color: var(--tone-7f1d1d); font-weight: 800;
+  }
   .vote-card .vote-megaphone { color: var(--timer-ink); width: var(--space-4); }
   .vote-card .voted-chip {
     position: static; width: var(--ui-art-badge-size); height: var(--ui-art-badge-size);

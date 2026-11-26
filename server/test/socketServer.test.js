@@ -655,7 +655,7 @@ describe('socket flow security & gameplay', () => {
       assert.equal(meeting.status, 'MEETING');
       assert.equal(meeting.phase, 'DISCUSSION');
       assert.equal(meeting.reporterId, 'player-2');
-      assert.ok(typeof meeting.discussionDeadline === 'string');
+      assert.equal(meeting.discussionDeadline, null);
 
       // Votes during DISCUSSION are rejected:
       const earlyVote = waitForEvent(host, 'room:error');
@@ -663,9 +663,20 @@ describe('socket flow security & gameplay', () => {
       const earlyError = await earlyVote;
       assert.equal(earlyError.code, 'VOTING_NOT_OPEN');
 
-      // After the discussion the server opens voting automatically:
+      assert.equal(await waitForNoEvent(player, 'game:voting_started', 350), false);
+      const waiting = roomStore.toPublicRoom(roomStore.getRequiredRoom(code));
+      assert.equal(waiting.meetingConfirmed, false);
+      assert.equal(waiting.discussionDeadline, undefined);
+      const guestDenied = waitForEvent(player, 'room:error');
+      player.emit('game:meeting_confirm', { code, meetingId: waiting.meetingId });
+      assert.equal((await guestDenied).code, 'NOT_ROOM_HOST');
+
+      // The discussion timer starts only after the host physically verifies arrival.
       const votingOnHost = waitForEvent(host, 'game:voting_started');
       const votingOnPlayer = waitForEvent(player, 'game:voting_started');
+      const confirmedOnHost = waitForEvent(host, 'game:meeting_confirmed');
+      host.emit('game:meeting_confirm', { code, meetingId: waiting.meetingId });
+      assert.ok(typeof (await confirmedOnHost).discussionDeadline === 'string');
       const [votingHost] = await Promise.all([votingOnHost, votingOnPlayer]);
       assert.ok(typeof votingHost.votingDeadline === 'string');
 
@@ -764,7 +775,9 @@ describe('socket flow security & gameplay', () => {
       // In the short-timer server everything routes through its own store.
       plantCorpseNear(shortStore, code, 'host-1');
       placeOnStreet(shortStore, code, 'player-2');
+      const awaitingHost = waitForRoomWhere(host, ({ status }) => status === 'MEETING');
       player.emit('game:report', { code });
+      host.emit('game:meeting_confirm', { code, meetingId: (await awaitingHost).meetingId });
       const [votingStarted] = await Promise.all([
         waitForEvent(host, 'game:voting_started', 9000),
         waitForEvent(player, 'game:voting_started', 9000),
@@ -1164,11 +1177,9 @@ test('Divo-Meeting-Intro: only the host confirms the cafeteria check', async () 
   const { host, player, code } = await createRoomWithTwoPlayers();
 
   try {
-    // Host double-tap confirmation arrives as a broadcast for everyone.
-    const confirmSeen = waitForEvent(player, 'game:meeting_confirmed');
+    const noMeeting = waitForEvent(host, 'room:error');
     host.emit('game:meeting_confirm', { code });
-    const confirmed = await confirmSeen;
-    assert.equal(confirmed.code, code);
+    assert.equal((await noMeeting).code, 'NOT_IN_MEETING');
 
     // Guests cannot self-confirm (the REAL anti-cheat: nobody fakes
     // "alle sind da" without the admin).

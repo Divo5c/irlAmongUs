@@ -20,15 +20,15 @@
       <h1>Real Life<br><span class="accent">Among Us</span></h1>
     </div>
     <div class="card">
-      <label for="player-name">Dein Name <output class="name-count" id="name-count" for="player-name">0 / 20</output></label>
-      <input id="player-name" maxlength="20" autocomplete="off" placeholder="z. B. Divo">
-      <label for="join-code">Lobby-Code</label>
+      <label for="player-name"><span data-i18n="home.name">Dein Name</span> <output class="name-count" id="name-count" for="player-name">0 / 20</output></label>
+      <input id="player-name" maxlength="20" autocomplete="off" placeholder="z. B. Divo" data-i18n-ph="home.nameExample">
+      <label for="join-code" data-i18n="home.code">Lobby-Code</label>
       <div class="code-field">
         <input id="join-code" class="join-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false">
         <div class="code-field__tiles" aria-hidden="true"><span>–</span><span>–</span><span>–</span><span>–</span><span>–</span><span>–</span></div>
       </div>
-      <button id="btn-join" class="primary big">Lobby beitreten</button>
-      <button id="btn-host" class="secondary big" hidden>Lobby erstellen</button>
+      <button id="btn-join" class="primary big" data-i18n="home.join">Lobby beitreten</button>
+      <button id="btn-host" class="secondary big" hidden data-i18n="home.host">Lobby erstellen</button>
       <p id="home-error" class="error hidden" role="alert"></p>
     </div>
       </section>
@@ -37,105 +37,105 @@
   <section id="screen-lobby" class="screen screen-lobby">
         <div class="topbar">
       <span class="room-code" id="lobby-code">&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;</span>
-      <button class="ghost small" id="btn-share">Code kopieren</button>
-      <button id="btn-lobby-settings" class="gear-btn" aria-label="Haupt-Einstellungen"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
+      <button class="ghost small" id="btn-share" data-i18n="home.copyCode">Code kopieren</button>
+      <button id="btn-lobby-settings" class="gear-btn" aria-label="Haupt-Einstellungen" data-i18n-aria="settings.title"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
     </div>
     <h2>Lobby</h2>
     <ul id="lobby-players" class="player-list"></ul>
   <div class="card hidden" id="lobby-rules">
     <button id="btn-rules-toggle" class="rules-toggle" aria-expanded="false">
-      <span>Spiel-Einstellungen</span>
+      <span data-i18n="lobby.rules">Spieleinstellungen</span>
       <span class="rules-chevron">&#9662;</span>
     </button>
     <div class="rules-body collapsed rules-body" id="rules-body">
     <div class="rules-panels">
       <div class="rules-group">
-        <div class="rules-tab">spieler &amp; impostoren</div>
+        <div class="rules-tab" data-i18n="lobby.players">Spieler und Impostoren</div>
         <div class="settings-grid">
-          <label># Impostoren
+          <label><span data-i18n="lobby.impostorCount">Anzahl der Impostoren</span>
             <select id="cfg-impostors"><option>1</option><option>2</option><option>3</option></select>
           </label>
         </div>
       </div>
       <div class="rules-group">
-        <div class="rules-tab">impostoren</div>
+        <div class="rules-tab" data-i18n="lobby.impostors">Impostoren</div>
         <div class="settings-grid">
-          <label>Kill-Cooldown (s)
+          <label><span data-i18n="lobby.cooldown">Wartezeit nach dem Ausschalten (s)</span>
             <select id="cfg-cooldown">
               <option>0</option><option>10</option><option>20</option><option>30</option>
               <option>45</option><option>60</option><option>90</option><option>120</option><option>180</option>
             </select>
           </label>
-          <label>Kill-Distanz (m)
+          <label><span data-i18n="lobby.killRadius">Reichweite zum Ausschalten (m)</span>
             <select id="cfg-kill-radius"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
           </label>
         </div>
       </div>
       <div class="rules-group">
-        <div class="rules-tab">meetings</div>
+        <div class="rules-tab" data-i18n="lobby.meetings">Meetings</div>
         <div class="settings-grid">
-          <label>Notfall-Meetings / Spieler
+          <label><span data-i18n="lobby.emergency">Notfallmeetings pro Spieler</span>
             <select id="cfg-emergency"><option>0</option><option>1</option><option>2</option><option>3</option></select>
           </label>
-          <label>Diskussion (s)
+          <label><span data-i18n="lobby.discussion">Diskussion (s)</span>
             <select id="cfg-discuss">
               <option>0</option><option>15</option><option>30</option><option>45</option><option>60</option><option>120</option>
             </select>
           </label>
-          <label>Abstimmung (s)
+          <label><span data-i18n="lobby.voting">Abstimmung (s)</span>
             <select id="cfg-vote">
               <option>30</option><option>45</option><option>60</option><option>90</option><option>120</option><option>180</option>
             </select>
           </label>
           <label class="settings-toggle-inline">
-            <span>Anonym abstimmen</span>
+            <span data-i18n="lobby.anonymous">Anonym abstimmen</span>
             <input type="checkbox" id="cfg-anonymous">
           </label>
           <label class="settings-toggle-inline">
-            <span>Rauswurf best&auml;tigen</span>
+            <span data-i18n="lobby.confirm">Rolle beim Rauswurf enthüllen</span>
             <input type="checkbox" id="cfg-confirm">
           </label>
         </div>
       </div>
       <div class="rules-group">
-        <div class="rules-tab">aufgaben</div>
+        <div class="rules-tab" data-i18n="lobby.tasks">Aufgaben</div>
         <div class="settings-grid">
-          <label>Aufgaben pro Crewmate
+          <label><span data-i18n="lobby.taskCount">Aufgaben pro Crewmitglied</span>
             <select id="cfg-tasks"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select>
           </label>
-          <label>Aufgabenreichweite (m)
+          <label><span data-i18n="lobby.taskRadius">Aufgabenreichweite (m)</span>
             <select id="cfg-taskradius"><option>5</option><option>8</option><option>12</option><option>15</option><option>20</option></select>
           </label>
           <label class="settings-toggle-inline">
-            <span>Aufgabenbalken immer sichtbar</span>
+            <span data-i18n="lobby.taskbar">Aufgabenbalken immer sichtbar</span>
             <input type="checkbox" id="cfg-taskbar" checked>
           </label>
         </div>
       </div>
       <div class="rules-group">
-        <div class="rules-tab">real life</div>
+        <div class="rules-tab" data-i18n="lobby.field">Spielfeld</div>
         <div class="settings-grid">
-          <label>Raus-Lauf-Abstand (m)
+          <label><span data-i18n="lobby.boundary">Abstand bis zur Spielfeldwarnung (m)</span>
             <select id="cfg-boundary"><option>2</option><option>4</option><option>5</option><option>10</option><option>15</option><option>20</option><option>30</option></select>
           </label>
         </div>
       </div>
     </div>
-    <p class="hint" id="rules-hint">Jede &Auml;nderung speichert sich sofort selbst.</p>
+    <p class="hint" id="rules-hint" data-i18n="lobby.autosave">Änderungen werden automatisch gespeichert.</p>
     </div>
   </div>
 
   <div class="card" id="host-controls">
     <div class="bot-row">
-      <button id="btn-bot-add" class="secondary">&plus; Bot hinzuf&uuml;gen</button>
-      <button id="btn-bot-remove" class="ghost">&minus; Bot entfernen</button>
+      <button id="btn-bot-add" class="secondary" data-i18n="lobby.addBot">+ Bot hinzufügen</button>
+      <button id="btn-bot-remove" class="ghost" data-i18n="lobby.removeBot">− Bot entfernen</button>
     </div>
     <button id="btn-load-cached-lobby" class="secondary big hidden"></button>
-    <button id="btn-edit-map" class="primary big">Karte bearbeiten / neue Stra&szlig;en laden</button>
-    <button id="btn-start-game" class="primary big btn-start-game button-art ui-art--start">Spiel starten</button>
+    <button id="btn-edit-map" class="primary big" data-i18n="map.edit">Karte bearbeiten / neue Straßen laden</button>
+    <button id="btn-start-game" class="primary big btn-start-game button-art ui-art--start" data-i18n="lobby.start">Spiel starten</button>
   </div>
-    <p id="lobby-waiting" class="hint">Warte auf den Host.</p>
-    <button class="ghost button-art ui-art--quit" id="btn-leave">Lobby verlassen</button>
+    <p id="lobby-waiting" class="hint" data-i18n="lobby.waitHost">Warte auf den Host.</p>
+    <button class="ghost button-art ui-art--quit" id="btn-leave" data-i18n="lobby.leave">Lobby verlassen</button>
   </section>
 
   <!-- ============================ MAP EDITOR ============================ -->
@@ -151,12 +151,12 @@
         <option value="500">500 m Radius</option>
         <option value="800">800 m Radius</option>
       </select>
-      <button id="btn-load-streets" class="secondary">Stra&szlig;en laden</button>
+      <button id="btn-load-streets" class="secondary" data-i18n="map.loadStreets">Straßen laden</button>
       <button id="btn-load-cached" class="ghost"></button>
-      <button id="btn-room-mode" class="secondary">Raum zeichnen</button>
-      <button id="btn-room-undo" class="ghost">&#8630; Punkt zur&uuml;ck</button>
+      <button id="btn-room-mode" class="secondary" data-i18n="map.drawRoom">Raum zeichnen</button>
+      <button id="btn-room-undo" class="ghost" data-i18n="map.undoPoint">↶ Punkt zurück</button>
       <div id="room-type-picker" class="hidden">
-        <p class="hint">1)&nbsp;Typ antippen (= Name) &rarr; 2)&nbsp;Punkte tippen &rarr; 3)&nbsp;ersten Punkt ANtippen = fertig &amp; speichert.</p>
+        <p class="hint" data-i18n="map.drawHelp">Wähle einen Raumtyp, setze die Eckpunkte und tippe zum Speichern erneut auf den ersten Punkt.</p>
         <div class="room-type-grid" id="room-type-grid">
           <button data-room-type="CAFETERIA">Cafeteria</button>
           <button data-room-type="MEDBAY">Medbay</button>
@@ -169,7 +169,7 @@
           <button data-room-type="WEAPONS">Weapons</button>
         </div>
       </div>
-      <button id="btn-map-settings" class="gear-btn" aria-label="Haupt-Einstellungen"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
+      <button id="btn-map-settings" class="gear-btn" aria-label="Haupt-Einstellungen" data-i18n-aria="settings.title"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
     </div>
     <div class="map-frame">
       <canvas class="map-canvas" id="map-canvas"></canvas>
@@ -179,28 +179,28 @@
       </div>
       <div id="map-spinner" class="spinner hidden"></div>
     </div>
-    <p class="hint" id="map-hint">Tippe eine Stra&szlig;e an, um sie auszuw&auml;hlen. Mehrere Stra&szlig;en = gr&ouml;&szlig;eres Spielfeld.</p>
+    <p class="hint" id="map-hint" data-i18n="map.pickStreet">Tippe eine Straße an, um sie auszuwählen.</p>
     <div class="editor-actions">
-      <button id="btn-build-streets" class="secondary big">Ausgew&auml;hlte &uuml;bernehmen</button>
-      <button id="btn-map-calib" class="secondary big"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Kalibrieren</button>
-      <button id="btn-map-save" class="primary big">Karte speichern</button>
+      <button id="btn-build-streets" class="secondary big" data-i18n="map.useSelection">Auswahl übernehmen</button>
+      <button id="btn-map-calib" class="secondary big"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> <span data-i18n="map.calibrate">Kalibrieren</span></button>
+      <button id="btn-map-save" class="primary big" data-i18n="map.save">Karte speichern</button>
     </div>
-    <p class="legal" id="osm-attribution">Stra&szlig;endaten &copy; OpenStreetMap-Mitwirkende</p>
-    <button class="ghost danger" id="btn-map-clear">Karte komplett entleeren</button>
+    <p class="legal" id="osm-attribution" data-i18n="map.attribution">Straßendaten © OpenStreetMap-Mitwirkende</p>
+    <button class="ghost danger" id="btn-map-clear" data-i18n="map.clear">Karte leeren</button>
   </section>
 
   <!-- ============================== GAME ================================ -->
   <section id="screen-game" class="screen screen-game">
     <div class="topbar">
       <span class="hint game-phase-hint" id="game-phase-hint"></span>
-      <button id="btn-map-zoom" class="gear-btn" aria-label="Karten-Zoom"><span class="ui-art ui-art--map" aria-hidden="true"></span></button>
-      <button id="btn-abort" class="gear-btn hidden btn-abort" aria-label="Runde abbrechen"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#flag"></use></svg></button>
-      <button id="btn-settings" class="gear-btn btn-settings" aria-label="Haupt-Einstellungen"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
+      <button id="btn-map-zoom" class="gear-btn" aria-label="Karten-Zoom" data-i18n-aria="settings.zoom"><span class="ui-art ui-art--map" aria-hidden="true"></span></button>
+      <button id="btn-abort" class="gear-btn hidden btn-abort" aria-label="Runde abbrechen" data-i18n-aria="settings.abort"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#flag"></use></svg></button>
+      <button id="btn-settings" class="gear-btn btn-settings" aria-label="Haupt-Einstellungen" data-i18n-aria="settings.title"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
     </div>
-    <div class="task-progress-strip" id="task-progress-strip" role="progressbar" aria-label="Teamaufgaben" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <div class="task-progress-strip" id="task-progress-strip" role="progressbar" aria-label="Teamaufgaben" data-i18n-aria="game.teamTasks" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
       <div class="task-progress-fill" id="task-progress-fill"></div>
       <div class="task-progress-strip-label" id="task-progress-strip-label">
-        <span id="task-label-text">Teamaufgaben</span>
+        <span id="task-label-text" data-i18n="game.teamTasks">Teamaufgaben</span>
         <span class="task-label-count" id="task-label-count">0/0</span>
       </div>
     </div>
@@ -208,7 +208,7 @@
       <div id="role-card" class="role-card crew">
         <div class="role-card-title" id="role-card-title">CREWMATE</div>
         <div class="role-card-detail" id="role-card-detail"></div>
-        <button id="role-continue" class="role-continue primary button-art ui-art--proceed">Weiter</button>
+        <button id="role-continue" class="role-continue primary button-art ui-art--proceed" data-i18n="btn.continue">Weiter</button>
       </div>
     </div>
     <!-- Under-Sie-Moment (Among Us): NUR für das Opfer selbst sichtbar,
@@ -222,7 +222,7 @@
         <div class="kill-bean victim"><span></span></div>
         <div class="kill-bean killer"><span></span></div>
       </div>
-      <div class="kill-text pixel-title">GEKILLT</div>
+      <div class="kill-text pixel-title" data-i18n="game.eliminated">AUSGESCHIEDEN</div>
     </div>
     <div id="role-banner" class="role-crew hidden role-banner">DU BIST CREWMATE</div>
     <div id="teammates" class="hint hidden"></div>
@@ -230,7 +230,7 @@
     <div class="sabotage-banner-line" id="sabotage-banner-line"><div id="sabotage-banner" class="hidden sabotage-banner"></div></div>
     <div class="live-map-wrap" id="live-map-wrap">
       <canvas class="game-map" id="game-map"></canvas>
-      <div id="boundary-banner" class="hidden boundary-banner">Geh zur&uuml;ck ins Spielfeld!</div>
+      <div id="boundary-banner" class="hidden boundary-banner" data-i18n="map.back">Geh zurück ins Spielfeld!</div>
     </div>
     <div class="game-dock">
       <details class="taskbox" id="taskbox">
@@ -263,11 +263,11 @@
       <div class="emergency-tablet">
         <div class="emergency-stripes"></div>
         <p id="emergency-status" class="emergency-status emergency-status"></p>
-        <button id="btn-emergency" class="emergency-dome" aria-label="Notfall-Meeting">
+        <button id="btn-emergency" class="emergency-dome" aria-label="Notfall-Meeting" data-i18n-aria="meeting.title">
           <span class="emergency-cap"></span>
           <span class="emergency-face" data-i18n="btn.emergency">NOTFALL</span>
         </button>
-        <button id="btn-emergency-close" class="secondary btn-emergency-close">Schlie&szlig;en</button>
+        <button id="btn-emergency-close" class="secondary btn-emergency-close" data-i18n="btn.close">Schließen</button>
       </div>
     </div>
     <!-- Among-Us-Admin-Tisch (Divo 4.11): Use im ADMIN-Raum öffnet die
@@ -276,7 +276,7 @@
       <div class="admin-tablet">
         <div class="admin-tablet-head">
           <span class="pixel-title" id="admin-table-title">ADMIN</span>
-          <button id="btn-admin-table-close" class="secondary">Schlie&szlig;en</button>
+          <button id="btn-admin-table-close" class="secondary" data-i18n="btn.close">Schließen</button>
         </div>
         <canvas class="admin-table-canvas" id="admin-table-canvas"></canvas>
         <p class="admin-table-status" id="admin-table-status"></p>
@@ -287,7 +287,7 @@
         <div class="vote-tablet-head">
           <h3 id="meeting-title" class="pixel-title">Who Is The Impostor?</h3>
           <div id="vote-countdown" class="vote-countdown vote-countdown"></div>
-          <button type="button" id="btn-skipvote" class="skip-vote-btn hidden button-art ui-art--skip-vote">Überspringen</button>
+          <button type="button" id="btn-skipvote" class="skip-vote-btn hidden button-art ui-art--skip-vote" data-i18n="meeting.skip">Überspringen</button>
         </div>
         <svg class="meeting-table" viewBox="0 0 160 32" aria-hidden="true"><ellipse cx="80" cy="16" rx="77" ry="13" fill="currentColor"/><ellipse cx="80" cy="13" rx="68" ry="8" fill="none" stroke="white" stroke-opacity=".65"/></svg>
         <p id="meeting-hint" class="hint meeting-hint"></p>
@@ -310,7 +310,7 @@
     <!-- v19.16: Voting Results (Among Us Stil) - 4.5s nach dem Abstimmen -->
     <div id="vote-results-overlay" class="vote-results-overlay hidden vote-results-overlay" role="dialog">
       <div class="vote-results-card">
-        <h3 id="vote-results-title" class="pixel-title vote-results-title">Stimmenauszählung</h3>
+        <h3 id="vote-results-title" class="pixel-title vote-results-title" data-i18n="meeting.results.title">Stimmenauszählung</h3>
         <ul id="vote-results-list" class="vote-results-list vote-results-list"></ul>
         <div id="vote-results-proceeding" class="vote-results-proceeding vote-results-proceeding"></div>
       </div>
@@ -320,17 +320,17 @@
         <h3 class="gameover-title" id="gameover-title">Spiel vorbei</h3>
         <p id="gameover-detail" class="hint"></p>
         <ul id="gameover-roster" class="gameover-roster player-list"></ul>
-        <button id="btn-rematch" class="primary big hidden button-art ui-art--play-again">Zurück zur Lobby</button>
-        <button id="btn-gameover-lobby" class="secondary big hidden">Zurück zur Lobby</button>
+        <button id="btn-rematch" class="primary big hidden button-art ui-art--play-again" data-i18n="btn.backLobby">Zurück zur Lobby</button>
+        <button id="btn-gameover-lobby" class="secondary big hidden" data-i18n="btn.backLobby">Zurück zur Lobby</button>
       </div>
     </div>
   </section>
 
-    <div id="settings-menu" class="task-overlay task-overlay--sheet hidden" role="dialog" aria-label="Einstellungen">
+    <div id="settings-menu" class="task-overlay task-overlay--sheet hidden" role="dialog" aria-label="Einstellungen" data-i18n-aria="settings.title">
       <div class="task-card settings-card">
         <div class="task-head">
           <div class="task-title" data-i18n="settings.title">Haupt-Einstellungen</div>
-          <button id="btn-settings-close" class="task-close" aria-label="Schließen"><span class="ui-art ui-art--close" aria-hidden="true"></span></button>
+          <button id="btn-settings-close" class="task-close" aria-label="Schließen" data-i18n-aria="btn.close"><span class="ui-art ui-art--close" aria-hidden="true"></span></button>
         </div>
         <div class="settings-body">
           <label class="settings-toggle">
@@ -338,7 +338,7 @@
             <span data-i18n="settings.sound">Sound &amp; Klingeltöne</span>
           </label>
           <label class="settings-toggle settings-slider">
-            <span>Lautstärke</span>
+            <span data-i18n="settings.volume">Lautstärke</span>
             <input type="range" id="opt-sfx-vol" min="0" max="100" value="80">
           </label>
           <label class="settings-toggle">
@@ -356,16 +356,16 @@
               <option value="en">English</option>
             </select>
           </label>
-          <button id="btn-set-anchor" class="primary big hidden"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Karte kalibrieren</button>
-          <p class="hint hidden" id="anchor-hint">Kalibriere ein Mal: 2 klare Punkte (z. B. Stra&#223;enecken) abgehen, die App merkt sich das f&#252;r immer.</p>
+          <button id="btn-set-anchor" class="primary big hidden"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> <span data-i18n="map.calibrateMap">Karte kalibrieren</span></button>
+          <p class="hint hidden" id="anchor-hint" data-i18n="map.anchorHint">Gehe zur Kalibrierung zwei markante Punkte ab. Die Karte speichert sie.</p>
           <button id="btn-leave-from-menu" class="danger-big button-art ui-art--quit" data-i18n="btn.leave">Verlassen</button>
           <p class="hint" id="settings-note" data-i18n="settings.note">Verlassen beendet die Verbindung. Die Lobby läuft weiter.</p>
           <div id="dev-errorbox" class="hidden">
-            <div class="task-title">Fehler-Log</div>
+            <div class="task-title" data-i18n="settings.errorLog">Fehlerprotokoll</div>
             <textarea id="error-log-box" class="error-log-box" readonly rows="7"></textarea>
             <div class="bot-row">
-              <button id="btn-error-copy" class="secondary">Kopieren</button>
-              <button id="btn-error-clear" class="ghost">Leeren</button>
+              <button id="btn-error-copy" class="secondary" data-i18n="settings.copy">Kopieren</button>
+              <button id="btn-error-clear" class="ghost" data-i18n="settings.clear">Leeren</button>
             </div>
           </div>
         </div>
@@ -375,41 +375,41 @@
     <div id="calib-overlay" class="task-overlay hidden" role="dialog">
       <div class="task-card settings-card">
         <div class="task-head">
-          <div class="task-title"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Setz-Punkt kalibrieren</div>
-          <button id="btn-calib-close" class="task-close" aria-label="Schließen"><span class="ui-art ui-art--close" aria-hidden="true"></span></button>
+          <div class="task-title"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> <span data-i18n="map.calibrateAnchor">GPS-Bezugspunkt kalibrieren</span></div>
+          <button id="btn-calib-close" class="task-close" aria-label="Schließen" data-i18n-aria="btn.close"><span class="ui-art ui-art--close" aria-hidden="true"></span></button>
         </div>
-        <p class="hint">1) Stell dich &#252;berall da hin (z.B. Cafeteria), wo du GENAU jenen Ort auf der Karte antippst. 2) W&#228;hle den Raum auf der Mini-Karte. 3) &quot;Ich stehe hier&quot;.</p>
+        <p class="hint" data-i18n="map.anchorHelp">Stell dich an einen bekannten Ort, tippe ihn auf der Karte an und wähle „Ich stehe hier“.</p>
         <canvas class="calib-map" id="calib-map"></canvas>
-        <div id="calib-status" class="hint">Kein GPS-Signal — geh raus.</div>
-        <button id="btn-calib-here" class="primary big" disabled>Ich stehe hier</button>
+        <div id="calib-status" class="hint" data-i18n="gps.waiting">Warte auf GPS-Signal …</div>
+        <button id="btn-calib-here" class="primary big" disabled data-i18n="map.standHere">Ich stehe hier</button>
       </div>
     </div>
     <div id="cal2-overlay" class="task-overlay hidden" role="dialog">
       <div class="task-card settings-card">
         <div class="task-head">
-          <div class="task-title"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> Karte kalibrieren</div>
-          <button id="btn-cal2-close" class="task-close" aria-label="Schließen"><span class="ui-art ui-art--close" aria-hidden="true"></span></button>
+          <div class="task-title"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#pin"></use></svg> <span data-i18n="map.calibrateMap">Karte kalibrieren</span></div>
+          <button id="btn-cal2-close" class="task-close" aria-label="Schließen" data-i18n-aria="btn.close"><span class="ui-art ui-art--close" aria-hidden="true"></span></button>
         </div>
-        <p class="hint" id="cal2-steps">Gehe zu 2 klaren Punkten (z. B. Stra&#223;enecken, weit auseinander). Einmal machen — f&#252;r immer gespeichert.</p>
+        <p class="hint" id="cal2-steps" data-i18n="map.anchorHint">Gehe zur Kalibrierung zwei markante Punkte ab. Die Karte speichert sie.</p>
         <canvas id="cal2-map" class="cal2-canvas cal2-map"></canvas>
-        <div id="cal2-status" class="hint">Punkt A: geh zur ersten Ecke.</div>
-        <button id="btn-cal2-sample" class="primary big" disabled>GPS-Punkt erfassen</button>
+        <div id="cal2-status" class="hint" data-i18n="map.firstPoint">Gehe zum ersten Punkt.</div>
+        <button id="btn-cal2-sample" class="primary big" disabled data-i18n="map.capturePoint">GPS-Punkt erfassen</button>
       </div>
     </div>
     <div id="rejoin-overlay" class="task-overlay hidden" role="dialog">
       <div class="task-card settings-card">
         <div class="task-head">
-          <div class="task-title" id="rejoin-title">Runde gefunden</div>
+          <div class="task-title" id="rejoin-title" data-i18n="home.roundFound">Runde gefunden</div>
         </div>
         <p class="hint" id="rejoin-text"></p>
-        <button id="btn-rejoin-yes" class="primary big">Wieder beitreten</button>
-        <button id="btn-rejoin-no" class="ghost">Nicht jetzt</button>
+        <button id="btn-rejoin-yes" class="primary big" data-i18n="home.rejoin">Wieder beitreten</button>
+        <button id="btn-rejoin-no" class="ghost" data-i18n="home.notNow">Nicht jetzt</button>
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.17.10"></script>
-  <script src="/js/mapEditor.js?v=19.17.10"></script>
-  <script type="module" src="/js/tasks.js?v=19.17.10"></script>
-  <script type="module" src="/js/app.js?v=19.17.10"></script>
+  <script src="/js/osm.js?v=19.17.11"></script>
+  <script src="/js/mapEditor.js?v=19.17.11"></script>
+  <script type="module" src="/js/tasks.js?v=19.17.11"></script>
+  <script type="module" src="/js/app.js?v=19.17.11"></script>
 </body>
 </html>

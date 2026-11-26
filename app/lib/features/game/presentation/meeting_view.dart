@@ -21,6 +21,10 @@ class MeetingView extends StatefulWidget {
     this.totalVoters = 0,
     this.canVote = false,
     this.result,
+    this.awaitingHost = false,
+    this.arrivedCount = 0,
+    this.onConfirmArrival,
+    this.impostorPartnerIds = const {},
     super.key,
   });
 
@@ -35,6 +39,10 @@ class MeetingView extends StatefulWidget {
   final int? votingDeadlineMs;
   final int votedCount;
   final int totalVoters;
+  final bool awaitingHost;
+  final int arrivedCount;
+  final VoidCallback? onConfirmArrival;
+  final Set<String> impostorPartnerIds;
 
   /// Whether the local player may vote (alive and in the room).
   final bool canVote;
@@ -192,7 +200,9 @@ class _MeetingViewState extends State<MeetingView> {
                 Icon(
                   result != null
                       ? Icons.gavel_rounded
-                      : (_inDiscussion
+                      : (widget.awaitingHost
+                          ? Icons.place_outlined
+                          : _inDiscussion
                           ? Icons.forum_rounded
                           : Icons.how_to_vote_rounded),
                   size: 64,
@@ -202,7 +212,9 @@ class _MeetingViewState extends State<MeetingView> {
                 Text(
                   result != null
                       ? 'Meeting Result'
-                      : (_inDiscussion ? 'Discussion' : 'Voting'),
+                      : (widget.awaitingHost
+                          ? 'Meet in the Cafeteria'
+                          : _inDiscussion ? 'Discussion' : 'Voting'),
                   textAlign: TextAlign.center,
                   style: textTheme.headlineSmall,
                 ),
@@ -251,6 +263,47 @@ class _MeetingViewState extends State<MeetingView> {
                     onPressed: widget.onContinue,
                     child: const Text('Continue'),
                   ),
+                ] else if (widget.awaitingHost) ...[
+                  Text(
+                    'Go to the Cafeteria. Discussion starts after the host confirms arrival.',
+                    textAlign: TextAlign.center,
+                    style: textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${widget.arrivedCount} / ${widget.totalVoters} in the Cafeteria by GPS',
+                    textAlign: TextAlign.center,
+                  ),
+                  if (widget.onConfirmArrival != null) ...[
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () async {
+                        final approved = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Everyone in the Cafeteria?'),
+                            content: const Text(
+                              'Check in person that all living players have arrived.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Start discussion'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (approved == true && mounted && widget.awaitingHost) {
+                          widget.onConfirmArrival?.call();
+                        }
+                      },
+                      child: const Text('Check arrivals'),
+                    ),
+                  ],
                 ] else if (_inDiscussion) ...[
                   Text(
                     _countdownText(_discussionDeadline),
@@ -297,7 +350,15 @@ class _MeetingViewState extends State<MeetingView> {
                           leading: const CircleAvatar(
                             child: Icon(Icons.person_outline, size: 20),
                           ),
-                          title: Text(_nameOf(player)),
+                          title: Text(
+                            _nameOf(player),
+                            style: widget.impostorPartnerIds.contains(player['id'])
+                                ? const TextStyle(
+                                    color: Color(0xFFB91C1C),
+                                    fontWeight: FontWeight.bold,
+                                  )
+                                : null,
+                          ),
                           trailing: IconButton(
                             key: Key('vote-button-${player['id']}'),
                             tooltip: 'Vote for ${_nameOf(player)}',

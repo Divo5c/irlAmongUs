@@ -188,6 +188,9 @@ class FakeRoomSocketClient implements RoomSocketClient {
   }
 
   @override
+  void confirmMeeting({required String code, String? meetingId}) {}
+
+  @override
   void castVote({required String code, String? targetId, bool skip = false}) {
     castVotes.add(skip ? 'skip' : targetId!);
   }
