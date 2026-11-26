@@ -35,7 +35,7 @@ import { avatar, buttonArt, icon } from './ui.js';
   }
 
   /** Shared overlay shell: header + body; returns controller. */
-  function openShell(titleText) {
+  function openShell(titleText, onClose) {
     const overlay = document.createElement('div');
     overlay.className = 'task-overlay task-overlay--game';
     overlay.setAttribute('role', 'dialog');
@@ -56,15 +56,18 @@ import { avatar, buttonArt, icon } from './ui.js';
     closeBtn.focus({ preventScroll: true });
     let closed = false;
     const cleanupFns = [];
+    const timeouts = new Set();
     function close() {
       if (closed) return;
       closed = true;
+      onClose();
+      timeouts.forEach(clearTimeout);
+      timeouts.clear();
       for (const fn of cleanupFns.splice(0)) {
         try { fn(); } catch { /* keep closing */ }
       }
       overlay.remove();
       if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
-      if (current) current = null;
     }
     closeBtn.addEventListener('click', () => {
       window.RlausSfx?.('panel_close', 0.7);
@@ -80,7 +83,13 @@ import { avatar, buttonArt, icon } from './ui.js';
       body,
       cleanup: (fn) => cleanupFns.push(fn),
       close,
-      setTitle: (text) => { title.textContent = text; },
+      delay(fn, ms) {
+        const timer = setTimeout(() => {
+          timeouts.delete(timer);
+          if (!closed) fn();
+        }, ms);
+        timeouts.add(timer);
+      },
     };
   }
 
@@ -101,15 +110,16 @@ import { avatar, buttonArt, icon } from './ui.js';
 
   function hint(container, text) {
     const node = el('div', 'task-hint', text);
+    node.setAttribute('role', 'status');
     container.appendChild(node);
     return {
-      update: (t) => { node.textContent = t; },
+      update: (t) => {
+        node.classList.remove('bad');
+        node.textContent = t;
+      },
       error: (t) => {
         node.textContent = t;
-        node.style.color = '#ef4444';
-        setTimeout(() => {
-          node.style.color = '';
-        }, 900);
+        node.classList.add('bad');
       },
     };
   }
@@ -192,6 +202,7 @@ import { avatar, buttonArt, icon } from './ui.js';
     }
     for (const [, node] of leftEnds) {
       on(node, 'pointerdown', (event) => {
+        if (dragFrom || node.classList.contains('used') || !event.isPrimary) return;
         event.preventDefault();
         dragFrom = node.dataset.wire;
         node.setPointerCapture(event.pointerId);
@@ -219,9 +230,14 @@ import { avatar, buttonArt, icon } from './ui.js';
           S(WIRE_LINK_SOUNDS[Math.floor(Math.random() * WIRE_LINK_SOUNDS.length)], 0.8);
           if (connected === 4) {
             board.classList.add('task-done-flash');
-            setTimeout(finish, 320);
+            shell.delay(finish, 320);
           }
         }
+      });
+      on(node, 'lostpointercapture', () => {
+        if (dragFrom !== node.dataset.wire) return;
+        dragFrom = null;
+        line.style.display = 'none';
       });
     }
     shell.cleanup(() => {
@@ -232,68 +248,102 @@ import { avatar, buttonArt, icon } from './ui.js';
 
   // ------------------------------------------------------------ swipe card //
 
-  function mountSwipeCard(shell, finish, setHint) {
+  function mountSwipeCard(shell, finish) {
     const { body } = shell;
     const track = el('div', 'swipe-track');
-    const cardSlot = el('div', 'swipe-slot');
-    const card = el('div', 'swipe-card', '\u2261 ID CARD');
-    const reader = el('div', 'swipe-reader');
-    track.append(reader, cardSlot);
-    cardSlot.appendChild(card);
-    body.appendChild(track);
-    const progress = progressBar(body, '#4ade80');
+    const reader = el('div', 'swipe-reader', 'Ziel');
+    const card = el('button', 'swipe-card');
+    card.type = 'button';
+    card.setAttribute('aria-label', 'Crew-Ausweis. Leertaste etwa eine Sekunde halten und loslassen.');
+    card.append(avatar('cyan'), el('span', '', 'Crew-Ausweis'));
+    const directions = el('div', 'swipe-directions');
+    directions.append(el('span', '', 'Start'), el('span', '', 'Wischrichtung →'), el('span', '', 'Leser'));
+    track.append(reader, card);
+    body.append(directions, track);
+    const progress = progressBar(body, 'var(--signal-ok)');
+    const status = hint(body, 'Zieh den Ausweis gleichmäßig nach rechts bis zum Leser.');
+    let attempt = null;
 
-    let startX = 0;
-    let startTime = 0;
-    let dragging = false;
-    let currentX = 0;
+    function begin(pointerId, x = 0) {
+      if (attempt || card.disabled) return false;
+      attempt = { pointerId, x, startedAt: performance.now() };
+      status.update('Bis zum Leser durchziehen, dann loslassen.');
+      S('card_move', 0.7);
+      return true;
+    }
+
+    function move(fraction) {
+      const distance = Math.max(0, track.clientWidth - card.offsetWidth);
+      card.style.transform = `translateX(${fraction * distance}px)`;
+      progress.set(fraction);
+    }
+
+    function fractionAt(clientX) {
+      const distance = track.clientWidth - card.offsetWidth;
+      if (distance <= 0) return 0;
+      const scale = track.getBoundingClientRect().width / track.offsetWidth;
+      return Math.max(0, Math.min(1, (clientX - attempt.x) / scale / distance));
+    }
+
+    function cancel(message) {
+      attempt = null;
+      move(0);
+      status.error(message);
+    }
+
+    function release(fraction) {
+      const elapsed = performance.now() - attempt.startedAt;
+      const error = fraction < 0.94 ? 'Zu kurz. Zieh die Karte bis zum Leser am rechten Rand.'
+        : elapsed < 300 ? 'Zu schnell. Wische beim nächsten Versuch etwas langsamer.'
+        : elapsed > 2200 ? 'Zu langsam. Zieh die Karte in einer gleichmäßigen Bewegung durch.'
+        : null;
+      if (error) {
+        S('card_deny', 0.9);
+        cancel(error);
+        return;
+      }
+      attempt = null;
+      move(1);
+      card.disabled = true;
+      card.classList.add('accepted');
+      status.update('Ausweis akzeptiert ✓');
+      S('card_accept');
+      shell.delay(finish, 320);
+    }
 
     card.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || !begin(event.pointerId, event.clientX)) return;
       event.preventDefault();
       card.setPointerCapture(event.pointerId);
-      S('card_move', 0.7);
-      startX = event.clientX;
-      currentX = 0;
-      startTime = Date.now();
-      dragging = true;
     });
     card.addEventListener('pointermove', (event) => {
-      if (!dragging) return;
-      currentX = Math.max(0, Math.min(260, event.clientX - startX));
-      card.style.transform = `translateX(${currentX}px)`;
-      progress.set(currentX / 260);
+      if (attempt?.pointerId === event.pointerId) move(fractionAt(event.clientX));
     });
-    card.addEventListener('pointerup', () => {
-      if (!dragging) return;
-      dragging = false;
-      const dt = Date.now() - startTime;
-      if (currentX >= 250) {
-        if (dt < 350) {
-          S('card_deny', 0.9);
-          setHint?.('Zu schnell! Karte zur\u00fcck.');
-        } else if (dt > 2200) {
-          S('card_deny', 0.9);
-          setHint?.('Zu langsam! Karte zur\u00fcck.');
-        } else {
-          S('card_accept');
-          card.classList.add('accepted');
-          setTimeout(finish, 320);
-          return;
-        }
-      } else if (currentX > 40) {
-        setHint?.('Abgebrochen \u2014 zieh bis ganz zum Ende.');
-      }
-      card.style.transform = 'translateX(0)';
-      progress.set(0);
-      void card.offsetWidth;
-      card.classList.remove('accepted');
+    card.addEventListener('pointerup', (event) => {
+      if (attempt?.pointerId === event.pointerId) release(fractionAt(event.clientX));
+    });
+    card.addEventListener('lostpointercapture', (event) => {
+      if (attempt?.pointerId === event.pointerId) cancel('Wischversuch unterbrochen. Versuch es noch einmal.');
+    });
+    card.addEventListener('keydown', (event) => {
+      if (event.code !== 'Space') return;
+      event.preventDefault();
+      if (!event.repeat && begin('keyboard')) status.update('Leertaste nach etwa einer Sekunde loslassen.');
+    });
+    card.addEventListener('keyup', (event) => {
+      if (event.code !== 'Space') return;
+      event.preventDefault();
+      if (attempt?.pointerId === 'keyboard') release(1);
+    });
+    card.addEventListener('blur', () => {
+      if (attempt?.pointerId === 'keyboard') cancel('Wischversuch unterbrochen. Versuch es noch einmal.');
     });
   }
 
   // ------------------------------------------------------------ upload data //
 
   function mountHoldToFill(shell, finish, setHint, {
-    seconds = 6, label = 'HALTEN', color = '#4ade80', cancelable = true, sound = null,
+    seconds = 6, label = 'Halten', color = '#4ade80', sound = null,
   } = {}) {
     const { body } = shell;
     const button = el('button', 'task-hold-btn', label);
@@ -307,16 +357,14 @@ import { avatar, buttonArt, icon } from './ui.js';
       clearInterval(timer);
       timer = null;
       button.classList.remove('holding');
-      if (cancel && cancelable) {
+      if (cancel) {
         fraction = 0;
         progress.set(0);
         setHint?.('Abgebrochen \u2014 halte durch!');
       }
     }
-    button.addEventListener('pointerdown', (event) => {
-      event.preventDefault();
-      button.setPointerCapture(event.pointerId);
-      if (timer) return;
+    function start() {
+      if (timer || button.disabled) return;
       if (sound) S(sound, 0.7);
       button.classList.add('holding');
       timer = setInterval(() => {
@@ -324,12 +372,29 @@ import { avatar, buttonArt, icon } from './ui.js';
         progress.set(fraction);
         if (fraction >= 1) {
           stop(false);
-          setTimeout(finish, 200);
+          button.disabled = true;
+          shell.delay(finish, 200);
         }
       }, 60);
+    }
+    button.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || !event.isPrimary) return;
+      event.preventDefault();
+      button.setPointerCapture(event.pointerId);
+      start();
     });
     button.addEventListener('pointerup', () => stop(true));
-    button.addEventListener('pointercancel', () => stop(true));
+    button.addEventListener('lostpointercapture', () => stop(true));
+    button.addEventListener('keydown', (event) => {
+      if (event.code === 'Space') {
+        event.preventDefault();
+        if (!event.repeat) start();
+      }
+    });
+    button.addEventListener('keyup', (event) => {
+      if (event.code === 'Space') stop(true);
+    });
+    button.addEventListener('blur', () => stop(true));
     shell.cleanup(() => {
       clearInterval(timer);
     });
@@ -340,14 +405,12 @@ import { avatar, buttonArt, icon } from './ui.js';
   function mountCalibrateDistributor(shell, finish, setHint) {
     const { body } = shell;
     const colors = ['#facc15', '#3b82f6', '#22d3ee'];
-    const names = ['Gelb', 'Blau', 'Cyan'];
     const field = el('div', 'calibrate-field');
     body.appendChild(field);
     const progress = progressBar(body, '#22d3ee');
 
     let round = 0;
     let angle = 0;
-    let rotor = null;
     const RINGS = [];
 
     for (let index = 0; index < 3; index += 1) {
@@ -355,13 +418,15 @@ import { avatar, buttonArt, icon } from './ui.js';
       ring.style.borderColor = colors[index];
       const arc = el('div', 'calibrate-arc');
       arc.style.background = colors[index];
+      placeMarker(arc, 280);
       ring.appendChild(arc);
       const dot = el('div', 'calibrate-dot');
       ring.appendChild(dot);
       field.appendChild(ring);
       RINGS.push({ ring, arc, dot });
     }
-    const pressBtn = el('button', 'task-tap-btn', 'CALIBRATE');
+    RINGS[0].ring.classList.add('active');
+    const pressBtn = el('button', 'task-tap-btn', 'Kalibrieren');
     body.appendChild(pressBtn);
 
     let active = true;
@@ -377,24 +442,32 @@ import { avatar, buttonArt, icon } from './ui.js';
       const z = zone();
       return angle >= z.from && angle <= z.to;
     }
+    function placeMarker(node, degrees) {
+      const radians = degrees * Math.PI / 180;
+      node.style.left = `${50 + Math.sin(radians) * 45}%`;
+      node.style.top = `${50 - Math.cos(radians) * 45}%`;
+    }
     function rotorNode() {
-      for (const { dot } of RINGS) {
-        dot.style.transform = `rotate(${angle}deg) translateY(-46px)`;
-      }
+      if (active) placeMarker(RINGS[round].dot, angle);
     }
     pressBtn.addEventListener('click', () => {
       if (!active) return;
+      const { ring } = RINGS[round];
       if (inZone()) {
-        RINGS[round].ring.classList.add('ok');
+        ring.classList.add('ok');
+        ring.classList.remove('active', 'miss');
         round += 1;
         progress.set(round / 3);
         if (round >= 3) {
           active = false;
-          setTimeout(finish, 260);
+          shell.delay(finish, 260);
+        } else {
+          RINGS[round].ring.classList.add('active');
+          rotorNode();
         }
       } else {
-        RINGS[round].ring.classList.add('miss');
-        setTimeout(() => RINGS[round].ring.classList.remove('miss'), 400);
+        ring.classList.add('miss');
+        shell.delay(() => ring.classList.remove('miss'), 400);
         setHint?.('Verfehlt \u2014 Ring ' + (round + 1) + ' nochmal!');
       }
     });
@@ -431,12 +504,12 @@ import { avatar, buttonArt, icon } from './ui.js';
       const pool = shuffle([...Array(9).keys()]);
       for (let i = 0; i < ROUND_LENGTHS[round]; i += 1) sequence.push(pool[i]);
       sequence.forEach((cellIndex, step) => {
-        setTimeout(() => {
+        shell.delay(() => {
           cells[cellIndex].classList.add('lit');
-          setTimeout(() => cells[cellIndex].classList.remove('lit'), 350);
+          shell.delay(() => cells[cellIndex].classList.remove('lit'), 350);
         }, step * 500);
       });
-      setTimeout(() => {
+      shell.delay(() => {
         showing = false;
       }, sequence.length * 500);
     }
@@ -445,29 +518,29 @@ import { avatar, buttonArt, icon } from './ui.js';
         if (showing) return;
         if (cellIndex === sequence[inputIndex]) {
           cell.classList.add('ok');
-          setTimeout(() => cell.classList.remove('ok'), 250);
+          shell.delay(() => cell.classList.remove('ok'), 250);
           inputIndex += 1;
           if (inputIndex >= sequence.length) {
             round += 1;
             progress.set(round / ROUND_LENGTHS.length);
             if (round >= ROUND_LENGTHS.length) {
-              setTimeout(finish, 260);
+              showing = true;
+              shell.delay(finish, 260);
               return;
             }
             showing = true;
             setHint?.('Runde ' + (round + 1) + ' von 3');
-            setTimeout(playSequence, 700);
+            shell.delay(playSequence, 700);
           }
         } else {
           cell.classList.add('wrong');
-          setTimeout(() => cell.classList.remove('wrong'), 350);
+          shell.delay(() => cell.classList.remove('wrong'), 350);
           showing = true;
           setHint?.('Falsch! Nochmal\u2026');
-          setTimeout(playSequence, 600);
+          shell.delay(playSequence, 600);
         }
       });
     });
-    shell.cleanup(() => {});
     setHint?.('Runde 1 von 3');
     playSequence();
   }
@@ -489,7 +562,7 @@ import { avatar, buttonArt, icon } from './ui.js';
       node.addEventListener('click', () => {
         if (Number(node.dataset.number) !== expected) {
           field.classList.add('task-error-flash');
-          setTimeout(() => field.classList.remove('task-error-flash'), 400);
+          shell.delay(() => field.classList.remove('task-error-flash'), 400);
           expected = 1;
           for (const [, node2] of nodes) node2.classList.remove('ok');
           setHint?.('Falsche Reihenfolge \u2014 ab 1 neu!');
@@ -497,7 +570,7 @@ import { avatar, buttonArt, icon } from './ui.js';
         }
         node.classList.add('ok');
         expected += 1;
-        if (expected > 10) setTimeout(finish, 280);
+        if (expected > 10) shell.delay(finish, 280);
       });
     }
   }
@@ -524,11 +597,11 @@ import { avatar, buttonArt, icon } from './ui.js';
         } else if (key === '\u2713') {
           if (typed === code) {
             display.style.color = '#4ade80';
-            setTimeout(finish, 280);
+            shell.delay(finish, 280);
             return;
           }
           display.classList.add('bad');
-          setTimeout(() => display.classList.remove('bad'), 500);
+          shell.delay(() => display.classList.remove('bad'), 500);
           typed = '';
           setHint?.('Falscher Code \u2014 nochmal!');
         } else if (typed.length < 5) {
@@ -557,14 +630,17 @@ import { avatar, buttonArt, icon } from './ui.js';
         S('breaker', 0.7);
         if (number !== expected) {
           expected = 1;
-          for (const sw of switches) sw.classList.remove('ok');
+          switches.forEach((sw, i) => {
+            sw.classList.remove('ok');
+            sw.textContent = String(i + 1);
+          });
           setHint?.('Falsch \u2014 ab Sicherung 1 neu!');
           return;
         }
         node.classList.add('ok');
         node.textContent = '\u21CA';
         expected += 1;
-        if (expected > 7) setTimeout(finish, 280);
+        if (expected > 7) shell.delay(finish, 280);
       });
     }
   }
@@ -576,71 +652,67 @@ import { avatar, buttonArt, icon } from './ui.js';
     const field = el('div', 'chart-field');
     body.appendChild(field);
     const ship = el('div', 'chart-ship', '\u25B6');
-    const w = field.clientWidth || field.offsetWidth || 300;
-    const h = field.clientHeight || 220;    const points = [];
-    const COLS = 5;
-    for (let col = 0; col < COLS; col += 1) {
-      const offset = col % 2 === 0 ? 0.25 : 0.75;
-      points.push({
-        x: (w - 30) * (col / (COLS - 1)) + 15,
-        y: h * offset,
-      });
+    const points = Array.from({ length: 5 }, (_, i) => ({
+      x: 8 + i * 21, y: i % 2 === 0 ? 25 : 75,
+    }));
+    function place(node, point) {
+      node.style.left = `${point.x}%`;
+      node.style.top = `${point.y}%`;
     }
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('class', 'chart-line');
-    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    svg.setAttribute('viewBox', '0 0 100 100');
+    svg.setAttribute('preserveAspectRatio', 'none');
     const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     polyline.setAttribute('points', points.map((p) => `${p.x},${p.y}`).join(' '));
     polyline.setAttribute('fill', 'none');
     polyline.setAttribute('stroke', 'rgba(255,255,255,0.35)');
     polyline.setAttribute('stroke-width', '3');
     polyline.setAttribute('stroke-dasharray', '7 5');
+    polyline.setAttribute('vector-effect', 'non-scaling-stroke');
     svg.appendChild(polyline);
     field.appendChild(svg);
-    points.forEach((p) => {
+    const dots = points.map((p) => {
       const dot = el('div', 'chart-dot');
-      dot.style.left = `${p.x - 4}px`;
-      dot.style.top = `${p.y - 4}px`;
+      place(dot, p);
       field.appendChild(dot);
+      return dot;
     });
-    ship.style.left = `${points[0].x - 10}px`;
-    ship.style.top = `${points[0].y - 10}px`;
+    place(ship, points[0]);
     field.appendChild(ship);
 
     let waypoint = 1;
-    let dragging = false;
+    let pointerId = null;
     ship.addEventListener('pointerdown', (event) => {
+      if (pointerId !== null || waypoint === points.length || event.button !== 0) return;
       event.preventDefault();
       ship.setPointerCapture(event.pointerId);
-      dragging = true;
+      pointerId = event.pointerId;
     });
     ship.addEventListener('pointermove', (event) => {
-      if (!dragging) return;
+      if (pointerId !== event.pointerId) return;
       const rect = field.getBoundingClientRect();
-      const x = Math.max(0, Math.min(w - 20, event.clientX - rect.left - 10));
-      const y = Math.max(0, Math.min(h - 20, event.clientY - rect.top - 10));
-      ship.style.left = `${x}px`;
-      ship.style.top = `${y}px`;
+      const x = Math.max(5, Math.min(95, (event.clientX - rect.left) / rect.width * 100));
+      const y = Math.max(10, Math.min(90, (event.clientY - rect.top) / rect.height * 100));
+      place(ship, { x, y });
       const target = points[waypoint];
-      if (target && Math.hypot(target.x - x, target.y - y) < 16) {
+      const dx = (target.x - x) / 100 * rect.width;
+      const dy = (target.y - y) / 100 * rect.height;
+      if (Math.hypot(dx, dy) < 18) {
+        dots[waypoint].classList.add('visited');
         waypoint += 1;
         if (waypoint >= points.length) {
-          dragging = false;
+          pointerId = null;
+          place(ship, target);
           ship.classList.add('ok');
-          setTimeout(finish, 280);
+          shell.delay(finish, 280);
         }
       }
     });
-    ship.addEventListener('pointerup', () => {
-      dragging = false;
-      // Snap back if lost its way:
-      const x = parseFloat(ship.style.left) || 0;
-      const y = parseFloat(ship.style.top) || 0;
-      const anchor = points[Math.max(0, waypoint - 1)];
-      if (Math.hypot(anchor.x - x, anchor.y - y) > 40) {
-        ship.style.left = `${anchor.x - 10}px`;
-        ship.style.top = `${anchor.y - 10}px`;
-      }
+    ship.addEventListener('lostpointercapture', (event) => {
+      if (pointerId !== event.pointerId) return;
+      pointerId = null;
+      place(ship, points[waypoint - 1]);
     });
   }
 
@@ -649,40 +721,55 @@ import { avatar, buttonArt, icon } from './ui.js';
   function mountCleanO2Filter(shell, finish) {
     const { body } = shell;
     const field = el('div', 'o2field');
-    const hole = el('div', 'o2-hole', '\u2B07 FEINSTAUB-ABFALL');
-    body.append(field, hole);
+    const hole = el('div', 'o2-hole', '↓ Sammelschacht');
+    field.appendChild(hole);
+    body.appendChild(field);
     let swept = 0;
     for (let index = 0; index < 6; index += 1) {
       const leaf = el('div', 'o2-leaf');
       leaf.append(icon('leaf'));
-      leaf.style.left = `${10 + (index % 3) * 32}%`;
-      leaf.style.top = `${10 + Math.floor(index / 3) * 40}%`;
+      const startX = `${18 + (index % 3) * 32}%`;
+      const startY = `${19 + Math.floor(index / 3) * 30}%`;
+      leaf.style.left = startX;
+      leaf.style.top = startY;
       field.appendChild(leaf);
-      let dragging = false;
+      let pointerId = null;
+      function reset() {
+        pointerId = null;
+        leaf.style.left = startX;
+        leaf.style.top = startY;
+        leaf.classList.remove('dragging');
+      }
       leaf.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0 || pointerId !== null) return;
         event.preventDefault();
         leaf.setPointerCapture(event.pointerId);
         S('o2_grab', 0.6);
-        dragging = true;
+        pointerId = event.pointerId;
+        leaf.classList.add('dragging');
       });
       leaf.addEventListener('pointermove', (event) => {
-        if (!dragging) return;
+        if (pointerId !== event.pointerId) return;
         const rect = field.getBoundingClientRect();
-        leaf.style.left = `${event.clientX - rect.left - 14}px`;
-        leaf.style.top = `${event.clientY - rect.top - 14}px`;
+        leaf.style.left = `${(event.clientX - rect.left) / rect.width * 100}%`;
+        leaf.style.top = `${(event.clientY - rect.top) / rect.height * 100}%`;
       });
       leaf.addEventListener('pointerup', (event) => {
-        if (!dragging) return;
-        dragging = false;
+        if (pointerId !== event.pointerId) return;
         const holeRect = hole.getBoundingClientRect();
-        if (event.clientY >= holeRect.top - 20) {
+        reset();
+        if (event.clientX >= holeRect.left && event.clientX <= holeRect.right
+          && event.clientY >= holeRect.top && event.clientY <= holeRect.bottom) {
           S('o2_drop', 0.8);
-          leaf.style.display = 'none';
+          leaf.remove();
           hole.classList.add('flash');
-          setTimeout(() => hole.classList.remove('flash'), 240);
+          shell.delay(() => hole.classList.remove('flash'), 240);
           swept += 1;
-          if (swept === 6) setTimeout(finish, 250);
+          if (swept === 6) shell.delay(finish, 250);
         }
+      });
+      leaf.addEventListener('lostpointercapture', (event) => {
+        if (pointerId === event.pointerId) reset();
       });
     }
   }
@@ -695,26 +782,40 @@ import { avatar, buttonArt, icon } from './ui.js';
     const lever = el('div', 'lever', '\u2193');
     leverWrap.appendChild(lever);
     body.appendChild(leverWrap);
-    let startY = null;
-    let pulled = 0;
+    let drag = null;
+    function progressAt(clientY) {
+      const travel = leverWrap.clientHeight - lever.offsetHeight;
+      if (travel <= 0) return 0;
+      const scale = leverWrap.getBoundingClientRect().height / leverWrap.offsetHeight;
+      return Math.max(0, Math.min(1, (clientY - drag.y) / scale / travel));
+    }
+    function move(fraction) {
+      lever.style.transform = `translateY(${fraction * (leverWrap.clientHeight - lever.offsetHeight)}px)`;
+    }
     lever.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || drag || lever.classList.contains('ok')) return;
       event.preventDefault();
       lever.setPointerCapture(event.pointerId);
-      startY = event.clientY;
+      drag = { id: event.pointerId, y: event.clientY };
     });
     lever.addEventListener('pointermove', (event) => {
-      if (startY == null) return;
-      pulled = Math.max(0, Math.min(120, event.clientY - startY));
-      lever.style.transform = `translateY(${pulled}px)`;
+      if (drag?.id === event.pointerId) move(progressAt(event.clientY));
     });
-    lever.addEventListener('pointerup', () => {
-      if (pulled >= 110) {
+    lever.addEventListener('pointerup', (event) => {
+      if (drag?.id !== event.pointerId) return;
+      if (progressAt(event.clientY) >= 0.9) {
+        move(1);
         lever.classList.add('ok');
-        setTimeout(finish, 300);
+        shell.delay(finish, 300);
       } else {
-        lever.style.transform = 'translateY(0)';
+        move(0);
       }
-      startY = null;
+      drag = null;
+    });
+    lever.addEventListener('lostpointercapture', (event) => {
+      if (drag?.id !== event.pointerId) return;
+      drag = null;
+      move(0);
     });
   }
 
@@ -748,11 +849,10 @@ import { avatar, buttonArt, icon } from './ui.js';
     body.appendChild(acceptBtn);
     acceptBtn.addEventListener('click', () => {
       if (rooms[Number(slider.value)] !== target) {
-        setHint?.('Falscher Raum \u2014 gesucht: ???');
-        setHint?.(`Das Ziel war ${target}. Nochmal!`);
+        setHint?.(`Falscher Raum. Wähle ${target} und bestätige erneut.`);
         return;
       }
-      setTimeout(finish, 200);
+      shell.delay(finish, 200);
     });
     body.appendChild(el('div', 'task-hint', `Zielraum: ${target}`));
   }
@@ -766,29 +866,36 @@ import { avatar, buttonArt, icon } from './ui.js';
     const needle = el('div', 'engine-needle', '\u25C4');
     gaugeWrap.append(reference, needle);
     body.appendChild(gaugeWrap);
-    let dragging = false;
+    let pointerId = null;
     needle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || pointerId !== null || needle.classList.contains('ok')) return;
       event.preventDefault();
       needle.setPointerCapture(event.pointerId);
-      dragging = true;
+      pointerId = event.pointerId;
     });
     needle.addEventListener('pointermove', (event) => {
-      if (!dragging) return;
+      if (pointerId !== event.pointerId) return;
       const wrapRect = gaugeWrap.getBoundingClientRect();
-      const y = Math.max(0, Math.min(wrapRect.height - 10, event.clientY - wrapRect.top - 5));
-      needle.style.top = `${y}px`;
+      const y = (event.clientY - wrapRect.top) / wrapRect.height * 100;
+      needle.style.top = `${Math.max(15, Math.min(85, y))}%`;
     });
-   needle.addEventListener('pointerup', (event) => {
-      dragging = false;
-      const wrapRect = gaugeWrap.getBoundingClientRect();
+    needle.addEventListener('pointerup', (event) => {
+      if (pointerId !== event.pointerId) return;
+      pointerId = null;
       const refRect = reference.getBoundingClientRect();
       const delta = Math.abs((refRect.top + refRect.height / 2) - (event.clientY));
       if (delta <= 12) {
-        needle.classList.add('ok');
-        setTimeout(finish, 280);
-      } else {
         needle.style.top = '50%';
+        needle.classList.add('ok');
+        shell.delay(finish, 280);
+      } else {
+        needle.style.top = '';
       }
+    });
+    needle.addEventListener('lostpointercapture', (event) => {
+      if (pointerId !== event.pointerId) return;
+      pointerId = null;
+      needle.style.top = '';
     });
   }
 
@@ -801,28 +908,40 @@ import { avatar, buttonArt, icon } from './ui.js';
     const cross = el('div', 'steer-cross', '\u271D');
     field.append(target, cross);
     body.appendChild(field);
-    let dragging = false;
+    let pointerId = null;
+    function reset() {
+      pointerId = null;
+      cross.style.left = '';
+      cross.style.top = '';
+    }
     cross.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || pointerId !== null || cross.classList.contains('ok')) return;
       event.preventDefault();
       cross.setPointerCapture(event.pointerId);
-      dragging = true;
+      pointerId = event.pointerId;
     });
     cross.addEventListener('pointermove', (event) => {
-      if (!dragging) return;
+      if (pointerId !== event.pointerId) return;
       const rect = field.getBoundingClientRect();
-      cross.style.left = `${event.clientX - rect.left - 14}px`;
-      cross.style.top = `${event.clientY - rect.top - 14}px`;
+      cross.style.left = `${(event.clientX - rect.left) / rect.width * 100}%`;
+      cross.style.top = `${(event.clientY - rect.top) / rect.height * 100}%`;
     });
-    cross.addEventListener('pointerup', () => {
-      dragging = false;
+    cross.addEventListener('pointerup', (event) => {
+      if (pointerId !== event.pointerId) return;
+      pointerId = null;
       const cRect = cross.getBoundingClientRect();
       const tRect = target.getBoundingClientRect();
       const dx = (cRect.left + cRect.width / 2) - (tRect.left + tRect.width / 2);
       const dy = (cRect.top + cRect.height / 2) - (tRect.top + tRect.height / 2);
       if (Math.hypot(dx, dy) < 14) {
         cross.classList.add('ok');
-        setTimeout(finish, 260);
+        shell.delay(finish, 260);
+      } else {
+        reset();
       }
+    });
+    cross.addEventListener('lostpointercapture', (event) => {
+      if (pointerId === event.pointerId) reset();
     });
   }
 
@@ -864,7 +983,7 @@ import { avatar, buttonArt, icon } from './ui.js';
         rock.remove();
         hits += 1;
         progress.set(hits / GOAL);
-        if (hits >= GOAL && alive) setTimeout(finish, 200);
+        if (hits >= GOAL && alive) shell.delay(finish, 200);
       });
       shell.cleanup(() => clearInterval(timer));
     }
@@ -880,21 +999,24 @@ import { avatar, buttonArt, icon } from './ui.js';
     const field = el('div', 'shield-grid');
     body.appendChild(field);
     const active = new Set();
-    const cells = [];
     for (let index = 0; index < 7; index += 1) {
       const cell = el('button', 'shield-hex', '');
       if (Math.random() < 0.75 || index < 1) {
         cell.classList.add('lit');
         active.add(index);
       }
+      cell.disabled = !active.has(index);
+      cell.setAttribute('aria-label', `Schild ${index + 1}`);
       field.appendChild(cell);
-      cells.push(cell);
       cell.addEventListener('click', () => {
         if (!cell.classList.contains('lit')) return;
+        cell.classList.remove('lit');
         cell.classList.add('ok');
+        cell.disabled = true;
+        cell.setAttribute('aria-label', `Schild ${index + 1} aktiviert`);
         active.delete(index);
-        if (active.size === 0 && [...cells].every((c) => !c.classList.contains('lit'))) {
-          setTimeout(finish, 280);
+        if (active.size === 0) {
+          shell.delay(finish, 280);
         }
       });
     }
@@ -909,8 +1031,9 @@ import { avatar, buttonArt, icon } from './ui.js';
     const vials = [];
     const anomaly = Math.floor(Math.random() * 5);
     for (let index = 0; index < 5; index += 1) {
-      const vial = el('div', 'sample-vial', '\u2B21');
-      vial.dataset.index = index;
+      const vial = el('button', 'sample-vial', String(index + 1));
+      vial.disabled = true;
+      vial.setAttribute('aria-label', `Probe ${index + 1}`);
       row.appendChild(vial);
       vials.push(vial);
     }
@@ -920,7 +1043,7 @@ import { avatar, buttonArt, icon } from './ui.js';
     let timer = null;
 
     startBtn.addEventListener('click', () => {
-      if (timer) clearInterval(timer);
+      startBtn.disabled = true;
       let remaining = 8;
       hintNode.update(`Scan l\u00e4uft\u2026 ${remaining}s`);
       timer = setInterval(() => {
@@ -932,18 +1055,22 @@ import { avatar, buttonArt, icon } from './ui.js';
         clearInterval(timer);
         timer = null;
         vials[anomaly].classList.add('anomaly');
-        hintNode.update('Anomalie gefunden \u2014 tippe die rote Probe!');
-        vials.forEach((vial) => {
-          vial.addEventListener('click', () => {
-            if (!vial.classList.contains('anomaly')) {
-              hintNode.error('Falsche Probe \u2014 Analyse neu starten.');
-              return;
-            }
-            setTimeout(finish, 240);
-          }, { once: true });
-        });
+        vials[anomaly].setAttribute('aria-label', `Probe ${anomaly + 1}: Anomalie`);
+        vials.forEach((vial) => { vial.disabled = false; });
+        hintNode.update(`Anomalie in Probe ${anomaly + 1}. Wähle die markierte Probe.`);
       }, 1000);
     });
+    for (const [index, vial] of vials.entries()) {
+      vial.addEventListener('click', () => {
+        if (index !== anomaly) {
+          hintNode.error(`Wähle die markierte Probe ${anomaly + 1}.`);
+          return;
+        }
+        vials.forEach((entry) => { entry.disabled = true; });
+        hintNode.update('Anomalie bestätigt ✓');
+        shell.delay(finish, 240);
+      });
+    }
     shell.cleanup(() => {
       clearInterval(timer);
     });
@@ -968,7 +1095,7 @@ import { avatar, buttonArt, icon } from './ui.js';
       hintNode.update(`Scan l\u00e4uft\u2026 ${remaining}s`);
       if (remaining <= 0) {
         clearInterval(timer);
-        setTimeout(finish, 200);
+        shell.delay(finish, 200);
       }
     }, 1000);
     shell.cleanup(() => {
@@ -981,11 +1108,15 @@ import { avatar, buttonArt, icon } from './ui.js';
   const GAME_BUILDERS = {
     fix_wiring: mountWiring,
     swipe_card: mountSwipeCard,
-    upload_data: (shell, finish, setHint) => mountHoldToFill(
-      shell, finish, setHint, { seconds: 6, label: '\u2B06 HALTEN \u2014 UPLOAD', color: '#4ade80' },
+    upload_data: (shell, finish, setHint, task) => mountHoldToFill(
+      shell, finish, setHint, {
+        seconds: 6,
+        label: (task.stageIndex ?? 0) === 0 && task.stages?.length > 1
+          ? 'Gedrückt halten zum Herunterladen' : 'Gedrückt halten zum Hochladen',
+      },
     ),
     fuel_engines: (shell, finish, setHint) => mountHoldToFill(
-      shell, finish, setHint, { seconds: 5, label: '\u26FD HALTEN \u2014 TANKEN', color: '#facc15', sound: 'fuel' },
+      shell, finish, setHint, { seconds: 5, label: 'Gedrückt halten zum Tanken', color: '#facc15', sound: 'fuel' },
     ),
     calibrate_distributor: mountCalibrateDistributor,
     start_reactor: mountStartReactor,
@@ -1004,54 +1135,56 @@ import { avatar, buttonArt, icon } from './ui.js';
     submit_scan: mountSubmitScan,
   };
 
+  const TASK_INSTRUCTIONS = {
+    fix_wiring: 'Zieh jedes Kabel links zum Anschluss mit demselben Symbol rechts.',
+    inspect_sample: 'Starte die Analyse und wähle danach die markierte Probe.',
+    calibrate_distributor: 'Tippe auf „Kalibrieren“, sobald der weiße Punkt die farbige Markierung erreicht.',
+    start_reactor: 'Merke dir die aufleuchtenden Felder und tippe sie in derselben Reihenfolge an.',
+    chart_course: 'Zieh das Schiff nacheinander durch alle Punkte der gestrichelten Route.',
+    clean_o2_filter: 'Zieh alle sechs Blätter in den Sammelschacht am unteren Rand.',
+    empty_garbage: 'Zieh den Hebel bis zum unteren Anschlag.',
+    divert_power: 'Wähle mit dem Regler den angezeigten Zielraum und bestätige.',
+    align_engine: 'Zieh den blauen Zeiger auf die waagerechte Markierung.',
+    stabilize_steering: 'Zieh das blaue Fadenkreuz in die Mitte des gestrichelten Rings.',
+    clear_asteroids: 'Tippe auf zwölf Asteroiden, bevor sie aus dem Feld fliegen.',
+    prime_shields: 'Tippe alle markierten Felder an, um sie zu aktivieren.',
+    submit_scan: 'Warte hier, bis der Scan abgeschlossen ist.',
+    unlock_manifolds: 'Tippe die Zahlen in der Reihenfolge 1 bis 10 an.',
+    enter_id_code: 'Gib den fünfstelligen Code von der Karte ein und tippe auf ✓.',
+    reset_breakers: 'Tippe die Sicherungen in der Reihenfolge 1 bis 7 an.',
+  };
+
   // ------------------------------------------------------------------- API //
 
   function launch(task, onComplete) {
-    if (current) current.close();
+    current?.close();
+    const title = task.stageLabels?.[task.stageIndex ?? 0]
+      ?? (task.type === 'swipe_card' ? 'Crew-Ausweis durchziehen' : task.title ?? 'Aufgabe');
+    const shell = openShell(title, () => {
+      if (current === session) current = null;
+    });
+    const session = { close: shell.close };
+    current = session;
     const finish = () => {
-      const cleanup = current;
-      current = null;
-      cleanup?.close();
+      if (current !== session) return;
+      session.close();
       if (typeof onComplete === 'function') onComplete(task);
     };
-    const shell = openShell(task.title ?? 'Minigame');
-    const setHintFn = (text) => {
-      let node = shell.body.querySelector('.task-hint:last-child');
-      if (!node || node._mode === 'done') {
-        node = hint(shell.body, text);
-        node._mode = 'hint';
-        return;
-      }
-      node.textContent = text;
-    };
-    let hintNodeRef = null;
-    const hintFn = Object.assign((text) => {
-      if (!hintNodeRef || hintNodeRef.dataset.dead === '1') {
-        hintNodeRef = hint(shell.body, text);
-        return hintNodeRef;
-      }
-      hintNodeRef.update(text);
-      return hintNodeRef;
-    }, {
-      error(text) {
-        if (!hintNodeRef || hintNodeRef.dataset.dead === '1') {
-          hintNodeRef = hint(shell.body, text);
-        } else {
-          hintNodeRef.error(text);
-        }
-      },
-    });
-    current = { task, close: shell.close };
     const builder = GAME_BUILDERS[task.type];
     if (!builder) {
-      // Unknown type \u2014 instant-close fallback.
-      shell.body.appendChild(hint(shell.body, 'Kein Minigame f\u00fcr diesen Task \u2014 nur \u201cUse\u201d am Ort \u2611'));
-      const okBtn = el('button', 'task-tap-btn', '\u2713 Erledigt');
+      hint(shell.body, 'Bestätige den Kontrollpunkt, um die Aufgabe abzuschließen.');
+      const okBtn = el('button', 'task-tap-btn', 'Kontrollpunkt bestätigen');
       okBtn.addEventListener('click', finish);
       shell.body.appendChild(okBtn);
       return shell;
     }
-    builder(shell, finish, hintFn);
+    const instructions = TASK_INSTRUCTIONS[task.type];
+    if (instructions) shell.body.appendChild(el('p', 'task-instructions', instructions));
+    let feedback;
+    builder(shell, finish, (message) => {
+      feedback ??= hint(shell.body, '');
+      feedback.update(message);
+    }, task);
     return shell;
   }
 

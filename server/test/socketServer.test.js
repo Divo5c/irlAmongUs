@@ -1068,6 +1068,8 @@ describe('socket flow security & gameplay', () => {
     await waitForEvent(player, 'game:role_assigned');
 
     try {
+      const completedTask = originalAssignment.tasks[0];
+      roomStore.completeTask(code, 'host-1', completedTask.id, { skipProximity: true });
       let foreignRoleEvents = 0;
       player.on('game:role_assigned', () => {
         foreignRoleEvents += 1;
@@ -1095,6 +1097,7 @@ describe('socket flow security & gameplay', () => {
       // (stages + coordinates), not just {id,type,title} — otherwise every
       // marker loses its position after a reload/GPS reset.
       assert.ok(assignment.tasks.length >= 2);
+      assert.equal(assignment.tasks.find(({ id }) => id === completedTask.id)?.completed, true);
       for (const task of assignment.tasks) {
         assert.ok(Array.isArray(task.stages) && task.stages.length >= 1,
           `rejoined task ${task.id} must carry its stages`);

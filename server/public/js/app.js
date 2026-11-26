@@ -1084,7 +1084,7 @@ const App = (() => {
           }
           showToast(`Stufe fertig! N\u00e4chster Schritt: ${task.roomName ?? 'unbekannt'}`);
           const li = $('task-list').querySelector(`[data-task-id="${advancedTaskId}"] small`);
-          if (li) li.textContent = `${task.roomName ?? ''} · ${t('tasks.stage')} ${task.stageIndex + 1}`;
+          if (li) li.textContent = taskLocationLabel(task);
         }
         beep(660);
         vibrate(40);
@@ -1097,7 +1097,7 @@ const App = (() => {
         const task = ownList.find((t) => t.id === completedTaskId);
         if (task) task.completed = true;
         showToast(task?.isFake ? 'Fake-Task abgehakt (kein Fortschritt \u2014 t\u00e4usche weiter!).' : 'Task erledigt!');
-        beep(880);
+        sfx('task_done');
         vibrate(50);
         const li = $('task-list').querySelector(`[data-task-id="${completedTaskId}"]`);
         if (li) {
@@ -1888,11 +1888,10 @@ const App = (() => {
       li.dataset.taskId = task.id;
       const button = element('button', 'task-item__button');
       button.disabled = Boolean(task.completed);
-      const copy = element('span', 'task-item__copy', task.title);
-      if (task.roomName) {
-        const stage = task.stages?.length > 1 ? ' · ' + t('tasks.stage') + ' ' + ((task.stageIndex ?? 0) + 1) : '';
-        copy.append(element('small', '', task.roomName + stage));
-      }
+      const title = task.type === 'swipe_card' && langActive() !== 'en' ? 'Crew-Ausweis durchziehen' : task.title;
+      const copy = element('span', 'task-item__copy', title);
+      const location = taskLocationLabel(task);
+      if (location) copy.append(element('small', '', location));
       button.append(icon(task.completed ? 'check' : 'task'), copy);
       button.addEventListener('click', () => openTask(task));
       li.append(button);
@@ -1903,6 +1902,12 @@ const App = (() => {
     const countEl = $('task-count');
     if (countEl) countEl.textContent = `${payload.tasks?.length ?? 0}`;
     renderGameHud();
+  }
+
+  function taskLocationLabel(task) {
+    const index = task.stageIndex ?? 0;
+    const stage = task.stages?.length > 1 ? task.stageLabels?.[index] ?? `${t('tasks.stage')} ${index + 1}` : null;
+    return [task.roomName, stage].filter(Boolean).join(' · ');
   }
 
   /** Team-Fortschritt im Live-Map-Header (aus room.taskProgress). */
@@ -2022,12 +2027,20 @@ const App = (() => {
       beep(220);
       return;
     }
-    window.RlausTasks?.launch(task, () => {
-      sfx('task_done');
-      ensureSocket().emit('task:complete', { code: state.code, taskId: task.id });
-      vibrate(80);
+    if (!window.RlausTasks) {
+      showToast('Aufgaben konnten nicht geladen werden. Lade die App neu und tritt der Runde erneut bei.');
+      return;
+    }
+    const code = state.code;
+    window.RlausTasks.launch(task, () => {
+      if (state.room?.status !== 'IN_GAME' || state.code !== code) return;
+      if (!state.socket?.connected) {
+        showToast('Keine Verbindung. Wiederhole die Aufgabe, sobald du wieder verbunden bist.');
+        return;
+      }
+      state.socket.emit('task:complete', { code, taskId: task.id });
     });
-    if (window.RlausTasks?.launch) sfx('task_open');
+    sfx('task_open');
   }
 
   /** Use-Knopf: Sabotage-Fix > Task > Notfall-Meeting (nur wenn anw\u00e4hlbar). */

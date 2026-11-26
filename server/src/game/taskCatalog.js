@@ -284,6 +284,7 @@ function groupTasksByPlayer(tasks) {
       id: task.id,
       type: task.type,
       title: task.title,
+      completed: !!task.completed,
       isFake: !!task.isFake,
       stageIndex: task.stageIndex ?? 0,
       stages: task.stages ?? null,
