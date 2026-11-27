@@ -28,4 +28,4 @@ Run server tests with `cd server; npm test`. From `app`, run `flutter analyze`, 
 
 ## Agent Deploy
 
-For AI-agent-led deploys (Render + ntfy push to Divo's phone), see [docs/agent-deploy.md](docs/agent-deploy.md). It covers the full flow: syntax check → tests → commit → push → verify `?v=` + health → `scripts/notify.sh`.
+For AI-agent-led deploys (Render + ntfy push to Divo's phone), see [docs/agent-deploy.md](docs/agent-deploy.md). It covers syntax checks, tests, commit and push, live verification of `?v=`, `/health` and the service-worker cache, then `scripts/notify.sh`.
