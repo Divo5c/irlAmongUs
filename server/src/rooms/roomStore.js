@@ -938,7 +938,7 @@ class RoomStore {
   /** True when a CRITICAL sabotage ran out; used by the socket timers. */
   isSabotageExpired(code) {
     const room = this.getRoom(code);
-    if (!room?.sabotage?.deadline) return false;
+    if (room?.status !== STATUS_IN_GAME || !room.sabotage?.deadline) return false;
     return new Date(room.sabotage.deadline).getTime() <= Date.now();
   }
 
@@ -2076,6 +2076,7 @@ class RoomStore {
     room.status = getEnumValue(RoomStatus, 'GAME_OVER');
     room.winner = winnerRole;
     delete room.meeting;
+    delete room.sabotage;
     room.updatedAt = new Date().toISOString();
 
     return {

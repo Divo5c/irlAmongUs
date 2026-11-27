@@ -1173,6 +1173,18 @@ describe('sabotage & emergency meeting', () => {
     assert.equal(store.getRoom('ABC234').sabotage, null);
   });
 
+  test('an old sabotage cannot expire after the crew has won', () => {
+    const { store, impostorId } = sabotageGame();
+    store.startSabotage('ABC234', impostorId, 'REACTOR');
+    const room = store.getRoom('ABC234');
+    store.endGame(room.code, 'CREWMATE');
+    if (room.sabotage) room.sabotage.deadline = new Date(0).toISOString();
+
+    assert.equal(store.isSabotageExpired(room.code), false);
+    assert.equal(store.toPublicRoom(room).sabotage, undefined);
+    assert.equal(room.winner, 'CREWMATE');
+  });
+
   test('sabotage cooldown blocks spam after a fix', () => {
     const { store, impostorId, crewIds } = sabotageGame();
     const room = store.getRoom('ABC234');

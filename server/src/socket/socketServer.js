@@ -997,6 +997,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
 
   function broadcastGameOver(ioInstance, code, winner) {
     clearMeetingTimer(code);
+    clearSabotageTimer(code);
     // Grund ermitteln, BEVOR endGame laeuft (UI erklaert den Sieg).
     const details = roomStore.getVictoryDetails(code);
     const reason = details?.winner === winner ? details.reason : null;
