@@ -118,6 +118,15 @@ describe('RoomStore.createRoom', () => {
     assert.equal(store.getRoom(room.code), room);
   });
 
+  test('generates a lobby code independently of Math.random', (t) => {
+    const store = new RoomStore();
+    const nonSecureRandom = t.mock.method(Math, 'random', () => 0);
+    const room = store.createRoom({ hostId: 'host-1' });
+
+    assert.match(room.code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
+    assert.equal(nonSecureRandom.mock.callCount(), 0);
+  });
+
   test('accepts a validated custom config on creation', () => {
     const store = new RoomStore();
     const room = store.createRoom({
