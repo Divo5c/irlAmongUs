@@ -38,7 +38,7 @@ function assertRateLimit(ip) {
 
 function parseStrictNumber(value, field, { min, max }) {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
+  if (value == null || String(value).trim() === '' || !Number.isFinite(parsed)) {
     throw new HttpError(400, `Query parameter "${field}" must be a number.`);
   }
   if (parsed < min || parsed > max) {
@@ -56,10 +56,13 @@ function buildOverpassQuery(lat, lon, radiusM) {
 }
 
 function parseStreets(payload) {
+  if (!Array.isArray(payload?.elements)) throw new Error('Invalid Overpass response.');
   const streets = [];
-  for (const element of payload?.elements ?? []) {
-    if (element.type !== 'way') continue;
-    const geometry = (element.geometry ?? []).filter(Boolean);
+  for (const element of payload.elements) {
+    if (element?.type !== 'way' || !Array.isArray(element.geometry)) continue;
+    const geometry = element.geometry.filter((point) =>
+      Number.isFinite(point?.lat) && Number.isFinite(point?.lon) &&
+      Math.abs(point.lat) <= 90 && Math.abs(point.lon) <= 180);
     if (geometry.length < 2) continue;
     streets.push({
       osmId: element.id,
