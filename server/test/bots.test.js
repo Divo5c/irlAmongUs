@@ -34,9 +34,9 @@ function validMap() {
   };
 }
 
-async function setupRoomWithBots(botCount) {
+async function setupRoomWithBots(botCount, botHooks) {
   const store = new RoomStore();
-  const bots = createBotEngine(store, { moveIntervalMs: 50, taskTicks: 2 });
+  const bots = createBotEngine(store, { moveIntervalMs: 50, taskTicks: 2, botHooks });
   const room = store.createRoom({ code: 'TESTAB', hostId: 'host-1', hostName: 'Divo' });
   const hostId = room.hostId;
   bots.addBots(room.code, botCount);
@@ -144,6 +144,62 @@ test('bot removal takes the last bot out of the lobby', async () => {
   const room = store.getRoom(code);
   assert.equal(room.players.filter((p) => p.isBot).length, 1);
   assert.equal(room.players.length, 2);
+});
+
+test('the bot timer stops when a finished room is ticked', async () => {
+  const { store, bots, code } = await setupRoomWithBots(2);
+  assert.equal(bots.isRunning(code), true);
+  store.endGame(code, 'CREWMATE');
+  bots.tickNow(code);
+  assert.equal(bots.isRunning(code), false);
+});
+
+test('completing the last crew task by a bot signals a win', async (t) => {
+  const { store, bots, code, hostId } = await setupRoomWithBots(2);
+  const wins = [];
+  const engine = createBotEngine(store, { taskTicks: 1, botHooks: {
+    onGameOver: (roomCode, winner) => wins.push([roomCode, winner]),
+  } });
+  store.startMapSetup(code);
+  store.saveMap(code, validMap());
+  t.mock.method(Math, 'random', () => 0.99);
+  const { assignments } = store.startGame(code);
+  assert.equal(assignments[hostId], 'IMPOSTOR');
+  const tasks = store.getRoom(code).tasks.filter((task) => !task.isFake);
+  assert.ok(tasks.length > 0);
+  for (const task of tasks.slice(1)) task.completed = true;
+  engine.tickNow(code);
+  bots.stop(code);
+  assert.deepEqual(wins, [[code, 'CREWMATE']]);
+});
+
+test('bots wait before voting and signal when the last vote is cast', async (t) => {
+  const voteEvents = [];
+  const { store, bots, code, hostId } = await setupRoomWithBots(2, {
+    onVote: (_, result) => voteEvents.push(result.everyoneVoted),
+  });
+  store.startMapSetup(code);
+  store.saveMap(code, validMap());
+  store.startGame(code);
+  const room = store.getRoom(code);
+  room.corpses = [
+    { playerId: 'dead-1', x: 5, y: 0, corridorId: 'c1', roomId: null, deadAt: new Date().toISOString() },
+  ];
+  store.updatePosition(code, hostId, { x: 5, y: 0, confidence: 1 });
+  store.reportBody(code, hostId);
+  store.confirmMeeting(code, hostId);
+  store.advanceMeeting(code);
+  store.castVote(code, hostId, { skip: true });
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  bots.setVoteDelayForTest(4000);
+  bots.tickNow(code);
+  assert.deepEqual(Object.keys(room.meeting.votes), [hostId]);
+
+  now += 4000;
+  bots.tickNow(code);
+  bots.stop(code);
+  assert.deepEqual(voteEvents, [false, true]);
 });
 
 test('impostor bots kill nearby crewmates through the real store gates (v19.13.4)', async () => {

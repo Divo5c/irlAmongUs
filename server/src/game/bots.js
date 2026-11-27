@@ -35,7 +35,7 @@ function createBotEngine(roomStore, {
   sabotageTicks = SABOTAGE_TICKS,
   /** optional (code, event, payload, playerId?) -> emit adapter (browser map) */
   broadcast = null,
-  /** optional server hooks: onGameOver(code, winner), onSabotageStarted(code) */
+  /** Optional server hooks for game over, sabotage and voting. */
   botHooks = null,
 } = {}) {
   /** code -> interval */
@@ -43,6 +43,7 @@ function createBotEngine(roomStore, {
   /** code -> Map<botId, {nodeId, x, y, targetId}> */
   const walkers = new Map();
   const tickCounter = new Map();
+  const voteDelays = new Map(); // Room code -> current meeting and pending bot votes.
 
   function botsOf(room) {
     return room.players.filter((player) => !!player.isBot);
@@ -106,6 +107,7 @@ function createBotEngine(roomStore, {
     timers.delete(code);
     walkers.delete(code);
     tickCounter.delete(code);
+    voteDelays.delete(code);
   }
 
   function safeTick(code) {
@@ -119,7 +121,7 @@ function createBotEngine(roomStore, {
 
   function tick(code) {
     const room = roomStore.getRoom(code);
-    if (!room) {
+    if (!room || room.status === 'GAME_OVER') {
       stop(code);
       return;
     }
@@ -128,6 +130,7 @@ function createBotEngine(roomStore, {
       stop(code);
       return;
     }
+    if (room.meeting?.phase !== 'VOTING') voteDelays.delete(code);
 
     if (room.status === 'IN_GAME') {
       const progress = (tickCounter.get(code) ?? 0) + 1;
@@ -141,6 +144,7 @@ function createBotEngine(roomStore, {
       }
       if (progress % taskTicks === 0) {
         autoCompleteOneTask(code, room, bots);
+        if (room.status !== 'IN_GAME') return;
       }
       if (room.sabotage) {
         botCrewFixSabotage(code, room, bots);
@@ -159,18 +163,22 @@ function createBotEngine(roomStore, {
       // Divo-Log 18: Bots voteten IM SEKUNDENTAKT -> das Meeting war vorbei,
       // bevor ein Mensch die Tafel lesen konnte. Jeder Bot wartet jetzt
       // 2-6s (zusaetzlich zur Diskussion) — das gibt dem Host Zeit zu voten.
-      const meetingStamp = room.meeting.discussionEndsAt ?? 'x';
+      let pending = voteDelays.get(code);
+      if (!pending || pending.meetingId !== room.meeting.id) {
+        pending = { meetingId: room.meeting.id, byBot: new Map() };
+        voteDelays.set(code, pending);
+      }
       const now = Date.now();
       for (const bot of bots) {
-        const key = `${code}:${meetingStamp}:${bot.id}`;
-        if (!voteDelays.has(key)) {
-          voteDelays.set(key, now + botVoteDelayMs());
-        } else if (now < voteDelays.get(key)) {
-          continue; // dieser Bot tut noch "nachdenken"
-        }
+        if (Object.hasOwn(room.meeting.votes, bot.id)) continue;
+        const readyAt = pending.byBot.get(bot.id) ?? now + botVoteDelayMs();
+        pending.byBot.set(bot.id, readyAt);
+        if (now < readyAt) continue;
         try {
-          castBotVote(code, room, bot.id, aliveIds(room));
-          voteDelays.delete(key);
+          const result = castBotVote(code, bot.id, aliveIds(room));
+          pending.byBot.delete(bot.id);
+          botHooks?.onVote?.(code, result);
+          if (result.everyoneVoted) return;
         } catch (error) {
           // Not our turn / phase changed: ignore this tick.
         }
@@ -435,11 +443,14 @@ function botCrewFixSabotage(code, room, bots) {
           .getTasksForPlayer(code, bot.id)
           .filter((task) => !task.completed);
         if (!tasks.length) continue;
-        roomStore.completeTask(code, bot.id, tasks[0].id, { skipProximity: true });
+        const result = roomStore.completeTask(code, bot.id, tasks[0].id, { skipProximity: true });
         if (typeof broadcast === 'function') {
-          broadcast(code, 'room:updated', roomStore.toPublicRoom(room));
-          broadcast(code, 'task:progress', { completedTaskId: tasks[0].id });
+          broadcast(code, 'room:updated', result.room);
+          broadcast(code, 'task:progress', {
+            code, completedTaskId: result.completedTaskId, progress: result.progress,
+          });
         }
+        if (result.winner) botHooks?.onGameOver?.(code, result.winner);
         return; // one task per cycle keeps the game going long enough
       } catch (error) {
         // Already completed this tick / task race: try next bot.
@@ -507,14 +518,12 @@ function botCrewFixSabotage(code, room, bots) {
     return null; // nicht verbunden — wander statt Teleport durch Waende
   }
 
-  function castBotVote(code, room, botId, alive) {
-    const votes = room.meeting?.votes ?? {};
-    if (botId in votes) return;
+  function castBotVote(code, botId, alive) {
     const targets = alive.filter((id) => id !== botId);
     // 30% skip, otherwise vote a random other alive player.
     const skip = targets.length === 0 || Math.random() < 0.3;
     const targetId = skip ? undefined : targets[Math.floor(Math.random() * targets.length)];
-    roomStore.castVote(code, botId, { targetId, skip });
+    return roomStore.castVote(code, botId, { targetId, skip });
   }
 
   function isRunning(code) {
@@ -527,7 +536,6 @@ function botCrewFixSabotage(code, room, bots) {
     if (botVoteDelayOverrideMs != null) return botVoteDelayOverrideMs;
     return MIN_VOTE_DELAY_MS + Math.random() * VOTE_DELAY_SPREAD_MS;
   }
-  const voteDelays = new Map(); // `${code}:${meeting}:${botId}` -> readyAt
 
   /** Test hook: run one tick synchronously. */
   function tickNow(code) {

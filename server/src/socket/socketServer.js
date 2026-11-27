@@ -23,6 +23,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
   });
   botHooks.onGameOver = (code, winner) => broadcastGameOver(io, code, winner);
   botHooks.onSabotageStarted = (code) => armSabotageDeadlineTimer(code, io);
+  botHooks.onVote = broadcastVoteProgress;
   const meetingTimers = new Map();
   const pendingDisconnects = new Map();
 
@@ -152,6 +153,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
           tasksByPlayer,
           room: publicRoom,
         } = roomStore.startGame(code);
+        if (publicRoom.players.some((player) => player.isBot)) bots.ensureRunning(code);
 
         // Everyone receives the public room only (no roles, no task details).
         io.to(code).emit('room:updated', publicRoom);
@@ -499,16 +501,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
           skip: skip === true,
         });
 
-        io.to(code).emit('room:updated', result.room);
-        io.to(code).emit('game:vote_progress', {
-          code,
-          votedCount: result.votedCount,
-          totalVoters: result.totalVoters,
-        });
-
-        if (result.everyoneVoted) {
-          advanceAndBroadcast(code);
-        }
+        broadcastVoteProgress(code, result);
       } catch (error) {
         emitRoomError(socket, error);
       }
@@ -835,6 +828,16 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
       clearTimeout(timer);
       meetingTimers.delete(code);
     }
+  }
+
+  function broadcastVoteProgress(code, result) {
+    io.to(code).emit('room:updated', result.room);
+    io.to(code).emit('game:vote_progress', {
+      code,
+      votedCount: result.votedCount,
+      totalVoters: result.totalVoters,
+    });
+    if (result.everyoneVoted) advanceAndBroadcast(code);
   }
 
   // ------------------------------------------------ sabotage deadline //
