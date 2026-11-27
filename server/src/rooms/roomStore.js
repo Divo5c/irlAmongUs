@@ -103,6 +103,9 @@ const ROLE_IMPOSTOR = PlayerRole.enum[1];
 const DEFAULT_TASK_RADIUS_M = 8;
 
 const MAX_PLAYERS = 10;
+const CRITICAL_SABOTAGE_DURATION_MS = 90_000;
+const CRITICAL_SABOTAGE_COOLDOWN_MS = 30_000;
+const SOFT_SABOTAGE_COOLDOWN_MS = 60_000;
 
 /**
  * Central in-memory game state. This class is the single source of truth:
@@ -826,14 +829,7 @@ class RoomStore {
       throw new GameError('SABOTAGE_ACTIVE', 'A critical sabotage is already running.');
     }
     const cooldownLeft = (room.sabotageCooldownUntil ?? 0) - Date.now();
-    if (active && cooldownLeft > 0) {
-      throw new GameError(
-        'SABOTAGE_COOLDOWN',
-        `Sabotage bereit in ${Math.ceil(cooldownLeft / 1000)}s.`,
-        { retryInMs: cooldownLeft },
-      );
-    }
-    if (!active && cooldownLeft > 0) {
+    if (cooldownLeft > 0) {
       throw new GameError(
         'SABOTAGE_COOLDOWN',
         `Sabotage bereit in ${Math.ceil(cooldownLeft / 1000)}s.`,
@@ -860,7 +856,7 @@ class RoomStore {
     const isCritical = RoomStore.SABOTAGE_META[type].critical;
     // 90 s meltdown / depletion — IRL braucht man länger zum Fixen,
     // aber nicht so lang dass das Meeting blockiert.
-    const deadlineMs = isCritical ? Date.now() + 90_000 : null;
+    const deadlineMs = isCritical ? Date.now() + CRITICAL_SABOTAGE_DURATION_MS : null;
     room.sabotage = {
       type,
       deadline: deadlineMs != null ? new Date(deadlineMs).toISOString() : null,
@@ -869,8 +865,8 @@ class RoomStore {
     // Cooldown for the NEXT sabotage: after a critical ends (+30 s mercy),
     // non-critical ones self-limit with 60 s ready time.
     room.sabotageCooldownUntil = deadlineMs != null
-      ? deadlineMs + 30_000
-      : Date.now() + 60_000;
+      ? deadlineMs + CRITICAL_SABOTAGE_COOLDOWN_MS
+      : Date.now() + SOFT_SABOTAGE_COOLDOWN_MS;
     room.updatedAt = new Date().toISOString();
 
     return { room: this.toPublicRoom(room), type, deadline: room.sabotage.deadline };
@@ -948,7 +944,7 @@ class RoomStore {
 
   #clearSabotage(room) {
     if (room.sabotage?.deadline != null) {
-      room.sabotageCooldownUntil = Date.now() + 30_000;
+      room.sabotageCooldownUntil = Date.now() + CRITICAL_SABOTAGE_COOLDOWN_MS;
     }
     room.sabotage = null;
     room.updatedAt = new Date().toISOString();

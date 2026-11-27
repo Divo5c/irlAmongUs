@@ -3562,18 +3562,6 @@ const App = (() => {
     }
   }
 
-  function openCalibration() {
-    const map = state.room?.map;
-    if (!map?.rooms?.length) return;
-    calib.points = map.rooms;
-    calib.selected = null;
-    $('btn-calib-here').textContent = localText('Ich stehe hier', "I am here");
-    $('calib-overlay').classList.remove('hidden');
-    clearInterval(drawCalibMap._iv);
-    drawCalibMap();
-    drawCalibMap._iv = setInterval(drawCalibMap, 700); // GPS-Puls & Status live
-  }
-
   function drawCalibMap() {
     const canvas = $('calib-map');
     if (!canvas || calib.points == null) return;

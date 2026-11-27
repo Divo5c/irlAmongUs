@@ -15,6 +15,8 @@ const { RoomStoreError } = require('../rooms/roomStore');
 
 // Well under the 8 m/s plausibility cap in positioning.js.
 const MOVE_INTERVAL_MS = 2000;
+const MIN_VOTE_DELAY_MS = 2000;
+const VOTE_DELAY_SPREAD_MS = 4000;
 const BOT_SPEED_MPS = 4.0;
 
 // One auto-completed crew task about every TASK_TICKS * MOVE_INTERVAL_MS.
@@ -425,7 +427,8 @@ function botCrewFixSabotage(code, room, bots) {
     }
   }
 
-  function autoCompleteOneTask(code, room, bots) {    for (const bot of bots) {
+  function autoCompleteOneTask(code, room, bots) {
+    for (const bot of bots) {
       if (bot.role !== 'CREWMATE') continue;
       try {
         const tasks = roomStore
@@ -522,7 +525,7 @@ function botCrewFixSabotage(code, room, bots) {
   let botVoteDelayOverrideMs = null;
   function botVoteDelayMs() {
     if (botVoteDelayOverrideMs != null) return botVoteDelayOverrideMs;
-    return 2000 + Math.random() * 4000;
+    return MIN_VOTE_DELAY_MS + Math.random() * VOTE_DELAY_SPREAD_MS;
   }
   const voteDelays = new Map(); // `${code}:${meeting}:${botId}` -> readyAt
 

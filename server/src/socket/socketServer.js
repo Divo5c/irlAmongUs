@@ -3,7 +3,10 @@ const { Server } = require('socket.io');
 const { RoomStoreError, groupTasksByPlayer } = require('../rooms/roomStore');
 const { createBotEngine } = require('../game/bots');
 
-function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000, hostAccess } = {}) {
+const DISCONNECT_GRACE_MS = 30_000;
+const SABOTAGE_SWEEP_INTERVAL_MS = 5_000;
+
+function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONNECT_GRACE_MS, hostAccess } = {}) {
   const io = new Server(httpServer);
   // Hooks for the bot engine: game over + sabotage need the socket-layer
   // chains (broadcastGameOver / deadline timer are defined below).
@@ -900,7 +903,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
         }
       }
     }
-  }, 5000);
+  }, SABOTAGE_SWEEP_INTERVAL_MS);
   sabotageSweeper.unref();
 
   /**
