@@ -58,10 +58,13 @@ const OSM = (() => {
           continue;
         }
         const data = JSON.parse(body);
+        if (!Array.isArray(data?.elements)) throw new Error('Invalid Overpass response.');
         const out = [];
-        for (const element of data.elements ?? []) {
-          if (element.type !== 'way') continue;
-          const geom = (element.geometry ?? []).filter(Boolean);
+        for (const element of data.elements) {
+          if (element?.type !== 'way' || !Array.isArray(element.geometry)) continue;
+          const geom = element.geometry.filter((point) =>
+            Number.isFinite(point?.lat) && Number.isFinite(point?.lon) &&
+            Math.abs(point.lat) <= 90 && Math.abs(point.lon) <= 180);
           if (geom.length < 2) continue;
           out.push({
             osmId: element.id,
