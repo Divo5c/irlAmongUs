@@ -234,6 +234,12 @@ describe('resolveRoomMembership', () => {
 // ──────────────────────────────────────── sanitizePositionEstimate ──────────
 
 describe('sanitizePositionEstimate', () => {
+  test('rejects coordinates that are not numbers', () => {
+    for (const value of [null, '', '5', false, []]) {
+      assert.throws(() => sanitizePositionEstimate({ x: value, y: 0 }), { code: 'POSITION_INVALID' });
+      assert.throws(() => sanitizePositionEstimate({ x: 0, y: value }), { code: 'POSITION_INVALID' });
+    }
+  });
   test('valid estimate passes through', () => {
     const result = sanitizePositionEstimate({
       x: 10, y: 20, heading: 90, confidence: 0.8, source: 'IMU',

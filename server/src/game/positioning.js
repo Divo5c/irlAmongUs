@@ -269,8 +269,7 @@ function sanitizePositionEstimate(raw) {
     throw new GameError('POSITION_INVALID', 'Position must be an object.');
   }
 
-  const x = Number(raw.x);
-  const y = Number(raw.y);
+  const { x, y } = raw;
 
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
     throw new GameError('POSITION_INVALID', 'Position x and y must be finite numbers.');
