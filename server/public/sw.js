@@ -1,6 +1,6 @@
 /* App shell: install (add to home screen). Network-first so deploys land
    immediately; cache only as offline fallback. */
-const CACHE = 'rlaus-shell-v87';
+const CACHE = 'rlaus-shell-v88';
 const VERSION = '19.17.13';
 const ASSETS = [
   '/',
@@ -26,6 +26,7 @@ const ASSETS = [
   '/css/styles/fonts/panel-handwriting.woff2',
   ...['osm', 'mapEditor', 'tasks', 'app'].map((name) => `/js/${name}.js?v=${VERSION}`),
   '/js/ui.js',
+  '/js/useAction.js',
   '/js/i18n.js',
   '/js/sabotagePanels.js',
   '/img/sabotage/hand.svg',

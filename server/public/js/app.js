@@ -6,6 +6,7 @@
 import { avatar, browserStorage, buttonArt, element, icon } from './ui.js';
 import { langActive, localText, roomErrorText, roomLabel, t, taskStageLabel, taskTitle } from './i18n.js';
 import { createSabotagePanel } from './sabotagePanels.js';
+import { chooseUseAction } from './useAction.js';
 
 const App = (() => {
   const $ = (id) => document.getElementById(id);
@@ -1877,7 +1878,7 @@ const App = (() => {
     sfx('task_open');
   }
 
-  /** Use-Knopf: Sabotage-Fix > Task > Notfall-Meeting (nur wenn anw\u00e4hlbar). */
+  /** Use-Knopf: nur erreichbare Ziele anbieten. */
   function useAction() {
     if (state.room?.status !== 'IN_GAME') return null;
     const sab = state.room?.sabotage;
@@ -1897,21 +1898,17 @@ const App = (() => {
       }
     }
     const task = nearestIncompleteTask();
-    if (task) {
-      return { label: taskTitle(task), kind: 'TASK', task };
-    }
     // Divo (4.11): Among-Us-Admin-Tisch — im ADMIN-Raum öffnet Use die
     // anonyme Raumbesetzung (graue Bohnen, keine Namen/Positionen).
-    if (roomIdContains('ADMIN')) {
-      return { label: localText("Adminkarte", "Admin map"), kind: 'ADMIN_TABLE' };
-    }
+    const admin = roomIdContains('ADMIN')
+      ? { label: localText("Adminkarte", "Admin map"), kind: 'ADMIN_TABLE' } : null;
     // Divo (v19.12): in der Cafeteria öffnet Use IMMER den Meeting-Tisch —
     // der rote Knopf steckt im Feld, mit BLOCKIERT-Kappe wenn keine
     // Meetings mehr / kritische Sabotage.
-    if (alive && roomIdContains('CAFETERIA')) {
-      return { label: localText('Notfall', "Emergency"), kind: 'EMERGENCY' };
-    }
-    return null;
+    const emergency = alive && roomIdContains('CAFETERIA')
+      ? { label: localText('Notfall', "Emergency"), kind: 'EMERGENCY' } : null;
+    return chooseUseAction(state.role?.role, task ? { label: taskTitle(task), kind: 'TASK', task } : null,
+      admin, emergency);
   }
 
   function roomIdContains(type) {
