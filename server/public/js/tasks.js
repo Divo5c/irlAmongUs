@@ -722,7 +722,11 @@ import { localText, roomLabel, taskStageLabel, taskTitle } from './i18n.js';
   function mountCleanO2Filter(shell, finish) {
     const { body } = shell;
     const field = el('div', 'o2field');
-    const hole = el('div', 'o2-hole', localText('↓ Sammelschacht', "↓ Waste chute"));
+    const hole = el('div', 'o2-hole');
+    const label = el('span', '', localText('↓ Blätter hierhin ziehen', '↓ Drag leaves here'));
+    const count = el('span', '', '0 / 6');
+    count.setAttribute('role', 'status');
+    hole.append(label, count);
     field.appendChild(hole);
     body.appendChild(field);
     let swept = 0;
@@ -741,6 +745,18 @@ import { localText, roomLabel, taskStageLabel, taskTitle } from './i18n.js';
         leaf.style.top = startY;
         leaf.classList.remove('dragging');
       }
+      function collect(clientY) {
+        if (clientY < hole.getBoundingClientRect().top) return false;
+        pointerId = null;
+        leaf.remove();
+        S('o2_drop', 0.8);
+        hole.classList.add('flash');
+        shell.delay(() => hole.classList.remove('flash'), 240);
+        swept += 1;
+        count.textContent = `${swept} / 6`;
+        if (swept === 6) shell.delay(finish, 250);
+        return true;
+      }
       leaf.addEventListener('pointerdown', (event) => {
         if (event.button !== 0 || pointerId !== null) return;
         event.preventDefault();
@@ -750,24 +766,13 @@ import { localText, roomLabel, taskStageLabel, taskTitle } from './i18n.js';
         leaf.classList.add('dragging');
       });
       leaf.addEventListener('pointermove', (event) => {
-        if (pointerId !== event.pointerId) return;
+        if (pointerId !== event.pointerId || collect(event.clientY)) return;
         const rect = field.getBoundingClientRect();
         leaf.style.left = `${(event.clientX - rect.left) / rect.width * 100}%`;
         leaf.style.top = `${(event.clientY - rect.top) / rect.height * 100}%`;
       });
       leaf.addEventListener('pointerup', (event) => {
-        if (pointerId !== event.pointerId) return;
-        const holeRect = hole.getBoundingClientRect();
-        reset();
-        if (event.clientX >= holeRect.left && event.clientX <= holeRect.right
-          && event.clientY >= holeRect.top && event.clientY <= holeRect.bottom) {
-          S('o2_drop', 0.8);
-          leaf.remove();
-          hole.classList.add('flash');
-          shell.delay(() => hole.classList.remove('flash'), 240);
-          swept += 1;
-          if (swept === 6) shell.delay(finish, 250);
-        }
+        if (pointerId === event.pointerId && !collect(event.clientY)) reset();
       });
       leaf.addEventListener('lostpointercapture', (event) => {
         if (pointerId === event.pointerId) reset();

@@ -342,7 +342,7 @@ function botCrewFixSabotage(code, room, bots) {
           text: `\u{1F9F0} ${bot.name} hat bei der Sabotage mitgeholfen.`,
         });
         broadcast(code, 'room:updated', roomStore.toPublicRoom(room));
-        broadcast(code, 'game:sabotage_fixed', { code, fixed: [panel] });
+        if (!room.sabotage) broadcast(code, 'game:sabotage_fixed', { code, fixed: [panel] });
       }
       return; // fixed — or one panel done per tick
     } catch {

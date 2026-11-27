@@ -876,14 +876,22 @@ class RoomStore {
     return { room: this.toPublicRoom(room), type, deadline: room.sabotage.deadline };
   }
 
-  /** Crew fix at a panel: REACTOR (available) / O2 / ADMIN. */
+  /** Living players of either role can repair the matching panel. */
   fixSabotagePanel(code, playerId, panel, { skipPresenceCheck = false } = {}) {
     const room = this.getRequiredRoom(code);
     assertInGame(room);
+    assertKnownPlayer(room, playerId);
+    if (!isPlayerAlive(room, playerId)) {
+      throw new GameError('PLAYER_DEAD', 'Ghosts cannot repair sabotage.');
+    }
 
     const sab = room.sabotage;
     if (!sab) {
       throw new GameError('NO_SABOTAGE', 'Nothing to fix right now.');
+    }
+    const validPanel = sab.type === 'O2' ? panel === 'o2' || panel === 'admin' : panel === sab.type;
+    if (!validPanel) {
+      throw new GameError('SABOTAGE_INVALID_PANEL', 'This panel cannot repair the active sabotage.');
     }
     if (sab.deadline != null && new Date(sab.deadline).getTime() <= Date.now()) {
       throw new GameError('SABOTAGE_EXPIRED', 'Too late — the countdown already ran out.');
@@ -902,16 +910,16 @@ class RoomStore {
     }
 
     if (sab.type === 'REACTOR') {
-      // Among Us rule: two area members must fix TOGETHER — a second alive
-      // crewmate must be standing in the reactor with the presser.
-      const helpers = this.#aliveCrewInRoom(code, 'REACTOR', playerId);
-      if (!skipPresenceCheck && helpers.length < 1) {
+      const hasPartner = room.players.some(
+        (player) => player.id !== playerId && player.isAlive && this.#playerRoomIdByType(code, player.id, 'REACTOR'),
+      );
+      if (!skipPresenceCheck && !hasPartner) {
         throw new GameError(
           'SABOTAGE_NEED_HELP',
-          'Zwei Crewmates m\u00fcssen im Reactor stehen, um zusammen zu fixen!',
+          'Two living players must be in the reactor to repair it.',
         );
       }
-      this.#clearSabotage(code, room);
+      this.#clearSabotage(room);
       return { room: this.toPublicRoom(room), fixed: ['REACTOR'] };
     }
 
@@ -919,7 +927,7 @@ class RoomStore {
       // O2: two panels — fix panel at O2 and Admin rooms.
       sab.panels[panel] = true;
       if (sab.panels.o2 && sab.panels.admin) {
-        this.#clearSabotage(code, room);
+        this.#clearSabotage(room);
         return { room: this.toPublicRoom(room), fixed: ['o2', 'admin'] };
       }
       room.updatedAt = new Date().toISOString();
@@ -927,7 +935,7 @@ class RoomStore {
     }
 
     // LIGHTS / COMMS: single press at the fitting panel.
-    this.#clearSabotage(code, room);
+    this.#clearSabotage(room);
     return { room: this.toPublicRoom(room), fixed: [sab.type] };
   }
 
@@ -938,11 +946,12 @@ class RoomStore {
     return new Date(room.sabotage.deadline).getTime() <= Date.now();
   }
 
-  #clearSabotage(code, room) {
-    const type = room.sabotage?.type;
+  #clearSabotage(room) {
+    if (room.sabotage?.deadline != null) {
+      room.sabotageCooldownUntil = Date.now() + 30_000;
+    }
     room.sabotage = null;
     room.updatedAt = new Date().toISOString();
-    return { room: this.toPublicRoom(room), clearedType: type };
   }
 
   #roomPolygonByType(room, type) {
@@ -964,17 +973,6 @@ class RoomStore {
     else if (sab.type === 'LIGHTS') neededType = 'ELECTRICAL';
     else neededType = 'COMMUNICATIONS';
     return this.#playerRoomIdByType(code, playerId, neededType);
-  }
-
-  #aliveCrewInRoom(code, type, excludeId) {
-    const room = this.getRoom(code);
-    if (!room) return [];
-    const result = [];
-    for (const player of room.players) {
-      if (player.id === excludeId || !player.isAlive || player.role === ROLE_IMPOSTOR) continue;
-      if (this.#playerRoomIdByType(code, player.id, type)) result.push(player.id);
-    }
-    return result;
   }
 
   // -------------------------------------------------- emergency meeting //
@@ -1024,7 +1022,7 @@ class RoomStore {
       confirmed: false, // v19.15.1: Host-Bestaetigung (Reconnect-Schutz fuer alle)
       ...this.#meetingAttendance(room),
     };
-    delete room.sabotage; // a meeting resets soft sabotages (Among Us rule)
+    delete room.sabotage;
     room.status = getEnumValue(RoomStatus, 'MEETING');
     room.updatedAt = new Date().toISOString();
 
@@ -1072,7 +1070,7 @@ class RoomStore {
     room.undiscoveredDeaths = room.undiscoveredDeaths.filter(
       (id) => !foundIds.has(id),
     );
-    delete room.sabotage; // a meeting resets soft sabotages (Among Us rule)
+    if (room.sabotage) this.#clearSabotage(room);
     room.status = getEnumValue(RoomStatus, 'MEETING');
     room.updatedAt = new Date().toISOString();
 
@@ -1878,8 +1876,6 @@ class RoomStore {
     }
     const own = this.#positions.get(code)?.get(playerId);
     if (!own) return [];
-    // Lights sabotage: nobody spots bodies in the dark (Among Us vision rule).
-    if (room.sabotage?.type === 'LIGHTS') return [];
     return corpses
       .filter(
         (corpse) =>

@@ -1100,7 +1100,7 @@ describe('sabotage & emergency meeting', () => {
     );
   });
 
-  test('REACTOR fix needs TWO crewmates standing together in the reactor', () => {
+  test('REACTOR needs two living players, including impostors, and rejects ghosts', () => {
     const { store, impostorId, crewIds } = sabotageGame();
     store.startSabotage('ABC234', impostorId);
 
@@ -1117,9 +1117,14 @@ describe('sabotage & emergency meeting', () => {
       'SABOTAGE_NEED_HELP',
     );
 
-    // A second crewmate joins -> the joint press fixes it.
+    // A ghost in the room cannot repair or help another player repair.
     placeAt(store, crewIds[1], REACTOR_C);
-    const result = store.fixSabotagePanel('ABC234', crewIds[0], 'REACTOR');
+    store.getRoom('ABC234').players.find(({ id }) => id === crewIds[1]).isAlive = false;
+    assertGameError(() => store.fixSabotagePanel('ABC234', crewIds[1], 'REACTOR'), 'PLAYER_DEAD');
+    assertGameError(() => store.fixSabotagePanel('ABC234', crewIds[0], 'REACTOR'), 'SABOTAGE_NEED_HELP');
+
+    placeAt(store, impostorId, REACTOR_C);
+    const result = store.fixSabotagePanel('ABC234', impostorId, 'REACTOR');
     assert.deepEqual(result.fixed, ['REACTOR']);
     assert.equal(store.getRoom('ABC234').sabotage, null);
   });
@@ -1135,6 +1140,7 @@ describe('sabotage & emergency meeting', () => {
 
     // Wrong room for the panel:
     placeAt(store, crewIds[0], O2_C);
+    assertGameError(() => store.fixSabotagePanel('ABC234', crewIds[0], 'invalid'), 'SABOTAGE_INVALID_PANEL');
     assertGameError(
       () => store.fixSabotagePanel('ABC234', crewIds[0], 'admin'),
       'SABOTAGE_NOT_AT_PANEL',
@@ -1205,7 +1211,7 @@ describe('sabotage & emergency meeting', () => {
     assert.equal(result.phase, 'DISCUSSION');
   });
 
-  test('LIGHTS sabotage has no deadline and hides corpses until fixed', () => {
+  test('LIGHTS sabotage has no deadline and can be repaired', () => {
     const { store, impostorId, crewIds } = sabotageGame();
     const room = store.getRoom('ABC234');
     room.map.rooms.push({
@@ -1228,6 +1234,12 @@ describe('sabotage & emergency meeting', () => {
     const fixed = store.fixSabotagePanel('ABC234', crewIds[0], 'LIGHTS');
     assert.deepEqual(fixed.fixed, ['LIGHTS']);
     assert.equal(store.getRoom('ABC234').sabotage, null);
+    store.startSabotage('ABC234', impostorId, 'LIGHTS');
+    plantCorpse(store, 'reported-body');
+    placeAt(store, crewIds[1], { x: 21, y: 50 });
+    const meeting = store.reportBody('ABC234', crewIds[1]);
+    assert.equal(meeting.room.status, 'MEETING');
+    assert.equal(meeting.room.sabotage, undefined);
   });
 
   test('COMMS sabotage requires a COMMUNICATIONS room to fix', () => {
@@ -1251,7 +1263,7 @@ describe('sabotage & emergency meeting', () => {
     assert.equal(store.getRoom('ABC234').sabotage, null);
   });
 
-  test('emergency blocked during soft sabotage; report meeting clears it (v19.12)', () => {
+  test('tasks work during COMMS, but only a body report can start a meeting', () => {
     const { store, impostorId, crewIds } = sabotageGame();
     const room = store.getRoom('ABC234');
     room.map.rooms.push(
@@ -1266,9 +1278,13 @@ describe('sabotage & emergency meeting', () => {
     );
     store.startSabotage('ABC234', impostorId, 'COMMS');
     assert.ok(store.getRoom('ABC234').sabotage);
+    const task = room.tasks.find(({ assignedTo }) => assignedTo === crewIds[0]);
+    placeAt(store, crewIds[0], task.stages[0]);
+    const progress = store.completeTask('ABC234', crewIds[0], task.id);
+    assert.equal(progress.completedTaskId ?? progress.advancedTaskId, task.id);
     // Among-Us-Regel: der Notfallknopf ist blockiert, solange eine
     // Sabotage laeuft — sonst waere der Meltdown per Meeting loeschbar.
-    placeAt(store, crewIds[0], { x: 21, y: 80 });
+    placeAt(store, crewIds[0], { x: 21, y: 80 }, true);
     assertGameError(
       () => store.emergencyMeeting('ABC234', crewIds[0]),
       'SABOTAGE_ACTIVE',
@@ -1284,7 +1300,7 @@ describe('sabotage & emergency meeting', () => {
     }];
     store.reportBody('ABC234', crewIds[0]);
     assert.equal(store.getRoom('ABC234').status, 'MEETING');
-    assert.equal(store.getRoom('ABC234').sabotage, undefined);
+    assert.equal(store.getRoom('ABC234').sabotage, null);
   });
 
   test('emergency meetings: Cafeteria only, one per player per round', () => {

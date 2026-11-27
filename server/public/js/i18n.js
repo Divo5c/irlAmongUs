@@ -95,7 +95,12 @@ const TEXT = {
   "game.killLanded": ["Spieler ausgeschaltet. Beachte die Wartezeit.","Player eliminated. Watch the cooldown."],
   "game.someoneKilled": ["Jemand wurde eliminiert. Halte die Augen offen!","Someone was eliminated. Keep your eyes open!"],
   "game.alive": ["Lebende Spieler:","Players alive:"],
-  "sab.reactor": ["Zwei Crewmitglieder müssen den Reaktor gemeinsam reparieren.","Two crewmates must repair the reactor together."],
+  "sab.reactor": ["Reaktorschmelze","Reactor meltdown"],
+  "sab.reactorCountdown": ["Reaktorschmelze in:","Reactor meltdown in:"],
+  "sab.reactorHelp": ["Zwei lebende Spieler müssen gemeinsam im Reaktor sein.","Two living players must be together in the reactor."],
+  "sab.o2Countdown": ["Sauerstoffausfall in:","Oxygen depletion in:"],
+  "sab.active": ["Sabotage läuft","Sabotage active"],
+  "sab.cooldown": ["Die nächste Sabotage ist nach der Wartezeit verfügbar.","The next sabotage is available after the cooldown."],
   "sab.o2": ["Sauerstoffversorgung reparieren.","Restore oxygen."],
   "sab.lights": ["Licht ausgefallen. Repariere die Stromversorgung.","Lights out. Restore the power."],
   "sab.comms": ["Kommunikation gestört. Repariere die Kommunikation.","Communications sabotaged. Restore communications."],
@@ -184,6 +189,9 @@ const TEXT = {
 };
 
 const ROOM_ERRORS = {
+  SABOTAGE_NEED_HELP: ["Zwei lebende Spieler müssen im Reaktor sein.","Two living players must be in the reactor."],
+  SABOTAGE_INVALID_PANEL: ["Dieses Bedienfeld passt nicht zur Sabotage.","This panel cannot repair the active sabotage."],
+  SABOTAGE_NOT_AT_PANEL: ["Geh zur Reparatur in den passenden Raum.","Go to the matching room to repair the sabotage."],
   ROOM_NOT_FOUND: ["Diese Lobby existiert nicht mehr.","This lobby no longer exists."],
   ROOM_EXISTS: ["Der Lobby-Code wird bereits verwendet.","This lobby code is already in use."],
   ROOM_FULL: ["Die Lobby ist voll.","The lobby is full."],

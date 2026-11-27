@@ -195,7 +195,10 @@
       conic-gradient(var(--signal-task) var(--cooldown), var(--panel-border-dim) 0) border-box;
   }
   .round-btn.icon-btn.ready { border-color: var(--signal-task); color: var(--signal-task); }
-  .round-btn.icon-btn.sabotage-active { border-color: var(--interest-danger); }
+  .round-btn.icon-btn.sabotage-active {
+    color: var(--text-primary); border-color: var(--interest-danger);
+    background: var(--signal-danger-deep); filter: none;
+  }
   .icon-label { font-size: var(--fs-xs); text-shadow: none; color: inherit; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .round-btn.icon-btn:active:not(:disabled) { transform: translateY(var(--line-3)); }
   .taskbox {
@@ -240,7 +243,10 @@
     justify-content: space-between; text-align: left; font-variant-numeric: tabular-nums;
   }
   .sabotage-banner.reactor-war, .sabotage-banner.o2-war { background: var(--signal-danger-deep); }
-  .sabotage-banner__timer { font-size: var(--fs-2xl); line-height: 1; color: var(--timer-bg); }
+  .sabotage-banner > span { min-width: 0; overflow-wrap: anywhere; }
+  .sabotage-banner__timer {
+    flex: none; white-space: nowrap; font-size: var(--fs-2xl); line-height: 1; color: var(--timer-bg);
+  }
   .sabotage-banner__timer.urgent { color: var(--text-primary); animation: alarm-frame var(--time-alarm) ease-in-out infinite alternate; }
   .alarm-frame::after {
     content: ""; position: absolute; inset: 0; pointer-events: none;
@@ -300,7 +306,8 @@
   }
   .vote-card.pickable.selected { border-color: var(--signal-info); }
   .vote-grid .vote-card.dead::after { content: none; }
-  .vote-grid .vote-card.dead { opacity: .8; }
+  .vote-grid .vote-card.dead { opacity: .8; filter: none; }
+  .vote-grid .vote-card.discussion { opacity: 1; filter: none; }
   .vote-card__pick {
     min-width: 0; display: flex; align-items: center; gap: var(--space-1);
     color: var(--meeting-ink); padding: 0; background: none; text-align: left;

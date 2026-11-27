@@ -317,6 +317,55 @@ describe('socket flow security & gameplay', () => {
     }
   });
 
+  test('two impostors keep private partner IDs and a report cancels a partially repaired O2 sabotage', async () => {
+    const { clients, code } = await createRoomWithNPlayers(6, { impostorCount: 2, discussionDurationMs: 0 });
+    const [host] = clients;
+    try {
+      await makeMapReadyOverWire(host, code);
+      const roles = Promise.all(clients.map((client) => waitForEvent(client, 'game:role_assigned')));
+      host.emit('game:start', { code });
+      const seats = (await roles).map((role, index) => ({ ...role, client: clients[index] }));
+      const impostors = seats.filter(({ role }) => role === 'IMPOSTOR');
+      assert.equal(impostors.length, 2);
+      for (const seat of seats) {
+        assert.deepEqual(seat.teammates.map(({ id }) => id),
+          seat.role === 'IMPOSTOR' ? impostors.filter((impostor) => impostor !== seat).map(({ playerId }) => playerId) : []);
+      }
+
+      const [saboteur] = impostors;
+      const reporter = seats.find(({ role }) => role === 'CREWMATE');
+      const started = waitForEvent(host, 'game:sabotage_started');
+      saboteur.client.emit('game:sabotage', { code, type: 'O2' });
+      assert.equal((await started).type, 'O2');
+      const atO2 = waitForEvent(saboteur.client, 'position:confirmed');
+      saboteur.client.emit('position:update', { code, x: 62, y: 108, confidence: 1 });
+      await atO2;
+      const neverFixed = waitForNoEvent(host, 'game:sabotage_fixed', 200);
+      const partial = waitForRoomWhere(host, (room) => room.sabotage?.panels?.o2 === true);
+      saboteur.client.emit('game:sabotage_fix', { code, panel: 'o2' });
+      assert.equal((await partial).sabotage.panels.admin, false);
+      assert.equal(await neverFixed, false);
+
+      placeOnStreet(roomStore, code, reporter.playerId);
+      plantCorpseNear(roomStore, code, 'reported-body');
+      const meeting = waitForRoomWhere(host, ({ status }) => status === 'MEETING');
+      reporter.client.emit('game:report', { code });
+      const awaiting = await meeting;
+      assert.equal(awaiting.sabotage, undefined);
+      assert.equal(awaiting.meetingConfirmed, false);
+      assert.ok(awaiting.players.every((player) => !('role' in player) && !('teammates' in player)));
+
+      const voting = waitForEvent(host, 'game:voting_started');
+      host.emit('game:meeting_confirm', { code, meetingId: awaiting.meetingId });
+      await voting;
+      const resumed = waitForRoomWhere(host, ({ status }) => status === 'IN_GAME');
+      for (const client of clients) client.emit('game:vote_cast', { code, skip: true });
+      assert.equal((await resumed).sabotage, undefined);
+    } finally {
+      for (const client of clients) client.disconnect();
+    }
+  });
+
   test('non-hosts cannot start the game', async () => {
     const { host, player, code } = await createRoomWithTwoPlayers();
 

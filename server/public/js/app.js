@@ -351,7 +351,8 @@ const App = (() => {
       if (meetingIntroActive && room.meetingConfirmed && room.meetingPhase === 'DISCUSSION') runMeetingReveal();
       else if (meetingIntroActive && meetingAwaitActive()) renderMeetingAwaitContent();
       drawGameMap();
-      updateEmergencyPanel();
+      renderGameHud();
+      renderSabotage();
       // MAP_READY: the host may go back to the lobby and start the game.
       const startGame = $('btn-start-game');
       const canStart = room.status === 'MAP_READY' && state.isHost;
@@ -509,20 +510,12 @@ const App = (() => {
       state.killTargets = (targets ?? []).filter(({ playerId }) => !isImpostorPartner(playerId));
       renderGameHud();
     });
-    socket.on('game:sabotage_started', ({ code: _code, type, deadline }) => {
-      if (state.room) {
-        state.room.sabotage = {
-          type,
-          deadline,
-          ...(type === 'O2' ? { panels: { o2: false, admin: false } } : {}),
-        };
-      }
+    socket.on('game:sabotage_started', () => {
       sfx('sabotage_alarm');
       vibrate([80, 60, 80, 60, 160]);
       renderSabotage();
     });
-    socket.on('game:sabotage_fixed', ({ code: _code }) => {
-      if (state.room) delete state.room.sabotage;
+    socket.on('game:sabotage_fixed', () => {
       renderSabotage();
       showToast(langActive() === 'en' ? 'Sabotage repaired' : 'Sabotage repariert');
       sfx('notification');
@@ -608,7 +601,6 @@ const App = (() => {
     socket.on('game:role_assigned', (payload) => {
       state.role = payload;
       state.killReadyAt = payload.killReadyAt ?? 0;
-      state.teammates = payload.role === 'IMPOSTOR' ? payload.teammates ?? [] : [];
       document.querySelectorAll('#vote-list .vote-card').forEach((row) => refreshVoteAffiliation(row));
       // Neue Runde = neuer Notfallknopf (Zähler lebt serverseitig).
       state._emergencyUsedThisRound = 0;
@@ -1696,9 +1688,8 @@ const App = (() => {
     const pct = total ? Math.round((progress.completed / total) * 100) : 0;
     const strip = document.getElementById('task-progress-strip');
     if (!strip) return;
-    const commsBlind = room.sabotage?.type === 'COMMS' && state.role?.role !== 'IMPOSTOR';
-    strip.classList.toggle('hidden', state.taskbarAlways === false || commsBlind);
-    if (state.taskbarAlways === false || commsBlind) return;
+    strip.classList.toggle('hidden', state.taskbarAlways === false);
+    if (state.taskbarAlways === false) return;
     $('task-progress-fill').style.setProperty('--progress', pct / 100);
     strip.setAttribute('aria-valuenow', pct);
     $('task-label-count').textContent = pct + '%';
@@ -1726,15 +1717,9 @@ const App = (() => {
     if (meetingMsg) meetingMsg.classList.add('hidden');
     if (room.status !== 'IN_GAME') return;
     const imAlive = room.players.find((p) => p.id === state.playerId)?.isAlive;
-    const commsDown = room.sabotage?.type === 'COMMS';
-    const notImpostor = state.role?.role !== 'IMPOSTOR';
-    // Comms-Sabotage: Taskliste + Marker verstecken (Crew ist blind).
     const taskbox = $('taskbox');
-    const commsBlind = commsDown && notImpostor;
-    taskbox.querySelector('summary').textContent = commsBlind
-      ? t('comms.down')
-      : `${t('tasks.summary')} (${state.tasks?.filter((x) => !x.completed).length ?? 0})`;
-    $('task-list').classList.toggle('hidden', commsBlind);
+    taskbox.querySelector('summary').textContent =
+      `${t('tasks.summary')} (${state.tasks?.filter((x) => !x.completed).length ?? 0})`;
     $('screen-game').classList.toggle('ghost-mode', imAlive === false);
     const bodies = state.nearbyBodies ?? [];
     const reportBtn = $('btn-report');
@@ -1789,10 +1774,6 @@ const App = (() => {
       showToast(localText("Diese Aufgabe ist bereits erledigt.", "You already completed this task."));
       return;
     }
-    if (state.room?.sabotage?.type === 'COMMS') {
-      showToast(localText("Die Kommunikation wurde sabotiert. Repariere sie, um Aufgaben zu öffnen.", "Communications are down. Restore them to access tasks."));
-      return;
-    }
     // Impostoren erledigen keine Tasks (nur anzeigen, nicht interaktiv).
     if (state.role?.role === 'IMPOSTOR') {
       showToast(localText('Impostoren können keine Aufgaben erledigen.', 'Impostors cannot complete tasks.'));
@@ -1826,8 +1807,8 @@ const App = (() => {
   function useAction() {
     if (state.room?.status !== 'IN_GAME') return null;
     const sab = state.room?.sabotage;
-    const roomId = state.selfPos?.roomId;
-    if (sab) {
+    const alive = state.room.players.some(({ id, isAlive }) => id === state.playerId && isAlive);
+    if (sab && alive) {
       if (sab.type === 'REACTOR' && roomIdContains('REACTOR')) {
         return { label: localText("Reparieren", "Repair"), kind: 'FIX', panel: 'REACTOR' };
       }
@@ -1845,12 +1826,6 @@ const App = (() => {
       if (sab.type === 'COMMS' && roomIdContains('COMMUNICATIONS')) {
         return { label: localText("Kommunikation", "Restore communications"), kind: 'FIX', panel: 'COMMS' };
       }
-      // Sabotage aktiv: in der Cafeteria das (blockierte) Meeting-Feld
-      // anbieten — der Knopf am Tisch zeigt BLOCKIERT (Among Us-Regel).
-      if (roomIdContains('CAFETERIA')) {
-        return { label: localText('Notfall', "Emergency"), kind: 'EMERGENCY' };
-      }
-      return null;
     }
     const task = nearestIncompleteTask();
     if (task) {
@@ -1864,7 +1839,7 @@ const App = (() => {
     // Divo (v19.12): in der Cafeteria öffnet Use IMMER den Meeting-Tisch —
     // der rote Knopf steckt im Feld, mit BLOCKIERT-Kappe wenn keine
     // Meetings mehr / kritische Sabotage.
-    if (roomIdContains('CAFETERIA')) {
+    if (alive && roomIdContains('CAFETERIA')) {
       return { label: localText('Notfall', "Emergency"), kind: 'EMERGENCY' };
     }
     return null;
@@ -1969,7 +1944,7 @@ const App = (() => {
     if (dome) {
       dome.classList.toggle('blocked', blocked);
       dome.classList.toggle('open', !blocked);
-      dome.disabled = blocked;
+      dome.disabled = blocked || dome.classList.contains('pressed');
     }
     const status = $('emergency-status');
     if (status) {
@@ -1989,17 +1964,19 @@ const App = (() => {
       showToast(localText('Knopf geht nicht \u2014 Sabotage l\u00e4uft oder keine Meetings mehr.', "You cannot call a meeting while sabotage is active or after using all your meetings."));
       return;
     }
-    if (!(roomIdContains('CAFETERIA') && emergencyLeft() > 0)) return;
+    if (!roomIdContains('CAFETERIA') || emergencyBlockedReason() || !state.socket?.connected) return;
     sfx('ui_select', 0.8);
     vibrate([60, 40, 60]);
     // Kappe-fallende Zeremonie (~1s), DANN startet das Meeting.
     btn.classList.add('pressed');
     btn.disabled = true;
-    state._emergencyUsedThisRound = (state._emergencyUsedThisRound ?? 0) + 1;
+    const code = state.code;
     setTimeout(() => {
-      btn.classList.remove('pressed');
+      if (!btn.classList.contains('pressed')) return;
       hideEmergencyPanel();
-      ensureSocket().emit('game:emergency', { code: state.code });
+      if (state.code !== code || emergencyBlockedReason() || !roomIdContains('CAFETERIA') || !state.socket?.connected) return;
+      state._emergencyUsedThisRound = (state._emergencyUsedThisRound ?? 0) + 1;
+      state.socket.emit('game:emergency', { code });
     }, 900);
   });
 
@@ -2043,29 +2020,32 @@ const App = (() => {
     };
     if (sab) {
       setActionCooldown(sabBtn, 0, 1);
-      // Aktive Sabotage: Knopf bleibt bedienbar (hell), Label zeigt Restzeit.
       if (sab.deadline) {
         const left = Math.max(0, Math.ceil((Date.parse(sab.deadline) - Date.now()) / 1000));
-        setSabLabel(`${sab.type} ${left}s`);
+        setSabLabel(`${left} s`);
       } else {
         setSabLabel(localText('L\u00e4uft', "Active"));
       }
       sabBtn.disabled = false;
+      sabBtn.classList.remove('ready');
       sabBtn.classList.add('sabotage-active');
+      sabBtn.setAttribute('aria-label', t('sab.active'));
       return;
     }
     // Cooldown bis zur naechsten Sabotage als Countdown auf dem Knopf.
     sabBtn.classList.remove('sabotage-active');
+    sabBtn.setAttribute('aria-label', t('btn.sabotage'));
     const cd = state.room?.sabotageCooldownUntil ?? 0;
     const remaining = Math.max(0, cd - Date.now());
     setActionCooldown(sabBtn, remaining, Math.max(remaining, 30000));
     const left = Math.ceil(remaining / 1000);
+    sabBtn.classList.toggle('ready', left === 0);
     if (left > 0) {
       setSabLabel(`${left}s`);
       sabBtn.disabled = true;
       return;
     }
-    setSabLabel('Sabotage');
+    setSabLabel(t('btn.sabotage'));
     sabBtn.disabled = false;
   }
 
@@ -2090,7 +2070,7 @@ const App = (() => {
     title.textContent = localText('Sabotage w\u00e4hlen', "Choose sabotage");
     card.appendChild(title);
     const meta = {
-      REACTOR: { label: localText('Reaktorschmelze', 'Reactor meltdown'), hint: t('sab.reactor') },
+      REACTOR: { label: t('sab.reactor'), hint: t('sab.reactorHelp') },
       O2: { label: localText('Sauerstoffausfall', 'Oxygen failure'), hint: localText('Reparatur in O₂ und Admin.', 'Repair in O₂ and Admin.') },
       LIGHTS: { label: localText('Lichtausfall', 'Lights out'), hint: t('sab.lights') },
       COMMS: { label: localText('Kommunikationsausfall', 'Communications down'), hint: t('sab.comms') },
@@ -2154,8 +2134,8 @@ const App = (() => {
     if (!active) return;
     const remaining = critical ? Math.max(0, Math.ceil((Date.parse(sab.deadline) - Date.now()) / 1000)) : 0;
     const details = {
-      REACTOR: t('sab.reactor'),
-      O2: t('sab.o2') + ' · O2: ' + (sab.panels?.o2 ? '✓' : '–') + ' · Admin: ' + (sab.panels?.admin ? '✓' : '–'),
+      REACTOR: t('sab.reactorCountdown'),
+      O2: t('sab.o2Countdown') + ' · O₂: ' + (sab.panels?.o2 ? '✓' : '–') + ' · Admin: ' + (sab.panels?.admin ? '✓' : '–'),
       LIGHTS: t('sab.lights'),
       COMMS: t('sab.comms'),
     };
@@ -2825,15 +2805,12 @@ const App = (() => {
 
     // task markers: echte Server-Koordinaten (roomId/roomName/x/y);
     // \u00e4ltere Runden ohne Spots fallen auf Karten-Knoten zur\u00fcck.
-    // Comms-Sabotage: Crew sieht keine Marker (Impostor schon).
     const eta = state.tasks ?? state.role?.tasks ?? [];
-    const commsBlind = state.room?.sabotage?.type === 'COMMS' &&
-      state.role?.role !== 'IMPOSTOR';
     const taskHits = [];
     // Mehrere Tasks im selben Raum: Marker leicht versetzt (kein Stack).
     const roomTaskSeen = {};
     let taskIdx = 0;
-    for (const task of commsBlind ? [] : eta) {
+    for (const task of eta) {
       if (task.completed) continue;
       let tx, ty;
       if (task.x != null) {
@@ -2905,7 +2882,8 @@ const App = (() => {
     }
 
     // corpses the player has discovered
-    for (const body of state.nearbyBodies ?? []) {
+    const lightsOut = state.room?.sabotage?.type === 'LIGHTS' && state.role?.role !== 'IMPOSTOR';
+    for (const body of lightsOut ? [] : state.nearbyBodies ?? []) {
       const [bx, by] = toPx(body.x, body.y);
       ctx.fillStyle = '#ef4444';
       ctx.beginPath();
@@ -2987,8 +2965,6 @@ const App = (() => {
     }
 
     // Lights-Sabotage: Crew sieht fast nichts (Sommerfolientausch ~0.72 Deckkraft).
-    const lightsOut = state.room?.sabotage?.type === 'LIGHTS' &&
-      state.role?.role !== 'IMPOSTOR';
     if (lightsOut) {
       ctx.fillStyle = 'rgba(2, 4, 10, 0.78)';
       const w = canvas.clientWidth || canvas.width;
@@ -3246,10 +3222,13 @@ const App = (() => {
   });
 
   $('btn-sabotage').addEventListener('click', () => {
-    if (state.room?.sabotage) {
-      if (state.room.sabotage.deadline == null) {
-        showToast(localText('Sabotage l\u00e4uft \u2014 Crew muss fixen oder du w\u00e4hlst beim n\u00e4chsten Cooldown neu.', "Sabotage is active. Wait for the crew to repair it."));
-      }
+    if (state.room?.status !== 'IN_GAME' || state.role?.role !== 'IMPOSTOR') return;
+    const sab = state.room.sabotage;
+    if (sab?.deadline || Date.now() < (state.room.sabotageCooldownUntil ?? 0)) {
+      const message = sab
+        ? [...$('sabotage-banner').children].map((child) => child.textContent.trim()).filter(Boolean).join(' ')
+        : t('sab.cooldown');
+      showToast(message || t('sab.active'));
       return;
     }
     openSabotageSelect();
@@ -3805,7 +3784,6 @@ const App = (() => {
     } else if (target.id === 'btn-leave-from-menu') {
       $('settings-menu').classList.add('hidden');
       state.role = null;
-      state.teammates = [];
       state.socket?.disconnect();
       state.socket = null;
       state.room = null;
@@ -4229,7 +4207,7 @@ const App = (() => {
 
   function isImpostorPartner(playerId) {
     return state.role?.role === 'IMPOSTOR'
-      && (state.teammates ?? []).some(({ id }) => id === playerId && id !== state.playerId);
+      && (state.role.teammates ?? []).some(({ id }) => id === playerId && id !== state.playerId);
   }
 
   function voteName(playerId, name, className) {

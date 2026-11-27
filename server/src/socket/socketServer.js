@@ -398,6 +398,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
 
         const result = roomStore.reportBody(code, socket.data.playerId);
         const meeting = result.room;
+        clearSabotageTimer(code);
 
         io.to(code).emit('room:updated', meeting);
         io.to(code).emit('game:meeting_started', {
@@ -451,10 +452,11 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
           socket.data.playerId,
           panel,
         );
-        clearSabotageTimer(code);
-
         io.to(code).emit('room:updated', result.room);
-        io.to(code).emit('game:sabotage_fixed', { code, fixed: result.fixed });
+        if (!result.room.sabotage) {
+          clearSabotageTimer(code);
+          io.to(code).emit('game:sabotage_fixed', { code, fixed: result.fixed });
+        }
       } catch (error) {
         emitRoomError(socket, error);
       }
@@ -848,7 +850,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = 30_000,
   function armSabotageDeadlineTimer(code, ioInstance) {
     clearSabotageTimer(code);
     const room = roomStore.getRoom(code);
-    if (!room?.sabotage) return;
+    if (!room?.sabotage?.deadline) return;
     const delay = Math.max(0, Date.parse(room.sabotage.deadline) - Date.now());
     const timer = setTimeout(() => {
       sabotageTimers.delete(code);
