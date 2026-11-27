@@ -19,7 +19,11 @@ const {
   cafeteriaTable,
   pushOutOfTable,
 } = require('../game/positioning');
-const { canKill } = require('../game/proximity');
+const { canKill, DEFAULT_MIN_CONFIDENCE } = require('../game/proximity');
+const {
+  PANEL_USE_RADIUS_M, REACTOR_HOLD_MS, REACTOR_RELEASE_GRACE_MS,
+  REACTOR_HEARTBEAT_TIMEOUT_MS, O2_RETRY_MS, panelLayout, makePanels,
+} = require('../game/sabotagePanels');
 
 const roomCodePattern = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
 const POSITION_FRESHNESS_MS = 8000;
@@ -305,6 +309,8 @@ class RoomStore {
         ? { sabotageCooldownUntil: room.sabotageCooldownUntil }
         : {}),
       taskProgress: getTaskProgress(room),
+      sabotageTypes: this.#sabotageTypesFor(room),
+      panelUseRadiusM: PANEL_USE_RADIUS_M,
       createdAt: room.createdAt,
       updatedAt: room.updatedAt,
     };
@@ -318,7 +324,8 @@ class RoomStore {
         type: room.sabotage.type,
         deadline: room.sabotage.deadline,
         // Wo muss gefixt werden? Map-Marker fuer die Crew (rote Badges).
-        fixSpots: this.#sabotageFixSpots(room, room.sabotage.type),
+        fixSpots: room.sabotage.controls?.spots ?? this.#sabotageFixSpots(room, room.sabotage.type),
+        ...(room.sabotage.controls ? { panelStatus: this.sabotagePanelStatus(room) } : {}),
         ...(room.sabotage.panels ? { panels: { ...room.sabotage.panels } } : {}),
       },
     };
@@ -791,8 +798,9 @@ class RoomStore {
   #sabotageTypesFor(room) {
     const types = (room.map?.rooms ?? []).map((room) => room.type);
     const allowed = [];
-    if (types.includes('REACTOR')) allowed.push('REACTOR');
-    if (types.includes('O2')) allowed.push('O2');
+    const layout = panelLayout(room.map);
+    if (layout.REACTOR.length === 2) allowed.push('REACTOR');
+    if (layout.O2.length === 2) allowed.push('O2');
     if (types.includes('ELECTRICAL')) allowed.push('LIGHTS');
     if (types.includes('COMMUNICATIONS')) allowed.push('COMMS');
     return allowed;
@@ -806,7 +814,7 @@ class RoomStore {
   });
 
   /**
-   * Impostor sabotage. Critical rounds (REACTOR/O2) run a 30 s countdown
+   * Impostor sabotage. Critical rounds (REACTOR/O2) run a 90 s countdown
    * that wins the game for the impostors when it expires. LIGHTS and
    * COMMS are soft sabotages without deadline; they disable corpse
    * spotting (visibility) or the task list until the crew fixes them.
@@ -838,6 +846,7 @@ class RoomStore {
     }
 
     const allowed = this.#sabotageTypesFor(room);
+    if (!allowed.length) throw new GameError('SABOTAGE_UNAVAILABLE', 'No sabotage panels available.');
     let type;
     if (requestedType != null) {
       if (!allowed.includes(requestedType)) {
@@ -862,6 +871,9 @@ class RoomStore {
       deadline: deadlineMs != null ? new Date(deadlineMs).toISOString() : null,
       panels: type === 'O2' ? { o2: false, admin: false } : null,
     };
+    if (isCritical) {
+      room.sabotage.controls = makePanels(room, type, panelLayout(room.map)[type]);
+    }
     // Cooldown for the NEXT sabotage: after a critical ends (+30 s mercy),
     // non-critical ones self-limit with 60 s ready time.
     room.sabotageCooldownUntil = deadlineMs != null
@@ -870,6 +882,138 @@ class RoomStore {
     room.updatedAt = new Date().toISOString();
 
     return { room: this.toPublicRoom(room), type, deadline: room.sabotage.deadline };
+  }
+
+  #panelNearby(room, playerId, spot, now) {
+    const pos = this.#positions.get(room.code)?.get(playerId);
+    return isPlayerAlive(room, playerId) && isFreshPosition(pos, now)
+      && pos.confidence >= DEFAULT_MIN_CONFIDENCE && pos.roomId === spot.roomId
+      && Math.hypot(pos.x - spot.x, pos.y - spot.y) <= PANEL_USE_RADIUS_M;
+  }
+
+  #panelContext(code, playerId, roundId, panelId, now) {
+    const room = this.getRequiredRoom(code);
+    assertInGame(room);
+    assertKnownPlayer(room, playerId);
+    if (!isPlayerAlive(room, playerId)) throw new GameError('PLAYER_DEAD', 'Ghosts cannot repair sabotage.');
+    const sab = room.sabotage;
+    const controls = sab?.controls;
+    if (!controls || controls.id !== roundId) throw new GameError('NO_SABOTAGE', 'No matching sabotage.');
+    if (Date.parse(sab.deadline) <= now) throw new GameError('SABOTAGE_EXPIRED', 'Sabotage expired.');
+    const spot = controls.spots.find(({ id }) => id === panelId);
+    if (!spot) throw new GameError('SABOTAGE_INVALID_PANEL', 'Unknown sabotage panel.');
+    if (!this.#panelNearby(room, playerId, spot, now)) throw new GameError('SABOTAGE_NOT_AT_PANEL', 'Move closer to the panel.');
+    return { room, sab, controls };
+  }
+
+  sabotagePanelStatus(room, now = Date.now(), fixed = false) {
+    const sab = room.sabotage;
+    const controls = sab?.controls;
+    if (!controls) return null;
+    const heldIds = new Set([...controls.holds.values()].filter(({ releasedAt }) => releasedAt == null).map(({ panelId }) => panelId));
+    return {
+      roundId: controls.id, type: sab.type,
+      progress: fixed ? 1 : controls.togetherSince == null ? 0 : Math.min(1, (now - controls.togetherSince) / REACTOR_HOLD_MS),
+      panels: controls.spots.map(({ id }) => ({
+        id, state: fixed || sab.panels?.[id] ? 'DONE' : heldIds.has(id) ? 'HELD' : 'OPEN',
+      })),
+    };
+  }
+
+  openSabotagePanel(code, playerId, roundId, panelId, now = Date.now()) {
+    const { room, sab, controls } = this.#panelContext(code, playerId, roundId, panelId, now);
+    if (controls.open.get(playerId) !== panelId) this.closeSabotagePanel(code, playerId, roundId);
+    controls.open.set(playerId, panelId);
+    return {
+      status: this.sabotagePanelStatus(room, now),
+      ...(sab.type === 'O2' && !sab.panels[panelId] ? { note: controls.code } : {}),
+    };
+  }
+
+  closeSabotagePanel(code, playerId, roundId, panelId) {
+    const controls = this.getRoom(code)?.sabotage?.controls;
+    if (!controls || (roundId != null && controls.id !== roundId) ||
+        (panelId != null && controls.open.get(playerId) !== panelId)) return;
+    controls.open.delete(playerId);
+    if (controls.holds.delete(playerId)) controls.togetherSince = null;
+  }
+
+  holdSabotagePanel(code, playerId, roundId, panelId, active, now = Date.now()) {
+    if (typeof active !== 'boolean') throw new GameError('SABOTAGE_INVALID_PANEL', 'Invalid hand state.');
+    if (!active) {
+      const controls = this.getRoom(code)?.sabotage?.controls;
+      const hold = controls?.holds.get(playerId);
+      if (controls?.id === roundId && hold?.panelId === panelId && hold.releasedAt == null) {
+        hold.releasedAt = now;
+        controls.togetherSince = null;
+      }
+      return;
+    }
+    const { sab, controls } = this.#panelContext(code, playerId, roundId, panelId, now);
+    if (sab.type !== 'REACTOR' || controls.open.get(playerId) !== panelId) {
+      throw new GameError('SABOTAGE_INVALID_PANEL', 'Open this reactor panel first.');
+    }
+    for (const [id, hold] of controls.holds) {
+      if (id !== playerId && hold.panelId === panelId && (hold.releasedAt == null
+        ? now - hold.lastAt < REACTOR_HEARTBEAT_TIMEOUT_MS
+        : now - hold.releasedAt < REACTOR_RELEASE_GRACE_MS)) {
+        throw new GameError('SABOTAGE_PANEL_BUSY', 'This panel is occupied.');
+      }
+    }
+    const previous = controls.holds.get(playerId);
+    if (!previous || previous.releasedAt != null || now - previous.lastAt >= REACTOR_HEARTBEAT_TIMEOUT_MS) {
+      controls.togetherSince = null;
+    }
+    controls.holds.set(playerId, { panelId, lastAt: now, releasedAt: null });
+    if (new Set([...controls.holds.values()].filter((hold) =>
+      hold.releasedAt == null && now - hold.lastAt < REACTOR_HEARTBEAT_TIMEOUT_MS).map((hold) => hold.panelId)).size === 2) {
+      controls.togetherSince ??= now;
+    }
+  }
+
+  tickReactorPanels(code, now = Date.now()) {
+    const room = this.getRoom(code);
+    const sab = room?.sabotage;
+    if (room?.status !== STATUS_IN_GAME || sab?.type !== 'REACTOR' || !sab.controls ||
+        Date.parse(sab.deadline) <= now) return null;
+    const { controls } = sab;
+    for (const [playerId, hold] of controls.holds) {
+      const spot = controls.spots.find(({ id }) => id === hold.panelId);
+      if (hold.releasedAt != null) {
+        if (now - hold.releasedAt >= REACTOR_RELEASE_GRACE_MS) controls.holds.delete(playerId);
+      } else if (now - hold.lastAt >= REACTOR_HEARTBEAT_TIMEOUT_MS || !this.#panelNearby(room, playerId, spot, now)) {
+        controls.holds.delete(playerId);
+        controls.togetherSince = null;
+      }
+    }
+    if (controls.togetherSince != null && now - controls.togetherSince >= REACTOR_HOLD_MS) {
+      const status = this.sabotagePanelStatus(room, now, true);
+      this.#clearSabotage(room);
+      return { status, room: this.toPublicRoom(room), fixed: ['REACTOR'] };
+    }
+    return { status: this.sabotagePanelStatus(room, now) };
+  }
+
+  submitOxygenPanel(code, playerId, roundId, panelId, digits, now = Date.now()) {
+    const { room, sab, controls } = this.#panelContext(code, playerId, roundId, panelId, now);
+    if (sab.type !== 'O2' || controls.open.get(playerId) !== panelId) {
+      throw new GameError('SABOTAGE_INVALID_PANEL', 'Open this oxygen panel first.');
+    }
+    if (typeof digits !== 'string' || !/^\d{1,5}$/.test(digits)) {
+      throw new GameError('SABOTAGE_INVALID_INPUT', 'Enter one to five digits.');
+    }
+    if (sab.panels[panelId]) return { result: 'OK', status: this.sabotagePanelStatus(room, now) };
+    if ((controls.retry.get(playerId) ?? 0) > now) return { result: 'BAD', retryInMs: controls.retry.get(playerId) - now };
+    if (digits !== controls.code) {
+      controls.retry.set(playerId, now + O2_RETRY_MS);
+      return { result: 'BAD', retryInMs: O2_RETRY_MS };
+    }
+    sab.panels[panelId] = true;
+    const complete = sab.panels.o2 && sab.panels.admin;
+    const status = this.sabotagePanelStatus(room, now, complete);
+    if (complete) this.#clearSabotage(room);
+    else room.updatedAt = new Date(now).toISOString();
+    return { result: 'OK', status, room: this.toPublicRoom(room), ...(complete ? { fixed: ['o2', 'admin'] } : {}) };
   }
 
   /** Living players of either role can repair the matching panel. */

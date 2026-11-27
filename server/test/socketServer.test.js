@@ -146,7 +146,7 @@ async function createRoomWithTwoPlayers(configPatch) {
  * Generic multi-player lobby: host-1 plus player-2..player-N.
  * Returns { clients: [{client,id}], players, code }.
  */
-async function createRoomWithNPlayers(playerCount, configPatch) {
+async function createRoomWithNPlayers(playerCount, configPatch, panelClients = 0) {
   const code = randomCode();
   const clients = [];
 
@@ -157,6 +157,7 @@ async function createRoomWithNPlayers(playerCount, configPatch) {
     code,
     hostId: 'host-1',
     hostName: 'Host',
+    sabotagePanels: panelClients > 0,
     ...(configPatch ? { config: configPatch } : {}),
   });
   await created;
@@ -166,7 +167,7 @@ async function createRoomWithNPlayers(playerCount, configPatch) {
     clients.push(client);
     const id = `player-${index}`;
     const joined = waitForRoomWhere(host, (r) => r.players.length === index);
-    client.emit('room:join', { code, playerId: id, playerName: `P${index}` });
+    client.emit('room:join', { code, playerId: id, playerName: `P${index}`, sabotagePanels: index <= panelClients });
     await joined;
   }
 
@@ -226,6 +227,83 @@ after(async () => {
 });
 
 describe('socket flow security & gameplay', () => {
+  test('panel clients repair reactor and share oxygen progress with a legacy client through rematch', async () => {
+    const { clients, code } = await createRoomWithNPlayers(4, { killCooldownMs: 0 }, 3);
+    const [host, partner, , legacy] = clients;
+    await makeMapReadyOverWire(host, code);
+    const assigned = Promise.all(clients.map((client) => waitForEvent(client, 'game:role_assigned')));
+    host.emit('game:start', { code });
+    const roles = await assigned;
+    const impostor = clients[roles.findIndex(({ role }) => role === 'IMPOSTOR')];
+    const room = roomStore.getRoom(code);
+    const send = (client, action, round, spot, fields) => client.timeout(3000).emitWithAck(
+      `game:sabotage_panel_${action}`, { code, roundId: round, panelId: spot.id, ...fields },
+    );
+    const place = async (client, spot) => {
+      const confirmed = waitForEvent(client, 'position:confirmed');
+      const id = room.players[clients.indexOf(client)].id;
+      roomStore.updatePosition(code, id, { x: spot.x, y: spot.y, confidence: 1 }, { skipPlausibilityCheck: true });
+      client.emit('position:update', { code, x: spot.x, y: spot.y, confidence: 1 });
+      await confirmed;
+    };
+    const start = async (type) => {
+      room.sabotageCooldownUntil = 0;
+      const arrived = waitForRoomWhere(host, (snapshot) => snapshot.sabotage?.type === type);
+      impostor.emit('game:sabotage', { code, type });
+      const snapshot = (await arrived).sabotage;
+      assert.equal('controls' in snapshot, false);
+      return { id: snapshot.panelStatus.roundId, spots: snapshot.fixSpots };
+    };
+    try {
+      const reactor = await start('REACTOR');
+      for (const [i, client] of [host, partner].entries()) {
+        await place(client, reactor.spots[i]);
+        assert.equal((await send(client, 'open', reactor.id, reactor.spots[i])).ok, true);
+      }
+      const checked = waitForEvent(host, 'room:error');
+      host.emit('game:sabotage_fix', { code, panel: 'REACTOR' });
+      assert.equal((await checked).code, 'SABOTAGE_INVALID_PANEL');
+      const fixed = waitForEvent(host, 'game:sabotage_fixed');
+      const beat = (client, i) => client.emit('game:sabotage_panel_hold', {
+        code, roundId: reactor.id, panelId: reactor.spots[i].id, active: true,
+      });
+      const interval = setInterval(() => [host, partner].forEach(beat), 350);
+      [host, partner].forEach(beat);
+      try {
+        assert.deepEqual((await fixed).fixed, ['REACTOR']);
+      } finally {
+        clearInterval(interval);
+      }
+      const oxygen = await start('O2');
+      await place(host, oxygen.spots[0]);
+      await place(legacy, oxygen.spots[1]);
+      const open = await send(host, 'open', oxygen.id, oxygen.spots[0]);
+      assert.ok(open.ok && /^[1-9]\d{4}$/.test(open.note));
+      assert.equal('note' in open.status, false);
+      const rejected = await send(legacy, 'open', oxygen.id, oxygen.spots[1]);
+      assert.equal(rejected.ok, false);
+      assert.equal('note' in rejected, false);
+      const partial = await send(host, 'submit', oxygen.id, oxygen.spots[0], { digits: open.note });
+      assert.equal(partial.result, 'OK');
+      assert.equal(partial.status.panels[1].state, 'OPEN');
+      const oxygenFixed = waitForEvent(host, 'game:sabotage_fixed');
+      legacy.emit('game:sabotage_fix', { code, panel: oxygen.spots[1].id });
+      assert.deepEqual((await oxygenFixed).fixed, ['o2', 'admin']);
+
+      for (const task of room.tasks.filter((task) => !task.isFake)) task.completed = true;
+      const target = clients.find((client) => client !== impostor);
+      await place(impostor, { x: 21, y: 50 });
+      await place(target, { x: 22, y: 50 });
+      const gameOver = waitForEvent(host, 'game:over');
+      impostor.emit('game:kill', { code, targetPlayerId: room.players[clients.indexOf(target)].id });
+      await gameOver;
+      const reset = waitForRoomWhere(host, (snapshot) => snapshot.status === 'MAP_READY');
+      host.emit('game:reset', { code });
+      assert.equal((await reset).sabotage, undefined);
+    } finally {
+      for (const client of clients) client.disconnect();
+    }
+  });
   test('server config binds publicly and validates the hosting port strictly', () => {
     assert.deepEqual(readServerConfig({}), {
       serverPort: DEFAULT_PORT,

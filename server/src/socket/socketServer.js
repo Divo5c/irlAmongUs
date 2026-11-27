@@ -5,6 +5,9 @@ const { createBotEngine } = require('../game/bots');
 
 const DISCONNECT_GRACE_MS = 30_000;
 const SABOTAGE_SWEEP_INTERVAL_MS = 5_000;
+const REACTOR_PANEL_TICK_MS = 100;
+const PANEL_HEARTBEAT_MIN_INTERVAL_MS = 120;
+const PANEL_SUBMIT_MIN_INTERVAL_MS = 250;
 
 function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONNECT_GRACE_MS, hostAccess } = {}) {
   const io = new Server(httpServer);
@@ -38,7 +41,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
     return `${code}|${playerId}`;
   }
 
-  function bindSocketToPlayer(socket, code, playerId) {
+  function bindSocketToPlayer(socket, code, playerId, sabotagePanels) {
     const key = primaryKey(code, playerId);
     const pendingDisconnect = pendingDisconnects.get(key);
     if (pendingDisconnect) {
@@ -52,6 +55,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
         existing.data.playerId === playerId
       ) {
         // Takeover: drop the previous socket for this identity.
+        roomStore.closeSabotagePanel(code, playerId);
         primarySockets.delete(key);
         existing.data.roomCode = null;
         existing.data.playerId = null;
@@ -61,6 +65,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
     socket.join(code);
     socket.data.roomCode = code;
     socket.data.playerId = playerId;
+    socket.data.sabotagePanels = sabotagePanels === true;
     primarySockets.set(key, socket.id);
   }
 
@@ -72,7 +77,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
           throw new RoomStoreError('HOST_DEVICE_REQUIRED', 'Only an approved device can create rooms.');
         }
         const room = roomStore.createRoom(payload ?? {});
-        bindSocketToPlayer(socket, room.code, room.hostId);
+        bindSocketToPlayer(socket, room.code, room.hostId, payload?.sabotagePanels);
         socket.emit('room:created', roomStore.toPublicRoom(room));
         emitSessionCreated(socket, room.code, room.hostId);
       } catch (error) {
@@ -87,7 +92,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
           id: playerId,
           name: playerName,
         });
-        bindSocketToPlayer(socket, code, playerId);
+        bindSocketToPlayer(socket, code, playerId, payload?.sabotagePanels);
         io.to(code).emit('room:updated', roomStore.toPublicRoom(room));
         emitSessionCreated(socket, code, playerId);
       } catch (error) {
@@ -117,7 +122,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
           throw new RoomStoreError('ROOM_NOT_FOUND', 'Room not found.');
         }
 
-        bindSocketToPlayer(socket, code, playerId);
+        bindSocketToPlayer(socket, code, playerId, payload?.sabotagePanels);
 
         const publicRoom = roomStore.toPublicRoom(room);
         socket.emit('room:rejoined', { ...publicRoom, playerId });
@@ -451,6 +456,10 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
       try {
         const { code, panel } = payload ?? {};
         assertSocketInRoom(socket, code);
+        const sabotage = roomStore.getRoom(code)?.sabotage;
+        if (socket.data.sabotagePanels && sabotage?.controls) {
+          throw new RoomStoreError('SABOTAGE_INVALID_PANEL', 'Use the sabotage panel.');
+        }
 
         const result = roomStore.fixSabotagePanel(
           code,
@@ -459,12 +468,60 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
         );
         io.to(code).emit('room:updated', result.room);
         if (!result.room.sabotage) {
+          if (sabotage?.controls) {
+            publishPanelStatus(code, {
+              roundId: sabotage.controls.id, type: sabotage.type, progress: 1,
+              panels: sabotage.controls.spots.map(({ id }) => ({ id, state: 'DONE' })),
+            });
+          }
           clearSabotageTimer(code);
           io.to(code).emit('game:sabotage_fixed', { code, fixed: result.fixed });
         }
       } catch (error) {
         emitRoomError(socket, error);
       }
+    });
+
+    function registerPanelEvent(event, act) {
+      socket.on(`game:sabotage_panel_${event}`, (payload, reply) => {
+        const ack = typeof reply === 'function' ? reply : () => {};
+        try {
+          const { code, roundId, panelId } = payload ?? {};
+          assertSocketInRoom(socket, code);
+          if (!socket.data.sabotagePanels || typeof roundId !== 'string' || roundId.length !== 36 ||
+              !['reactor-1', 'reactor-2', 'o2', 'admin'].includes(panelId)) {
+            throw new RoomStoreError('SABOTAGE_INVALID_PANEL', 'Invalid sabotage panel.');
+          }
+          ack({ ok: true, ...act(code, socket.data.playerId, roundId, panelId, payload) });
+        } catch (error) {
+          // Use error codes only. In particular, never log the keypad payload.
+          ack({ ok: false, error: error instanceof RoomStoreError ? error.code : 'INTERNAL_ERROR' });
+        }
+      });
+    }
+
+    registerPanelEvent('open', (code, playerId, roundId, panelId) =>
+      roomStore.openSabotagePanel(code, playerId, roundId, panelId));
+    registerPanelEvent('close', (code, playerId, roundId, panelId) => {
+      roomStore.closeSabotagePanel(code, playerId, roundId, panelId);
+    });
+    registerPanelEvent('hold', (code, playerId, roundId, panelId, { active }) => {
+      const now = Date.now();
+      if (active === true) {
+        if (now - (socket.data.lastPanelHeartbeat ?? -Infinity) < PANEL_HEARTBEAT_MIN_INTERVAL_MS) return;
+        socket.data.lastPanelHeartbeat = now;
+      }
+      roomStore.holdSabotagePanel(code, playerId, roundId, panelId, active, now);
+    });
+    registerPanelEvent('submit', (code, playerId, roundId, panelId, { digits }) => {
+      const now = Date.now();
+      if (now - (socket.data.lastPanelSubmit ?? -Infinity) < PANEL_SUBMIT_MIN_INTERVAL_MS) {
+        return { result: 'BAD', retryInMs: PANEL_SUBMIT_MIN_INTERVAL_MS };
+      }
+      socket.data.lastPanelSubmit = now;
+      const result = roomStore.submitOxygenPanel(code, playerId, roundId, panelId, digits, now);
+      publishPanelResult(code, result);
+      return { result: result.result, status: result.status, retryInMs: result.retryInMs };
     });
 
     /** Notfall-Button: standing in the Cafeteria, one per player per game. */
@@ -788,6 +845,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
       return; // a newer socket owns this identity now
     }
     primarySockets.delete(key);
+    roomStore.closeSabotagePanel(roomCode, playerId);
 
     const room = roomStore.getRoom(roomCode);
     if (
@@ -843,8 +901,10 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
   // ------------------------------------------------ sabotage deadline //
 
   const sabotageTimers = new Map();
+  const reactorRooms = new Map();
 
   function clearSabotageTimer(code) {
+    reactorRooms.delete(code);
     const timer = sabotageTimers.get(code);
     if (timer) {
       clearTimeout(timer);
@@ -857,9 +917,11 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
     clearSabotageTimer(code);
     const room = roomStore.getRoom(code);
     if (!room?.sabotage?.deadline) return;
+    if (room.sabotage.type === 'REACTOR') reactorRooms.set(code, null);
     const delay = Math.max(0, Date.parse(room.sabotage.deadline) - Date.now());
     const timer = setTimeout(() => {
       sabotageTimers.delete(code);
+      reactorRooms.delete(code);
       try {
         if (!roomStore.isSabotageExpired(code)) return;
         clearMeetingTimer(code);
@@ -878,6 +940,45 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
     timer.unref();
     sabotageTimers.set(code, timer);
   }
+
+  function publishPanelStatus(code, status) {
+    if (!status) return;
+    const room = roomStore.getRoom(code);
+    for (const player of room?.players ?? []) {
+      if (player.isAlive) emitToPlayer(code, player.id, 'game:sabotage_panel_status', status);
+    }
+  }
+
+  function publishPanelResult(code, result) {
+    publishPanelStatus(code, result.status);
+    if (result.room) io.to(code).emit('room:updated', result.room);
+    if (result.fixed) {
+      clearSabotageTimer(code);
+      io.to(code).emit('game:sabotage_fixed', { code, fixed: result.fixed });
+    }
+  }
+
+  const reactorTick = setInterval(() => {
+    for (const [code, previous] of reactorRooms) {
+      const result = roomStore.tickReactorPanels(code);
+      if (!result) {
+        if (roomStore.getRoom(code)?.sabotage?.type === 'REACTOR') reactorRooms.delete(code);
+        else clearSabotageTimer(code);
+        continue;
+      }
+      const snapshot = JSON.stringify(result.status);
+      if (snapshot !== previous) {
+        reactorRooms.set(code, snapshot);
+        publishPanelResult(code, result);
+      }
+    }
+  }, REACTOR_PANEL_TICK_MS);
+  reactorTick.unref();
+  httpServer.once('close', () => {
+    clearInterval(reactorTick);
+    clearInterval(sabotageSweeper);
+    for (const code of sabotageTimers.keys()) clearSabotageTimer(code);
+  });
 
   /**
    * Failsafe sweep: every 5 s all rooms get checked for expired critical
