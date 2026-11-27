@@ -1,6 +1,6 @@
 /* App shell: install (add to home screen). Network-first so deploys land
    immediately; cache only as offline fallback. */
-const CACHE = 'rlaus-shell-v86';
+const CACHE = 'rlaus-shell-v87';
 const VERSION = '19.17.13';
 const ASSETS = [
   '/',
@@ -11,6 +11,7 @@ const ASSETS = [
   '/css/styles/screens/editor.css',
   '/css/styles/screens/hud.css',
   '/css/styles/screens/tasks.css',
+  '/css/styles/screens/sabotage.css',
   '/css/styles/screens/moments.css',
   '/css/styles/screens/meeting.css',
   '/css/styles/terminal.css',
@@ -21,9 +22,13 @@ const ASSETS = [
   '/img/ghost/crack-b.svg',
   '/img/ghost/ghost-avatar.svg',
   '/css/styles/fonts/nunito-latin.woff2',
+  '/css/styles/fonts/panel-lcd.woff2',
+  '/css/styles/fonts/panel-handwriting.woff2',
   ...['osm', 'mapEditor', 'tasks', 'app'].map((name) => `/js/${name}.js?v=${VERSION}`),
   '/js/ui.js',
   '/js/i18n.js',
+  '/js/sabotagePanels.js',
+  '/img/sabotage/hand.svg',
   '/socket.io/socket.io.js',
   '/manifest.webmanifest',
   '/icons/terminal.svg',

@@ -5,9 +5,14 @@
  */
 import { avatar, browserStorage, buttonArt, element, icon } from './ui.js';
 import { langActive, localText, roomErrorText, roomLabel, t, taskStageLabel, taskTitle } from './i18n.js';
+import { createSabotagePanel } from './sabotagePanels.js';
 
 const App = (() => {
   const $ = (id) => document.getElementById(id);
+  const sabotagePanel = createSabotagePanel({
+    t, tones: playTones, vibrate, notify: showToast,
+    currentPanel: () => state.room?.sabotage?.panelStatus,
+  });
 
   // ------------------------------------------------------- i18n (DE/EN) //
   /** Statische Texte im HTML tauschen (data-i18n Attribute). */
@@ -344,6 +349,9 @@ const App = (() => {
         && state.room?.players?.some(({ id, isAlive }) => id === state.playerId && isAlive);
       if (state.room?.status === 'IN_GAME' && room.status !== 'IN_GAME') closeGameDialogs();
       state.room = room;
+      sabotagePanel.sync(room.sabotage?.panelStatus,
+        room.players?.some(({ id, isAlive }) => id === state.playerId && isAlive));
+      renderPanelMapWarning();
       if (room.code) state.code = room.code;
       state.isHost = room.hostId === state.playerId;
       // Remember the lobby settings of this round on the device; a fresh
@@ -565,6 +573,14 @@ const App = (() => {
       vibrate([80, 60, 80, 60, 160]);
       renderSabotage();
     });
+    socket.on('game:sabotage_panel_status', (status) => {
+      const sab = state.room?.sabotage;
+      if (sab?.panelStatus?.roundId !== status.roundId) return;
+      sab.panelStatus = status;
+      sabotagePanel.showStatus(status);
+      renderSabotage();
+    });
+    socket.on('disconnect', sabotagePanel.close);
     socket.on('game:sabotage_fixed', () => {
       renderSabotage();
       showToast(langActive() === 'en' ? 'Sabotage repaired' : 'Sabotage repariert');
@@ -578,6 +594,7 @@ const App = (() => {
     });
     socket.on('position:confirmed', (pos) => {
       state.selfPos = pos;
+      state.panelPositionAt = performance.now();
       if (meetingIntroActive && meetingAwaitActive()) renderMeetingAwaitContent();
       const wasRetrying = state.positionRetryAt > 0;
       state.positionRetryAt = 0;
@@ -676,6 +693,7 @@ const App = (() => {
       if (victim) victim.isAlive = false;
       renderGameHud();
       if (killedPlayerId === state.playerId) {
+        sabotagePanel.close();
         activateGhostSkin(true);
       } else {
         $('game-phase-hint').textContent = t('game.killLanded');
@@ -949,6 +967,7 @@ const App = (() => {
   }
 
   function closeGameDialogs() {
+    sabotagePanel.close();
     window.RlausTasks?.close();
     $('sabotage-picker')?.remove();
     $('settings-menu').classList.add('hidden');
@@ -1018,7 +1037,7 @@ const App = (() => {
     if (!saved || !isRecentSession(saved) || browserStorage.getItem(SESSION_KEY) !== saved.raw) return false;
     state.name = saved.name ?? state.name;
     Object.assign(state, { code: saved.code, playerId: saved.playerId, token: saved.token });
-    state.socket.emit('room:rejoin', { code: saved.code, playerId: saved.playerId, token: saved.token });
+    state.socket.emit('room:rejoin', { code: saved.code, playerId: saved.playerId, token: saved.token, sabotagePanels: true });
     return true;
   }
 
@@ -1064,6 +1083,7 @@ const App = (() => {
         // Der Server vergibt den Code (Kollision + Bunny-Squatting auss).
         hostId: playerId,
         hostName: name,
+        sabotagePanels: true,
       });
     } else {
       const code = $('join-code').value.trim().toUpperCase();
@@ -1076,6 +1096,7 @@ const App = (() => {
         code,
         playerId: state.playerId,
         playerName: name,
+        sabotagePanels: true,
       });
     }
 
@@ -1862,16 +1883,11 @@ const App = (() => {
     const sab = state.room?.sabotage;
     const alive = state.room.players.some(({ id, isAlive }) => id === state.playerId && isAlive);
     if (sab && alive) {
-      if (sab.type === 'REACTOR' && roomIdContains('REACTOR')) {
-        return { label: localText("Reparieren", "Repair"), kind: 'FIX', panel: 'REACTOR' };
-      }
-      if (sab.type === 'O2') {
-        if (!sab.panels?.o2 && roomIdContains('O2')) {
-          return { label: localText("Sauerstoff", "Repair O2"), kind: 'FIX', panel: 'o2' };
-        }
-        if (!sab.panels?.admin && roomIdContains('ADMIN')) {
-          return { label: localText("Admin reparieren", "Repair Admin panel"), kind: 'FIX', panel: 'admin' };
-        }
+      if (sab.panelStatus && state.selfPos) {
+        const { x, y, roomId, confidence } = state.selfPos;
+        const spot = confidence >= 0.4 && performance.now() - state.panelPositionAt <= 8000 && sab.fixSpots.find((candidate) =>
+          roomId === candidate.roomId && Math.hypot(candidate.x - x, candidate.y - y) <= state.room.panelUseRadiusM);
+        if (spot) return { label: t('panel.open'), kind: 'PANEL', panel: spot.id };
       }
       if (sab.type === 'LIGHTS' && roomIdContains('ELECTRICAL')) {
         return { label: localText("Licht reparieren", "Restore lights"), kind: 'FIX', panel: 'LIGHTS' };
@@ -2154,13 +2170,17 @@ const App = (() => {
 
   /** Sabotage-Typen, die die aktuelle Karte hergibt (React/O2/EC/COMMS). */
   function sabotageTypesAvailable() {
-    const types = (state.room?.map?.rooms ?? []).map((room) => room.type);
-    const allowed = [];
-    if (types.includes('REACTOR')) allowed.push('REACTOR');
-    if (types.includes('O2')) allowed.push('O2');
-    if (types.includes('ELECTRICAL')) allowed.push('LIGHTS');
-    if (types.includes('COMMUNICATIONS')) allowed.push('COMMS');
-    return allowed;
+    return state.room?.sabotageTypes ?? [];
+  }
+
+  function renderPanelMapWarning() {
+    const warning = $('map-panel-warning');
+    const roomTypes = state.room?.map?.rooms?.map(({ type }) => type) ?? [];
+    const errors = [];
+    if (roomTypes.includes('REACTOR') && !sabotageTypesAvailable().includes('REACTOR')) errors.push(t('panel.reactorSmall'));
+    if (roomTypes.includes('O2') && roomTypes.includes('ADMIN') && !sabotageTypesAvailable().includes('O2')) errors.push(t('panel.oxygenSmall'));
+    warning.textContent = errors.join(' · ');
+    warning.hidden = errors.length === 0;
   }
   setInterval(() => {
     renderGameHud();
@@ -2188,14 +2208,24 @@ const App = (() => {
     const remaining = critical ? Math.max(0, Math.ceil((Date.parse(sab.deadline) - Date.now()) / 1000)) : 0;
     const details = {
       REACTOR: t('sab.reactorCountdown'),
-      O2: t('sab.o2Countdown') + ' · O₂: ' + (sab.panels?.o2 ? '✓' : '–') + ' · Admin: ' + (sab.panels?.admin ? '✓' : '–'),
+      O2: t('sab.o2Countdown'),
       LIGHTS: t('sab.lights'),
       COMMS: t('sab.comms'),
     };
     const guidance = details[sab.type] ?? 'Sabotage';
-    if (banner.dataset.guidance !== guidance) {
-      banner.dataset.guidance = guidance;
-      banner.replaceChildren(icon('sabotage'), element('span', '', guidance), element('strong', 'sabotage-banner__timer'));
+    const chips = sab.panelStatus?.panels.map(({ state: panelState }, index) => {
+      const label = sab.type === 'REACTOR' && panelState === 'OPEN' ? 'FREE' : panelState;
+      return `${t('panel.number')} ${index + 1}: ${t(`panel.state.${label}`)}`;
+    }) ?? [];
+    const labels = (sab.fixSpots ?? []).map(({ roomType }) => roomLabel(roomType));
+    const destination = [...new Set(labels)].join(' / ');
+    const signature = [guidance, destination, ...chips].join('|');
+    if (banner.dataset.guidance !== signature) {
+      banner.dataset.guidance = signature;
+      const status = element('span', 'sab-status-chips');
+      for (const chip of chips) status.append(element('span', 'sab-status-chip', chip));
+      banner.replaceChildren(icon('sabotage'), element('span', '', destination ? `${guidance} → ${destination}` : guidance),
+        element('strong', 'sabotage-banner__timer'), status);
     }
     const timer = banner.querySelector('strong');
     timer.textContent = critical ? remaining + ' s' : '';
@@ -2847,7 +2877,7 @@ const App = (() => {
       ctx.stroke();
       ctx.font = '15px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText('!', fx, fy + 5);
+      ctx.fillText(spot.id ? String(fixSpots.indexOf(spot) + 1) : '!', fx, fy + 5);
       ctx.textAlign = 'left';
     }
 
@@ -3248,7 +3278,9 @@ const App = (() => {
     const action = useAction();
     if (!action) return;
     const socket = ensureSocket();
-    if (action.kind === 'FIX') {
+    if (action.kind === 'PANEL') {
+      sabotagePanel.open(socket, state.code, state.room.sabotage, action.panel);
+    } else if (action.kind === 'FIX') {
       socket.emit('game:sabotage_fix', { code: state.code, panel: action.panel });
       vibrate(60);
     } else if (action.kind === 'TASK') {

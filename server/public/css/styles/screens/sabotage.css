@@ -1,0 +1,209 @@
+@font-face {
+  font-family: "Panel LCD";
+  src: url("../fonts/panel-lcd.woff2") format("woff2");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Panel Handwriting";
+  src: url("../fonts/panel-handwriting.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@layer screens {
+  .sab-dialog {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    border: 0;
+    background: var(--sab-overlay);
+    color: var(--sab-scan);
+    overflow: auto;
+  }
+  .sab-dialog[open] { display: grid; place-items: center; }
+  .sab-dialog::backdrop { background: var(--sab-overlay); }
+  .sab-close {
+    position: fixed;
+    z-index: 1;
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    background: var(--sab-panel-edge);
+    border: 1px solid var(--sab-panel-steel);
+    border-radius: 12px;
+  }
+  .sab-close .ui-art { width: 34px; height: 34px; }
+  .sab-terminal {
+    width: min(100%, 380px);
+    padding: clamp(8px, 2.2vw, 18px);
+    border: 6px solid var(--sab-panel-edge);
+    border-top-color: var(--sab-panel-raised);
+    border-radius: 16px;
+    box-shadow: inset 0 0 0 2px var(--sab-metal-shadow);
+    background: linear-gradient(var(--sab-panel-raised), var(--sab-panel-bg));
+  }
+  .sab-display {
+    display: grid;
+    place-items: center;
+    min-height: 48px;
+    border: 3px solid var(--sab-panel-edge);
+    border-radius: 7px;
+    padding: 4px 7px;
+    background: var(--sab-key-face);
+    color: var(--sab-lcd-bg);
+    font: 600 clamp(16px, 4vw, 24px)/1.05 "Panel LCD", monospace;
+    text-align: center;
+  }
+  .sab-hand {
+    --sab-mask: url("/img/sabotage/hand.svg") center / contain no-repeat;
+    position: relative;
+    display: block;
+    width: clamp(200px, 60vw, 305px);
+    height: clamp(200px, 38dvh, 305px);
+    padding: 0;
+    margin: 6px auto;
+    border: 0;
+    background: transparent;
+    touch-action: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    filter: drop-shadow(0 0 4px var(--sab-hand-line));
+  }
+  .sab-hand::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--sab-scan);
+    mask: var(--sab-mask);
+  }
+  .sab-hand__idle, .sab-hand__scan, .sab-hand__progress {
+    position: absolute;
+    inset: 5px;
+    mask: var(--sab-mask);
+    pointer-events: none;
+  }
+  .sab-hand__idle, .sab-hand__progress {
+    background-image: linear-gradient(var(--sab-hand-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--sab-hand-line) 1px, transparent 1px);
+    background-size: 8px 8px;
+    background-color: var(--sab-hand-idle);
+  }
+  .sab-hand__progress {
+    background-color: var(--sab-hand-active);
+    clip-path: inset(calc(100% - var(--sab-progress, 0) * 100%) 0 0);
+    transition: clip-path 100ms linear;
+  }
+  .sab-hand__scan { display: none; }
+  .sab-hand.is-waiting .sab-hand__scan { display: block; }
+  .sab-hand__scan::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    background: linear-gradient(transparent 44%, var(--sab-scan) 50%, transparent 56%);
+    animation: sab-scan 2s linear infinite;
+  }
+  .sab-partner { min-height: 1.4em; text-align: center; }
+  .sab-terminal--o2 {
+    position: relative;
+    width: min(100%, 315px);
+    padding-top: 47px;
+    background: linear-gradient(var(--sab-panel-steel), var(--sab-metal-shadow));
+  }
+  .sab-terminal--o2 .sab-display {
+    background: var(--sab-lcd-bg);
+    color: var(--sab-lcd-ink);
+    letter-spacing: .12em;
+    font-size: 29px;
+  }
+  .sab-display[data-result="bad"] { color: var(--sab-hand-idle); }
+  .sab-display[data-result] { animation: sab-blink 500ms linear 3; }
+  .sab-note {
+    position: absolute;
+    top: 3px;
+    left: 9px;
+    min-width: 87px;
+    padding: 2px 10px 0;
+    transform: rotate(-5deg);
+    background: var(--sab-note-yellow);
+    color: var(--sab-hand-line);
+    text-align: center;
+    box-shadow: 2px 3px 0 var(--sab-metal-shadow);
+    font: 700 25px/1.15 "Panel Handwriting", cursive;
+  }
+  .sab-note::before {
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: 30%;
+    width: 40%;
+    height: 7px;
+    background: var(--sab-note-tape);
+    transform: rotate(3deg);
+  }
+  .sab-keys {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(48px, 68px));
+    gap: clamp(4px, 1vh, 8px);
+    justify-content: center;
+    margin-top: 8px;
+  }
+  .sab-key {
+    aspect-ratio: 1;
+    min-height: 48px;
+    padding: 0;
+    border: 4px solid var(--sab-metal-shadow);
+    border-top-color: var(--sab-scan);
+    border-left-color: var(--sab-panel-steel);
+    border-radius: 8px;
+    color: var(--sab-hand-line);
+    background: var(--sab-key-face);
+    font: 700 clamp(24px, 7vw, 38px)/1 "Panel Handwriting", cursive;
+  }
+  .sab-key[data-action="clear"] { background: var(--sab-key-clear); }
+  .sab-key[data-action="submit"] { background: var(--sab-key-ok); }
+  .sab-key:active:not(:disabled) {
+    transform: translateY(2px);
+    border-color: var(--sab-scan);
+    border-top-color: var(--sab-metal-shadow);
+    border-left-color: var(--sab-metal-shadow);
+  }
+  .sab-dialog button:focus-visible { outline: 3px solid var(--sab-hand-active); outline-offset: 2px; }
+  .sab-status-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .sab-status-chip {
+    border: 1px solid currentColor;
+    border-radius: 7px;
+    padding: 0 4px;
+    white-space: nowrap;
+    font-size: .75em;
+  }
+
+  @keyframes sab-scan { from { transform: translateY(-55%); } to { transform: translateY(55%); } }
+  @keyframes sab-blink { 50% { opacity: .5; } }
+
+  @media (max-height: 440px) {
+    .sab-terminal--o2 {
+      display: grid;
+      grid-template-columns: minmax(96px, 1fr) auto;
+      grid-template-rows: 48px auto;
+      column-gap: 10px;
+      width: min(100%, 415px);
+      padding-top: 10px;
+    }
+    .sab-terminal--o2 .sab-note { grid-row: 2; position: relative; align-self: start; top: 14px; left: 0; }
+    .sab-keys { grid-area: 1 / 2 / span 2; grid-template-columns: repeat(3, 48px); margin-top: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sab-hand__progress { transition: none; }
+    .sab-display[data-result], .sab-hand__scan::after { animation: none; }
+  }
+}

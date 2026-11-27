@@ -516,3 +516,22 @@
 [data-crew-color="gray"] { --crew-body: var(--crew-gray); }
 [data-crew-color="tan"] { --crew-body: var(--crew-tan); }
 [data-crew-color="coral"] { --crew-body: var(--crew-coral); }
+:root {
+  --sab-panel-bg: #2a323e;
+  --sab-panel-raised: #4b5766;
+  --sab-panel-edge: #161a22;
+  --sab-panel-steel: #a6b5c4;
+  --sab-metal-shadow: #485668;
+  --sab-hand-idle: #f96b58;
+  --sab-hand-active: #53f0df;
+  --sab-hand-line: #080d12;
+  --sab-scan: #fff;
+  --sab-note-yellow: #ffe585;
+  --sab-note-tape: #fff6bc;
+  --sab-key-face: #dae4ec;
+  --sab-key-ok: #a9e177;
+  --sab-key-clear: #fb9b75;
+  --sab-lcd-bg: #060d0e;
+  --sab-lcd-ink: #a5ffc9;
+  --sab-overlay: rgb(10 14 20 / 94%);
+}

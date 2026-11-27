@@ -2,6 +2,22 @@ import { browserStorage } from './ui.js';
 
 // Statische Texte und gemeinsame Begriffe für Deutsch und Englisch.
 const TEXT = {
+  "panel.open": ["Panel benutzen", "Use panel"],
+  "panel.hold": ["Halten, um die Kernschmelze zu stoppen", "HOLD TO STOP MELTDOWN"],
+  "panel.waiting": ["Warte auf zweiten Nutzer", "WAITING FOR SECOND USER"],
+  "panel.nominal": ["Reaktor stabil", "REACTOR NOMINAL"],
+  "panel.partner": ["Partner hält", "Partner is holding"],
+  "panel.note": ["Code am Panel", "Panel code"],
+  "panel.clear": ["Eingabe löschen", "Clear input"],
+  "panel.submit": ["Code bestätigen", "Submit code"],
+  "panel.unavailable": ["Panel nicht verfügbar. Geh näher heran und versuche es erneut.", "Panel unavailable. Move closer and try again."],
+  "panel.number": ["Panel", "Panel"],
+  "panel.state.OPEN": ["Offen", "Open"],
+  "panel.state.FREE": ["Frei", "Free"],
+  "panel.state.HELD": ["Wird gehalten", "Held"],
+  "panel.state.DONE": ["Erledigt", "Done"],
+  "panel.reactorSmall": ["Reaktorraum zu klein: zeichne ihn größer.", "Reactor too small: draw a larger room."],
+  "panel.oxygenSmall": ["O₂-Panels passen nicht: zeichne Sauerstoff und Admin größer oder weiter auseinander.", "O₂ panels do not fit: draw larger or more widely separated Oxygen and Admin rooms."],
   "ghost.status": ["Du bist ein Geist", "You are a ghost"],
   "ghost.crewHint": ["Du kannst weiter Aufgaben erledigen.", "You can keep doing tasks."],
   "ghost.impostorHint": ["Du kannst weiter sabotieren.", "You can still start sabotage."],
