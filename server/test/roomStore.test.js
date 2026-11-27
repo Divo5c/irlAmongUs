@@ -502,6 +502,18 @@ describe('kill & cooldown', () => {
     );
   });
 
+  test('impostors cannot kill their teammates even within kill range', () => {
+    const store = new RoomStore();
+    createRoomWithPlayers(store, 5, 'ABC234', { impostorCount: 2, killCooldownMs: 0 });
+    const { assignments } = beginGame(store);
+    const [killer, teammate] = impostorsOf(assignments);
+    assert.ok(teammate);
+    placeNear(store, [killer, teammate]);
+
+    assertGameError(() => store.killPlayer('ABC234', killer, teammate), 'INVALID_TARGET');
+    assert.equal(store.getRoom('ABC234').players.find((player) => player.id === teammate).isAlive, true);
+  });
+
   test('cooldown blocks with retryAfterMs and unlocks afterwards', async () => {
     const { store, impostorIds, crewmateIds } = startedGame(4, { killCooldownMs: 60 });
     placeNear(store, [impostorIds[0], crewmateIds[0], crewmateIds[1]]);
