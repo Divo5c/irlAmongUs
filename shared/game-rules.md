@@ -1,15 +1,13 @@
 # Real Life Among Us – Game Rules (technische Referenz)
 
-Stand: Runde 3 (2026-08-25). Diese Datei ist die verbindliche Beschreibung der
-serverautoritativen Spielregeln. Der Server (`server/src/rooms/roomStore.js`
-plus `server/src/game/*`) implementiert genau diese Regeln; Clients stellen
-sie nur dar.
+Diese Datei beschreibt die serverautoritativen Spielregeln in
+`server/src/rooms/roomStore.js` und `server/src/game/*`.
 
 ## 1. Spieler & Räume
 
 - 2–10 Spieler pro Raum (`MAX_PLAYERS = 10`). Empfohlen: ≥ 5, damit die
   Impostor-Paritätsregel nicht sofort greift.
-- Joinen ist nur im Status `LOBBY` möglich.
+- Beitritt ist in `LOBBY`, `MAP_SETUP` und `MAP_READY` möglich.
 - Ein Raum hat einen 6-Zeichen-Code (Alphabet ohne 0/1) und genau einen Host.
 - Verlässt der Host die Lobby, wird das am längsten anwesende Mitglied zum
   neuen Host befördert. Ist niemand mehr übrig, wird der Raum gelöscht.
@@ -19,7 +17,8 @@ sie nur dar.
 ## 2. Rollen
 
 - Rollen werden bei `game:start` zufällig verteilt: `impostorCount` Impostors,
-  alle anderen Crewmates. Genau die konfigurierte Anzahl.
+  alle anderen Crewmates. Die konfigurierte Anzahl wird auf das zulässige
+  Maximum begrenzt.
 - **Geheimhaltung:** Rollen verlassen den Server niemals in öffentlichen
   Broadcasts. Jeder Spieler erhält seine Rolle ausschließlich privat
   (`game:role_assigned`). Bei Game Over werden alle Rollen aufgedeckt.
@@ -29,10 +28,10 @@ sie nur dar.
 
 ### Gültige Impostor-Anzahl
 
-`1 <= impostorCount <= floor((playerCount - 1) / 2)`
+`1 <= impostorCount <= max(1, floor((playerCount - 1) / 2))`
 
-Damit sind Crewmates zu Beginn immer in der Überzahl (sonst würde die
-Paritäts-Siegbedingung sofort auslösen). Beispiele:
+Ab drei Spielern sind Crewmates durch diese Grenze zu Beginn in der Überzahl.
+Beispiele:
 
 | Spieler | max. Impostors |
 |---|---|
@@ -41,18 +40,18 @@ Paritäts-Siegbedingung sofort auslösen). Beispiele:
 | 8 | 3 |
 | 10 | 4 |
 
-Wird gegen diese Grenze verstoßen (Konfig oder Spielerzahl geändert),
-wirft der Server `CONFIG_INVALID_IMPOSTORS` bei `game:start`.
+Beim Ändern der Konfiguration und beim Spielstart begrenzt der Server die
+Impostor-Anzahl entsprechend.
 
 ## 3. Konfiguration (GameConfig)
 
-Nur der Host darf sie ändern, nur im Status `LOBBY` (`CONFIG_LOCKED` sonst).
+Nur der Host darf sie in `LOBBY` oder `MAP_READY` ändern.
 Alle Werte serverseitig validiert; öffentlicher Teil jeder Room-Projektion.
 
 | Feld | Range | Default | Bedeutung |
 |---|---|---|---|
 | impostorCount | 1–5 (+Spielerregel) | 1 | Anzahl Impostors |
-| tasksPerCrewmate | 1–8 | 2 | Tasks pro Crewmate |
+| tasksPerCrewmate | 1–6 | 2 | Tasks pro Crewmate |
 | killCooldownMs | 0–180000 | 20000 | Pause zwischen Kills (0 = aus) |
 | discussionDurationMs | 0–180000 | 15000 | Diskussionsphase vor dem Voting (0 = überspringen) |
 | votingDurationMs | 5000–300000 | 30000 | Maximale Votingdauer |
@@ -64,14 +63,14 @@ Alle Werte serverseitig validiert; öffentlicher Teil jeder Room-Projektion.
 - Katalog mit festen Typen (fix_wiring, swipe_card, upload_data, …).
 - Instanz: `{id: <type>-<playerNr>-<taskNr>, type, assignedTo, title,
   completed, completedAt}`.
-- Nur der zugewiesene (lebende) Spieler kann abschließen; kein Doppelabschluss;
-  Fortschritt ist serverautoriativ (`taskProgress {completed,total}`).
-- Crew-Sieg, sobald **alle** Tasks abgeschlossen sind.
+- Crewmates können ihre zugewiesenen Aufgaben auch als Geist abschließen.
+  Abgeschlossene Aufgaben werden nur einmal gezählt. Der Server berechnet
+  `taskProgress {completed,total}`.
+- Crew-Sieg, sobald alle echten Aufgaben abgeschlossen sind.
 
 ## 5. Kill
 
-- Nur lebende Impostors, nur Status `IN_GAME`, Ziel muss leben und darf nicht
-  man selbst sein.
+- Ein lebender Impostor kann in `IN_GAME` nur lebende Crewmates töten.
 - Cooldown pro Raum (`killCooldownMs`); Verstoß → `KILL_ON_COOLDOWN` mit
   `retryAfterMs`.
 - Das Opfer wird öffentlich sichtbar tot (`isAlive=false`, Broadcast
@@ -83,10 +82,11 @@ Alle Werte serverseitig validiert; öffentlicher Teil jeder Room-Projektion.
 
 1. **Report:** Ein lebender Spieler meldet → Status `MEETING`, Phase
    `DISCUSSION`. Kein Voting während der Diskussion (`VOTING_NOT_OPEN`).
-2. **DISCUSSION:** Läuft `discussionDurationMs`; Countdown für alle; danach
-   schaltet der Server automatisch auf `VOTING` (Event `game:voting_started`).
+2. **DISCUSSION:** Die Frist von `discussionDurationMs` startet mit der
+   Host-Freigabe in der Cafeteria. Danach schaltet der Server automatisch auf
+   `VOTING` (Event `game:voting_started`).
 3. **VOTING:** Jeder Lebende hat genau eine Stimme (Ziel muss leben oder
-   Skip). Tote können weder voten noch gemeldet bekommen werden sie gezählt.
+   Skip). Tote zählen weder als Stimmberechtigte noch als Ziel.
    Endet automatisch bei Deadline **oder** sobald alle Lebenden gevotet haben.
 4. **RESULT:** Streng Meistgewählter wird ausgeworfen; Unentschieden oder
    Skip-Mehrheit → niemand fliegt. Mit `confirmEjects` wird der Name genannt,
@@ -106,8 +106,9 @@ Bei Sieg: Status `GAME_OVER`, Event `game:over` mit Gewinner + allen Rollen.
 
 ## 8. Rematch
 
-Nur der Host, nur ab `GAME_OVER` (`game:reset`). Zurück nach `LOBBY`:
-Code, Host, Spielerreihenfolge, Session-Tokens und Config bleiben erhalten;
+Nur der Host, nur ab `GAME_OVER` (`game:reset`). Mit gespeicherter Karte
+geht es zurück nach `MAP_READY`, sonst nach `LOBBY`.
+Code, Host, Spielerreihenfolge, Session-Tokens und Config bleiben erhalten.
 Rollen, Alive-State, Tasks, Ejections, Votes und Cooldowns werden vollständig
 verworfen. Anschließend startet der Host eine frische Runde.
 
