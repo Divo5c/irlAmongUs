@@ -127,6 +127,21 @@ describe('RoomStore.createRoom', () => {
     assert.equal(nonSecureRandom.mock.callCount(), 0);
   });
 
+  test('pruning an inactive room preserves another room’s boundary warnings', () => {
+    const store = new RoomStore();
+    createRoomWithPlayers(store);
+    beginGame(store);
+    const old = store.createRoom({ code: 'DEF234', hostId: 'old-host' });
+    old.updatedAt = new Date(0).toISOString();
+    const outside = { x: 20, y: 250, confidence: 1 };
+    assert.equal(store.updatePosition('ABC234', 'host-1', outside).boundary.strikes, 1);
+
+    store.createRoom({ hostId: 'new-host' });
+
+    assert.equal(store.getRoom(old.code), null);
+    assert.equal(store.updatePosition('ABC234', 'host-1', outside).boundary.strikes, 2);
+  });
+
   test('accepts a validated custom config on creation', () => {
     const store = new RoomStore();
     const room = store.createRoom({

@@ -258,15 +258,18 @@ class RoomStore {
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     for (const [code, room] of this.#roomsByCode) {
       if (Date.parse(room.updatedAt ?? room.createdAt ?? 0) < cutoff) {
-        this.#roomsByCode.delete(code);
-        this.#positions.delete(code);
-        this.#boundaryStrikes.clear?.();
-        this.#authTokens.delete(code);
-        this.#adminAuth.delete(code);
-        this.#adminAuthAttempts.delete(code);
-        this.#posRejects.delete(code);
+        this.#deleteRoom(code);
       }
     }
+  }
+
+  #deleteRoom(code) {
+    this.#roomsByCode.delete(code);
+    this.#positions.delete(code);
+    this.#authTokens.delete(code);
+    this.#adminAuth.delete(code);
+    this.#adminAuthAttempts.delete(code);
+    this.#clearBoundaryStrikes(code);
   }
 
   /**
@@ -518,10 +521,7 @@ class RoomStore {
     this.#authTokens.get(code)?.delete(playerId);
 
     if (room.players.length === 0) {
-      this.#roomsByCode.delete(code);
-      this.#authTokens.delete(code);
-      this.#positions.delete(code);
-      this.#clearBoundaryStrikes(code);
+      this.#deleteRoom(code);
       return { removed: true, deleted: true, room: null };
     }
 
