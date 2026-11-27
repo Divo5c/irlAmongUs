@@ -11,7 +11,7 @@
  *   RlausTasks.isActive()                          \u2014 a game is open
  *   RlausTasks.close()                             \u2014 force-close
  */
-import { avatar, buttonArt, icon } from './ui.js';
+import { avatar, browserStorage, buttonArt, icon } from './ui.js';
 import { localText, roomLabel, t, taskStageLabel, taskTitle } from './i18n.js';
 
 (() => {
@@ -74,7 +74,7 @@ import { localText, roomLabel, t, taskStageLabel, taskTitle } from './i18n.js';
     closeBtn.addEventListener('click', () => {
       window.RlausSfx?.('panel_close', 0.7);
       close();
-      if (localStorage.getItem('rlaus_vibration') !== 'false') navigator.vibrate?.(20);
+      if (browserStorage.getItem('rlaus_vibration') !== 'false') navigator.vibrate?.(20);
     });
     overlay.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;

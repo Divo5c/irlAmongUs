@@ -1,3 +1,5 @@
+import { browserStorage } from './ui.js';
+
 // Statische Texte und gemeinsame Begriffe für Deutsch und Englisch.
 const TEXT = {
   "ghost.status": ["Du bist ein Geist", "You are a ghost"],
@@ -250,7 +252,7 @@ const TASK_TITLES = {
 };
 
 export function langActive() {
-  return localStorage.getItem('rlaus_lang') === 'en' ? 'en' : 'de';
+  return browserStorage.getItem('rlaus_lang') === 'en' ? 'en' : 'de';
 }
 
 export function localText(de, en) {

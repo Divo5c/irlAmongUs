@@ -1,5 +1,17 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+export const browserStorage = {
+  getItem(key) {
+    try { return localStorage.getItem(key); } catch { return null; }
+  },
+  setItem(key, value) {
+    try { localStorage.setItem(key, value); } catch { /* Storage may be blocked or full. */ }
+  },
+  removeItem(key) {
+    try { localStorage.removeItem(key); } catch { /* Storage may be blocked. */ }
+  },
+};
+
 export function element(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;

@@ -3,7 +3,7 @@
  * All server interaction runs through Socket.IO with the same event
  * protocol as the Flutter client. UI language: German.
  */
-import { avatar, buttonArt, element, icon } from './ui.js';
+import { avatar, browserStorage, buttonArt, element, icon } from './ui.js';
 import { langActive, localText, roomErrorText, roomLabel, t, taskStageLabel, taskTitle } from './i18n.js';
 
 const App = (() => {
@@ -27,7 +27,7 @@ const App = (() => {
     });
   }
   function setLang(lang) {
-    localStorage.setItem('rlaus_lang', lang === 'en' ? 'en' : 'de');
+    browserStorage.setItem('rlaus_lang', lang === 'en' ? 'en' : 'de');
     applyStaticI18n();
     if (state.role) renderRole(state.role);
     if (state.room) renderLobbyPlayers(state.room);
@@ -92,6 +92,7 @@ const App = (() => {
 
   function show(name) {
     if (name !== 'game' && document.body.dataset.screen === 'game') closeGameDialogs();
+    if (name === 'home') stopGpsWatchers();
     document.body.dataset.screen = name;
     if (name !== 'game') {
       clearGhostSkin();
@@ -153,7 +154,7 @@ const App = (() => {
 
   /** Einstellungen aus dem Gear-Men\u00fc (persistiert in localStorage). */
   function optEnabled(key, fallback) {
-    const raw = localStorage.getItem(key);
+    const raw = browserStorage.getItem(key);
     if (raw == null) return fallback;
     return raw === '1';
   }
@@ -179,7 +180,7 @@ const App = (() => {
     // ResizeObserver-Loop = Browser-Randnotiz (Layout ok, kein Bug).
     if (/ResizeObserver loop/i.test(String(message))) return;
     try {
-      const log = JSON.parse(localStorage.getItem(ERROR_LOG_KEY) ?? '[]');
+      const log = JSON.parse(browserStorage.getItem(ERROR_LOG_KEY) ?? '[]');
       log.push({
         at: new Date().toLocaleTimeString('de-DE'),
         kind,
@@ -187,7 +188,7 @@ const App = (() => {
         ...(stack ? { stack: String(stack).slice(0, 200) } : {}),
       });
       while (log.length > ERROR_LOG_MAX) log.shift();
-      localStorage.setItem(ERROR_LOG_KEY, JSON.stringify(log));
+      browserStorage.setItem(ERROR_LOG_KEY, JSON.stringify(log));
     } catch (_) { /* log best-effort */ }
   }
 
@@ -195,7 +196,7 @@ const App = (() => {
     const box = $('error-log-box');
     if (!box) return;
     let log = [];
-    try { log = JSON.parse(localStorage.getItem(ERROR_LOG_KEY) ?? '[]'); } catch (_) {}
+    try { log = JSON.parse(browserStorage.getItem(ERROR_LOG_KEY) ?? '[]'); } catch (_) {}
     const header = [
       `RLAUS Log (${log.length}) — ${new Date().toLocaleString('de-DE')}`,
       `Spieler: ${state.name || '?'} | Code: ${state.code || '—'}`,
@@ -227,7 +228,7 @@ const App = (() => {
         done();
       }
     } else if (event.target.closest('#btn-error-clear')) {
-      localStorage.removeItem(ERROR_LOG_KEY);
+      browserStorage.removeItem(ERROR_LOG_KEY);
       renderErrorLogBox();
       showToast(localText("Fehlerprotokoll gelöscht.", "Error log cleared."));
     }
@@ -272,7 +273,7 @@ const App = (() => {
   };
 
   function sfxVolumeBase() {
-    const savedVolume = Number(localStorage.getItem('rlaus_sfx_vol') ?? 0.8);
+    const savedVolume = Number(browserStorage.getItem('rlaus_sfx_vol') ?? 0.8);
     return Number.isFinite(savedVolume) ? Math.min(1, Math.max(0, savedVolume)) : 0.8;
   }
 
@@ -349,7 +350,7 @@ const App = (() => {
       // room later auto-applies them (Divo request).
       if (state.isHost && room.config) {
         try {
-          localStorage.setItem('rlaus.lastConfig', JSON.stringify(room.config));
+          browserStorage.setItem('rlaus.lastConfig', JSON.stringify(room.config));
         } catch { /* storage full/blocked: settings just don't persist */ }
       }
       renderLobbyPlayers(room);
@@ -481,7 +482,7 @@ const App = (() => {
       // Carry the lobby settings of the last round into the new room
       // (server clamps/validates everything again anyway).
       try {
-        const lastConfig = JSON.parse(localStorage.getItem('rlaus.lastConfig') ?? 'null');
+        const lastConfig = JSON.parse(browserStorage.getItem('rlaus.lastConfig') ?? 'null');
         if (lastConfig) {
           ensureSocket().emit('game:update_config', {
             code: room.code,
@@ -512,7 +513,7 @@ const App = (() => {
         state.room = null;
         state.selfPos = null;
         state.sessionAttached = false;
-        localStorage.removeItem('rlaus_session');
+        browserStorage.removeItem('rlaus_session');
         show('home');
         errorHome(localText('Die Sitzung ist abgelaufen. Tritt mit einem gültigen Code erneut bei.', "The session expired. Rejoin with a valid code."));
         return;
@@ -962,7 +963,7 @@ const App = (() => {
 
   function rememberSession() {
     const { code, playerId, token, name } = state;
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ code, playerId, token, name, lastActiveAt: Date.now() }));
+    browserStorage.setItem(SESSION_KEY, JSON.stringify({ code, playerId, token, name, lastActiveAt: Date.now() }));
   }
 
   function isRecentSession(saved) {
@@ -972,11 +973,11 @@ const App = (() => {
   }
 
   function forgetSession(raw) {
-    if (localStorage.getItem(SESSION_KEY) === raw) localStorage.removeItem(SESSION_KEY);
+    if (browserStorage.getItem(SESSION_KEY) === raw) browserStorage.removeItem(SESSION_KEY);
   }
 
   function recentSession() {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = browserStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     let saved;
     try {
@@ -993,7 +994,7 @@ const App = (() => {
   }
 
   async function checkSavedSession(saved) {
-    if (!saved || !isRecentSession(saved) || localStorage.getItem(SESSION_KEY) !== saved.raw) return false;
+    if (!saved || !isRecentSession(saved) || browserStorage.getItem(SESSION_KEY) !== saved.raw) return false;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
     try {
@@ -1005,7 +1006,7 @@ const App = (() => {
         signal: controller.signal,
       });
       if (response.status === 404) forgetSession(saved.raw);
-      return response.status === 204 && isRecentSession(saved) && localStorage.getItem(SESSION_KEY) === saved.raw;
+      return response.status === 204 && isRecentSession(saved) && browserStorage.getItem(SESSION_KEY) === saved.raw;
     } catch {
       return false;
     } finally {
@@ -1014,7 +1015,7 @@ const App = (() => {
   }
 
   function tryRejoin(saved = recentSession()) {
-    if (!saved || !isRecentSession(saved) || localStorage.getItem(SESSION_KEY) !== saved.raw) return false;
+    if (!saved || !isRecentSession(saved) || browserStorage.getItem(SESSION_KEY) !== saved.raw) return false;
     state.name = saved.name ?? state.name;
     Object.assign(state, { code: saved.code, playerId: saved.playerId, token: saved.token });
     state.socket.emit('room:rejoin', { code: saved.code, playerId: saved.playerId, token: saved.token });
@@ -1053,7 +1054,7 @@ const App = (() => {
     if (asHost && !state.canHost) return;
     const name = $('player-name').value.trim() || 'Spieler';
     state.name = name;
-    localStorage.setItem('rlaus_name', name);
+    browserStorage.setItem('rlaus_name', name);
     ensureSocket();
 
     if (asHost) {
@@ -1082,7 +1083,7 @@ const App = (() => {
     // else to do here.
   }
 
-  $('player-name').value = localStorage.getItem('rlaus_name') ?? '';
+  $('player-name').value = browserStorage.getItem('rlaus_name') ?? '';
   $('btn-host').addEventListener('click', () => joinRoom({ asHost: true }));
   $('btn-join').addEventListener('click', () => joinRoom({ asHost: false }));
   $('btn-share').addEventListener('click', async () => {
@@ -1098,7 +1099,7 @@ const App = (() => {
   });
 
   $('btn-leave').addEventListener('click', () => {
-    localStorage.removeItem('rlaus_session');
+    browserStorage.removeItem('rlaus_session');
     state.socket?.disconnect();
     state.socket = null;
     state.room = null;
@@ -1202,10 +1203,17 @@ const App = (() => {
 
   function readSavedLocalMap() {
     try {
-      const map = JSON.parse(localStorage.getItem(SAVED_MAP_KEY) ?? 'null');
+      const map = JSON.parse(browserStorage.getItem(SAVED_MAP_KEY) ?? 'null');
       // Anchor may be missing from very old saves; loading still works,
       // GPS projection just needs a fresh anchor in that case.
-      if (!map?.nodes?.length || !map?.corridors?.length) return null;
+      if (!Array.isArray(map?.nodes) || !map.nodes.length ||
+          !map.nodes.every((node) => typeof node?.id === 'string' && Number.isFinite(node.x) && Number.isFinite(node.y)) ||
+          !Array.isArray(map.corridors) || !map.corridors.length ||
+          !map.corridors.every((corridor) => typeof corridor?.a === 'string' && typeof corridor.b === 'string') ||
+          (map.rooms != null && (!Array.isArray(map.rooms) || !map.rooms.every((room) =>
+            room && Array.isArray(room.polygon) && room.polygon.every((point) =>
+              Number.isFinite(point?.x) && Number.isFinite(point?.y))))) ||
+          (map.connections != null && !Array.isArray(map.connections))) return null;
       return map;
     } catch {
       return null;
@@ -1231,9 +1239,7 @@ const App = (() => {
     }
     const { savedAt, ...previousMap } = previous ?? {};
     if (JSON.stringify(map) === JSON.stringify(previousMap)) return;
-    try {
-      localStorage.setItem(SAVED_MAP_KEY, JSON.stringify({ ...map, savedAt: new Date().toISOString() }));
-    } catch { /* Storage can be unavailable or full. */ }
+    browserStorage.setItem(SAVED_MAP_KEY, JSON.stringify({ ...map, savedAt: new Date().toISOString() }));
   }
 
   function refreshCachedMapButton() {
@@ -1258,7 +1264,7 @@ const App = (() => {
   function applyCachedMap() {
     const cached = readSavedLocalMap();
     if (!cached) return;
-    if (Number.isFinite(cached.anchor?.lat)) {
+    if (Number.isFinite(cached.anchor?.lat) && Number.isFinite(cached.anchor?.lon)) {
       editor.setAnchor(cached.anchor.lat, cached.anchor.lon);
     } else {
       showToast(localText("Die Karte hat keinen GPS-Bezugspunkt. Dein Standort ist eventuell nicht verfügbar.", "This map has no GPS reference point. Location may be unavailable in the game."));
@@ -1564,11 +1570,11 @@ const App = (() => {
     body.classList.toggle('collapsed', collapsed);
     button?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     try {
-      localStorage.setItem('rlausRulesOpen', collapsed ? '0' : '1');
+      browserStorage.setItem('rlausRulesOpen', collapsed ? '0' : '1');
     } catch { /* private mode: toggle works without memory */ }
   });
   try {
-    if (localStorage.getItem('rlausRulesOpen') === '1') {
+    if (browserStorage.getItem('rlausRulesOpen') === '1') {
       $('rules-body')?.classList.remove('collapsed');
       $('btn-rules-toggle')?.setAttribute('aria-expanded', 'true');
     }
@@ -2352,12 +2358,11 @@ const App = (() => {
     }
   }
 
-  ensureGpsLoop.started = false;
+  let gpsWatchIds = [];
   function ensureGpsLoop() {
-    if (!('geolocation' in navigator) || ensureGpsLoop.started) return;
-    ensureGpsLoop.started = true;
+    if (!navigator.geolocation || gpsWatchIds.length) return;
     attachMotionSensors();
-    navigator.geolocation.watchPosition((pos) => {
+    const preciseWatch = navigator.geolocation.watchPosition((pos) => {
       if (!isFreshGpsFix(pos.timestamp) || pos.timestamp < (state.gpsFixAt ?? 0)) return;
       state.gpsPreciseFixAt = pos.timestamp;
       acceptGpsFix(pos);
@@ -2368,11 +2373,27 @@ const App = (() => {
         : err?.code === 2 ? 'unavailable' : 'waiting';
     }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 });
     // Den letzten groben Fix für den Wechsel bereithalten.
-    navigator.geolocation.watchPosition((pos) => {
+    const fallbackWatch = navigator.geolocation.watchPosition((pos) => {
       if (pos.timestamp <= (state.gpsFallbackFix?.timestamp ?? 0) || !isFreshGpsFix(pos.timestamp)) return;
       state.gpsFallbackFix = pos;
       useGpsFallback();
     }, () => {}, { enableHighAccuracy: false, maximumAge: GPS_FIX_MAX_AGE_MS, timeout: 30000 });
+    gpsWatchIds = [preciseWatch, fallbackWatch];
+  }
+
+  function stopGpsWatchers() {
+    for (const id of gpsWatchIds) navigator.geolocation.clearWatch(id);
+    gpsWatchIds = [];
+    Object.assign(state, {
+      gpsFix: null,
+      gpsFixAt: 0,
+      gpsPreciseFixAt: 0,
+      gpsFallbackFix: null,
+      gpsError: null,
+      gpsAccM: null,
+      gpsHeading: null,
+    });
+    stopGpsLoop();
   }
 
   /** GPS-Hinweiszeile im Spiel: nur sichtbar, wenn etwas nicht stimmt. */
@@ -2670,7 +2691,7 @@ const App = (() => {
     const fitScale = Math.min((right - padding) / Math.max(24, maxX - minX),
       (bottom - top) / Math.max(24, maxY - minY));
 
-    state.mapZoomIdx = Number(localStorage.getItem('rlaus_mapZoom')) === 1 ? 1 : 0;
+    state.mapZoomIdx = Number(browserStorage.getItem('rlaus_mapZoom')) === 1 ? 1 : 0;
     const zoomed = state.mapZoomIdx === 1 && state.selfPos?.x != null;
     const scale = fitScale * (zoomed ? 2.4 : 1);
     const anchorX = zoomed ? state.selfPos.x : (minX + maxX) / 2;
@@ -3029,8 +3050,8 @@ const App = (() => {
     }
   }
   $('btn-map-zoom').addEventListener('click', () => {
-    const next = (Number(localStorage.getItem('rlaus_mapZoom')) === 1) ? 0 : 1;
-    localStorage.setItem('rlaus_mapZoom', String(next));
+    const next = (Number(browserStorage.getItem('rlaus_mapZoom')) === 1) ? 0 : 1;
+    browserStorage.setItem('rlaus_mapZoom', String(next));
     beep(next ? 520 : 380);
     drawGameMap();
   });
@@ -3798,22 +3819,22 @@ const App = (() => {
       state.selfPos = null;
       state.posSmooth = null;
       state.botPositions = null;
-      localStorage.removeItem('rlaus_session');
+      browserStorage.removeItem('rlaus_session');
       show('home');
     }
   });
   document.addEventListener('change', (event) => {
     const id = event.target.id;
     if (id === 'opt-sound') {
-      localStorage.setItem('rlaus_sound', event.target.checked ? '1' : '0');
+      browserStorage.setItem('rlaus_sound', event.target.checked ? '1' : '0');
     } else if (id === 'opt-sfx-vol') {
-      localStorage.setItem('rlaus_sfx_vol', String(Number(event.target.value) / 100));
+      browserStorage.setItem('rlaus_sfx_vol', String(Number(event.target.value) / 100));
       // Losgelassen -> ein Preview-Beep, damit man die Lautstaerke hoert.
       sfx('task_done');
     } else if (id === 'opt-vibration') {
-      localStorage.setItem('rlaus_vibration', event.target.checked ? '1' : '0');
+      browserStorage.setItem('rlaus_vibration', event.target.checked ? '1' : '0');
     } else if (id === 'opt-show-bots') {
-      localStorage.setItem('rlaus_showBots', event.target.checked ? '1' : '0');
+      browserStorage.setItem('rlaus_showBots', event.target.checked ? '1' : '0');
       drawGameMap();
     } else if (id === 'opt-lang') {
       setLang(event.target.value);
@@ -3821,7 +3842,7 @@ const App = (() => {
   });
   document.addEventListener('input', (event) => {
     if (event.target.id === 'opt-sfx-vol') {
-      localStorage.setItem('rlaus_sfx_vol', String(Number(event.target.value) / 100));
+      browserStorage.setItem('rlaus_sfx_vol', String(Number(event.target.value) / 100));
     }
   });
 
