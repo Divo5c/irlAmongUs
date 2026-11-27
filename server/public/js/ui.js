@@ -31,5 +31,12 @@ export function buttonArt(name, label) {
 export function avatar(colorId, dead = false) {
   const svg = icon(dead ? 'ghost' : 'crew', 'crew-avatar');
   svg.dataset.crewColor = colorId ?? 'gray';
+  if (dead) {
+    svg.classList.add('crew-avatar--ghost');
+    const skin = document.createElementNS(SVG_NS, 'use');
+    skin.classList.add('ghost-avatar-shape');
+    skin.setAttribute('href', '/img/ghost/ghost-avatar.svg#ghost-avatar');
+    svg.append(skin);
+  }
   return svg;
 }

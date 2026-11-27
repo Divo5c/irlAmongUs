@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" preserveAspectRatio="xMidYMid slice">
+  <defs><path id="fracture" d="M237 1 218 31l-15 4-11 23-19 7-7 24-22 14-18 33-19 10-16 24-22 10m125-122 18 8 2 25 14 21 11 3m-65-50-24-12-21 6-18-13-14 4m70 39 15 17-7 18 8 13m-75 9-28 2-12 13m146-81-13-11-12 4"/></defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#fracture" stroke="#061222" stroke-width="2.8" transform="translate(-1 1)" opacity=".72"/>
+    <use href="#fracture" stroke="#7fe8e0" stroke-width="3" opacity=".12"/>
+    <use href="#fracture" stroke="#cfe3f7" stroke-width="1.4" opacity=".72"/>
+    <path d="m222 16-7 7m22 14-8 1m-48 34-8 13m35 10 6 9m-81 34-6 8-10 4" stroke="#cfe3f7" stroke-width="1" opacity=".5"/>
+  </g>
+</svg>

@@ -1,0 +1,54 @@
+@layer ghost {
+  :root {
+    --ghost-intro-time: 1800ms;
+    --ghost-fade-time: 200ms;
+    --ghost-reveal-delay: 1250ms;
+    --ghost-float-time: 3600ms;
+  }
+
+  .ghost-transition .ghost-flash { animation: ghost-wake var(--ghost-intro-time) linear both; }
+  .ghost-transition .ghost-cracks { animation: ghost-fracture var(--ghost-intro-time) var(--ease-out) both; }
+  :root[data-role="ghost"] .ghost-transition .ghost-status {
+    animation: ghost-status-rise var(--ghost-fade-time) var(--ease-out) var(--ghost-reveal-delay) both;
+  }
+  :root[data-role="ghost"] .ghost-status .crew-avatar {
+    animation: ghost-float var(--ghost-float-time) ease-in-out infinite;
+  }
+
+  @keyframes ghost-wake {
+    0% { opacity: .24; }
+    3%, 100% { opacity: 0; }
+  }
+  /* Reveal the static SVG using compositor-friendly motion, with a small jolt at the edge. */
+  @keyframes ghost-fracture {
+    0%, 3% { opacity: 0; transform: scale(.12); }
+    18% { opacity: .95; transform: scale(1) translateX(var(--line-3)); }
+    24% { transform: translateX(calc(-1 * var(--line-2))); }
+    31%, 100% { opacity: 1; transform: none; }
+  }
+  @keyframes ghost-status-rise {
+    from { opacity: 0; transform: translateY(var(--line-4)); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes ghost-float {
+    0%, 100% { transform: translateY(var(--line-3)); }
+    50% { transform: translateY(calc(-1 * var(--line-3))); }
+  }
+  @keyframes ghost-soft-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ghost-transition .ghost-flash, :root[data-role="ghost"] .ghost-status .crew-avatar { animation: none; }
+  }
+}
+
+/* The global reduced-motion utility allows just this brief opacity fade. */
+@layer utilities {
+  @media (prefers-reduced-motion: reduce) {
+    .ghost-transition .ghost-cracks, :root[data-role="ghost"] .ghost-transition .ghost-status {
+      animation: ghost-soft-fade var(--ghost-fade-time) ease-out both;
+    }
+  }
+}

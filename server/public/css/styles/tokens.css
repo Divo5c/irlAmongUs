@@ -8,6 +8,7 @@
   }
 }
 
+@layer base {
 :root {
   /* Supplied button art. Keep paths centralized. */
   --icon-use: url("/img/among-us/btn-use.png");
@@ -494,6 +495,7 @@
   --size-14rem: 14rem;
   --size-4p5rem: 4.5rem;
   --size-3p75rem: 3.75rem;
+}
 }
 
 [data-crew-color="red"] { --crew-body: var(--crew-red); }

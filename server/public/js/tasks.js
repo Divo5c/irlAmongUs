@@ -12,7 +12,7 @@
  *   RlausTasks.close()                             \u2014 force-close
  */
 import { avatar, buttonArt, icon } from './ui.js';
-import { localText, roomLabel, taskStageLabel, taskTitle } from './i18n.js';
+import { localText, roomLabel, t, taskStageLabel, taskTitle } from './i18n.js';
 
 (() => {
   let current = null; // { task, cleanup }
@@ -45,6 +45,7 @@ import { localText, roomLabel, taskStageLabel, taskTitle } from './i18n.js';
     const card = el('div', 'task-card');
     const header = el('div', 'task-head');
     const title = el('div', 'task-title', titleText);
+    title.appendChild(el('small', 'ghost-context', t('ghost.status')));
     const closeBtn = el('button', 'task-close');
     closeBtn.setAttribute('aria-label', localText('Aufgabe schließen', "Close task"));
     closeBtn.append(buttonArt('close'));

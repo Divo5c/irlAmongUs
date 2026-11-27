@@ -1,5 +1,8 @@
 // Statische Texte und gemeinsame Begriffe für Deutsch und Englisch.
 const TEXT = {
+  "ghost.status": ["Du bist ein Geist", "You are a ghost"],
+  "ghost.crewHint": ["Du kannst weiter Aufgaben erledigen.", "You can keep doing tasks."],
+  "ghost.impostorHint": ["Du kannst weiter sabotieren.", "You can still start sabotage."],
   "role.crew.title": ["CREWMATE","CREWMATE"],
   "role.crew.line1": ["Erledige alle Aufgaben","Complete all your tasks"],
   "role.crew.and": ["und finde den Impostor!","and find the impostor!"],

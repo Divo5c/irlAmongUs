@@ -192,7 +192,16 @@
   <!-- ============================== GAME ================================ -->
   <section id="screen-game" class="screen screen-game">
     <div class="topbar">
-      <span class="hint game-phase-hint" id="game-phase-hint"></span>
+      <div class="game-status">
+        <div class="ghost-status" id="ghost-status" role="status">
+          <span id="ghost-status-avatar" aria-hidden="true"></span>
+          <span>
+            <span data-i18n="ghost.status">Du bist ein Geist</span>
+            <small class="ghost-status__hint" id="ghost-status-hint" hidden></small>
+          </span>
+        </div>
+        <span class="hint game-phase-hint" id="game-phase-hint"></span>
+      </div>
       <button id="btn-map-zoom" class="gear-btn" aria-label="Karten-Zoom" data-i18n-aria="settings.zoom"><span class="ui-art ui-art--map" aria-hidden="true"></span></button>
       <button id="btn-abort" class="gear-btn hidden btn-abort" aria-label="Runde abbrechen" data-i18n-aria="settings.abort"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#flag"></use></svg></button>
       <button id="btn-settings" class="gear-btn btn-settings" aria-label="Haupt-Einstellungen" data-i18n-aria="settings.title"><span class="ui-art ui-art--settings" aria-hidden="true"></span></button>
@@ -211,25 +220,16 @@
         <button id="role-continue" class="role-continue primary button-art ui-art--proceed" data-i18n="btn.continue">Weiter</button>
       </div>
     </div>
-    <!-- Under-Sie-Moment (Among Us): NUR für das Opfer selbst sichtbar,
-         weil game:killed an Crew-Leute privat ist (v19.13.5). -->
-    <div id="kill-anim" class="hidden kill-anim" aria-hidden="true">
-      <div class="kill-bg"></div>
-      <div class="kill-slash s1"></div>
-      <div class="kill-slash s2"></div>
-      <div class="kill-knife"><svg class="icon" aria-hidden="true"><use href="/img/terminal.svg#kill"></use></svg></div>
-      <div class="kill-beans">
-        <div class="kill-bean victim"><span></span></div>
-        <div class="kill-bean killer"><span></span></div>
-      </div>
-      <div class="kill-text pixel-title" data-i18n="game.eliminated">AUSGESCHIEDEN</div>
-    </div>
     <div id="role-banner" class="role-crew hidden role-banner">DU BIST CREWMATE</div>
     <div id="teammates" class="hint hidden"></div>
     <div id="gps-status" role="status" class="gps-status hidden"></div>
     <div class="sabotage-banner-line" id="sabotage-banner-line"><div id="sabotage-banner" class="hidden sabotage-banner"></div></div>
     <div class="live-map-wrap" id="live-map-wrap">
       <canvas class="game-map" id="game-map"></canvas>
+      <div class="ghost-atmosphere" id="ghost-atmosphere" aria-hidden="true">
+        <div class="ghost-cracks"></div>
+        <div class="ghost-flash" id="ghost-flash"></div>
+      </div>
       <div id="boundary-banner" class="hidden boundary-banner" data-i18n="map.back">Geh zurück ins Spielfeld!</div>
     </div>
     <div class="game-dock">
@@ -285,6 +285,7 @@
     <div id="meeting-overlay" class="overlay hidden" role="dialog">
       <div class="vote-tablet">
         <div class="vote-tablet-head">
+          <span class="ghost-context" data-i18n="ghost.status">Du bist ein Geist</span>
           <h3 id="meeting-title" class="pixel-title">Who Is The Impostor?</h3>
           <div id="vote-countdown" class="vote-countdown vote-countdown"></div>
           <button type="button" id="btn-skipvote" class="skip-vote-btn hidden button-art ui-art--skip-vote" data-i18n="meeting.skip">Überspringen</button>
@@ -407,9 +408,9 @@
       </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/osm.js?v=19.17.12"></script>
-  <script src="/js/mapEditor.js?v=19.17.12"></script>
-  <script type="module" src="/js/tasks.js?v=19.17.12"></script>
-  <script type="module" src="/js/app.js?v=19.17.12"></script>
+  <script src="/js/osm.js?v=19.17.13"></script>
+  <script src="/js/mapEditor.js?v=19.17.13"></script>
+  <script type="module" src="/js/tasks.js?v=19.17.13"></script>
+  <script type="module" src="/js/app.js?v=19.17.13"></script>
 </body>
 </html>

@@ -1,0 +1,100 @@
+@layer ghost {
+  :root {
+    --ghost-space: #05070f;
+    --ghost-panel-fill: #131b2b;
+    --ghost-panel-raised: #1a2336;
+    --ghost-panel-border: #8fa3c4;
+    --ghost-border-dim: #3e4c69;
+    --ghost-text-primary: #dde6f5;
+    --ghost-text-secondary: #8f9db8;
+    --ghost-accent: #7fe8e0;
+    --ghost-accent-soft: #4fa9a8;
+    --ghost-crack: #cfe3f7;
+    --ghost-crack-glow: rgb(127 232 224 / .35);
+    --ghost-veil: rgb(120 150 200 / .06);
+    --ghost-meeting-bg: #a6b7cf;
+    --ghost-meeting-panel: #c1cfe0;
+    --ghost-flash-ink: #fff;
+    --ghost-button-shadow: 0 var(--line-2) 0 var(--ghost-space);
+    --ghost-panel-shadow: 0 0 0 var(--line-2) var(--ghost-space);
+    --ghost-crack-size: min(32vw, 31dvh);
+  }
+
+  .game-status { display: contents; }
+  .ghost-status, .ghost-context, .ghost-atmosphere, .ghost-avatar-shape { display: none; }
+
+  :root[data-role="ghost"] {
+    --space-950: var(--ghost-space);
+    --space-900: var(--ghost-panel-fill);
+    --space-800: var(--ghost-panel-raised);
+    --panel-fill: var(--ghost-panel-fill);
+    --panel-fill-raised: var(--ghost-panel-raised);
+    --panel-border: var(--ghost-panel-border);
+    --panel-border-dim: var(--ghost-border-dim);
+    --text-primary: var(--ghost-text-primary);
+    --text-secondary: var(--ghost-text-secondary);
+    --signal-task: var(--ghost-accent);
+    --meeting-bg: var(--ghost-meeting-bg);
+    --meeting-panel: var(--ghost-meeting-panel);
+    --shadow-1: var(--ghost-button-shadow);
+    --shadow-2: var(--ghost-panel-shadow);
+  }
+
+  /* The cracks sit in the map layer, below labels, alarms and dialogs. */
+  :root[data-role="ghost"] .ghost-atmosphere {
+    display: block; position: fixed; inset: 0; pointer-events: none; background: var(--ghost-veil);
+  }
+  .ghost-cracks, .ghost-flash { position: absolute; inset: 0; pointer-events: none; }
+  .ghost-cracks {
+    background: url("/img/ghost/crack-a.svg") top right / var(--ghost-crack-size) no-repeat;
+    transform-origin: top right;
+  }
+  .ghost-atmosphere[data-variant="b"] .ghost-cracks {
+    background-image: url("/img/ghost/crack-b.svg");
+    background-position: bottom left;
+    transform-origin: bottom left;
+  }
+  .ghost-flash { opacity: 0; background: var(--ghost-flash-ink); }
+
+  :root[data-role="ghost"] .game-status { display: grid; min-width: 0; margin-inline-end: auto; align-self: center; }
+  :root[data-role="ghost"] .game-phase-hint:empty { display: none; }
+  :root[data-role="ghost"] .ghost-status {
+    display: inline-flex; align-items: center; justify-self: start; gap: var(--space-1);
+    padding: var(--space-1) var(--space-2); color: var(--text-primary); background: var(--panel-fill);
+    border: var(--line-1) solid var(--panel-border); border-radius: var(--r-chip);
+    font-size: var(--fs-xs); font-weight: 800; line-height: 1.2; overflow-wrap: anywhere;
+  }
+  :root[data-role="ghost"] .ghost-status .crew-avatar {
+    width: var(--space-6); height: var(--space-6);
+  }
+  :root[data-role="ghost"] .ghost-status__hint:not([hidden]) {
+    display: block; margin-block-start: var(--line-2); color: var(--text-secondary); font-weight: 600;
+  }
+  :root[data-role="ghost"] .ghost-context {
+    display: block; font-size: var(--fs-xs); font-weight: 700; color: var(--text-secondary);
+  }
+  :root[data-role="ghost"] .vote-tablet-head .ghost-context {
+    grid-column: 1 / -1; color: var(--meeting-ink);
+  }
+
+  :root[data-role="ghost"] .crew-avatar { filter: saturate(.72); }
+  :root[data-role="ghost"] .crew-avatar--ghost > use:not(.ghost-avatar-shape) { display: none; }
+  :root[data-role="ghost"] .ghost-avatar-shape { display: inline; }
+  :root[data-role="ghost"] .game-map { filter: saturate(.78); }
+  :root[data-role="ghost"] .game-actions button:not(.sabotage-active) .ui-art { filter: saturate(.55) brightness(.94); }
+  :root[data-role="ghost"] .game-actions button:disabled .ui-art { filter: grayscale(1) brightness(.75); }
+  :root[data-role="ghost"] :focus-visible { outline-color: var(--ghost-accent); }
+  :root[data-role="ghost"] .task-overlay--game .task-card {
+    background: var(--panel-fill); border-color: var(--panel-border); box-shadow: var(--ghost-panel-shadow);
+  }
+  :root[data-role="ghost"] .task-overlay--game .task-head { color: var(--ghost-accent); }
+  :root[data-role="ghost"] .vote-tablet { background: var(--meeting-panel); box-shadow: var(--ghost-panel-shadow); }
+
+  @media (min-width: 24rem) {
+    :root[data-role="ghost"] .task-overlay--game .task-head::after {
+      content: ""; position: absolute; inset-block-start: 0; inset-inline-start: 0;
+      width: var(--space-5); height: var(--space-2); pointer-events: none;
+      background: url("/img/ghost/crack-b.svg") bottom left / cover no-repeat;
+    }
+  }
+}

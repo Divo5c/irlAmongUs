@@ -253,7 +253,6 @@
     box-shadow: inset 0 0 0 var(--line-3) var(--signal-danger), inset 0 0 var(--space-6) var(--signal-danger-deep);
     animation: alarm-frame var(--time-alarm) ease-in-out infinite alternate;
   }
-  .ghost-mode .live-map-wrap { filter: saturate(.55); }
   .task-overlay { background: var(--overlay-scrim); }
   .task-overlay--game > .task-card { width: min(100%, var(--layout-max)); }
   .task-overlay--sheet { align-items: flex-end; }

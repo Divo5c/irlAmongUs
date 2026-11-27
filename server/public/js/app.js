@@ -93,8 +93,52 @@ const App = (() => {
   function show(name) {
     if (name !== 'game' && document.body.dataset.screen === 'game') closeGameDialogs();
     document.body.dataset.screen = name;
-    if (name !== 'game') hideEmergencyPanel();
+    if (name !== 'game') {
+      clearGhostSkin();
+      hideEmergencyPanel();
+    }
   }
+
+  let ghostHintTimer;
+
+  function endGhostTransition() {
+    screens.game.classList.remove('ghost-transition');
+    document.removeEventListener('pointerdown', endGhostTransition, true);
+  }
+
+  function clearGhostSkin() {
+    if (document.documentElement.dataset.role !== 'ghost') return;
+    delete document.documentElement.dataset.role;
+    endGhostTransition();
+    window.clearTimeout(ghostHintTimer);
+    $('ghost-status-hint').hidden = true;
+  }
+
+  function playGhostTransition() {
+    if (document.body.dataset.screen !== 'game' || document.documentElement.dataset.role !== 'ghost') return;
+    screens.game.classList.add('ghost-transition');
+    document.addEventListener('pointerdown', endGhostTransition, { capture: true, once: true });
+    if (state.room?.status !== 'IN_GAME' || !state.role) return;
+    const hint = $('ghost-status-hint');
+    hint.textContent = t(state.role.role === 'IMPOSTOR' ? 'ghost.impostorHint' : 'ghost.crewHint');
+    hint.hidden = false;
+    window.clearTimeout(ghostHintTimer);
+    ghostHintTimer = window.setTimeout(() => { hint.hidden = true; }, 3600);
+  }
+
+  function activateGhostSkin(animate = false) {
+    if (document.body.dataset.screen !== 'game' || document.documentElement.dataset.role === 'ghost') return;
+    const self = state.room?.players?.find(({ id }) => id === state.playerId);
+    const variant = [...state.playerId].reduce((sum, char) => sum + char.codePointAt(0), 0) % 2;
+    $('ghost-atmosphere').dataset.variant = variant ? 'b' : 'a';
+    $('ghost-status-avatar').replaceChildren(avatar(self?.colorId, true));
+    document.documentElement.dataset.role = 'ghost';
+    if (animate) playGhostTransition();
+  }
+
+  $('ghost-atmosphere').addEventListener('animationend', (event) => {
+    if (event.target.classList.contains('ghost-cracks')) endGhostTransition();
+  });
 
   function errorHome(message) {
     const el = $('home-error');
@@ -295,6 +339,8 @@ const App = (() => {
     if (state.socket) return state.socket;
     const socket = io();
     socket.on('room:updated', (room) => {
+      const wasAlive = state.room?.code === room.code
+        && state.room?.players?.some(({ id, isAlive }) => id === state.playerId && isAlive);
       if (state.room?.status === 'IN_GAME' && room.status !== 'IN_GAME') closeGameDialogs();
       state.room = room;
       if (room.code) state.code = room.code;
@@ -325,6 +371,9 @@ const App = (() => {
       }
       if (room.status === 'GAME_OVER' || room.status === 'IN_GAME' || room.status === 'MEETING') {
         if (active !== 'screen-game') show('game');
+        const self = room.players.find(({ id }) => id === state.playerId);
+        if (self?.isAlive === false) activateGhostSkin(wasAlive && $('eject-overlay').classList.contains('hidden'));
+        else if (self?.isAlive === true) clearGhostSkin();
       }
       // v19.15.1: Reconnect/Reload während eines laufenden Meetings —
       // game:meeting_started kommt nicht nochmal, also den Intro-Zustand
@@ -626,10 +675,7 @@ const App = (() => {
       if (victim) victim.isAlive = false;
       renderGameHud();
       if (killedPlayerId === state.playerId) {
-        // Divo (4.11): das Opfer sieht den vollen Under-Sie-Moment —
-        // solo sichtbar, weil game:killed an Crew Leute privat ist.
-        showKillAnim();
-        $('game-phase-hint').textContent = t('game.youKilled');
+        activateGhostSkin(true);
       } else {
         $('game-phase-hint').textContent = t('game.killLanded');
       }
@@ -744,7 +790,7 @@ const App = (() => {
     /** Nach der Eject-Show: Hinweise + GPS je nach Rundenstatus. */
     function applyEjectAftermath(ejectedPlayerId, ejectedPlayerName, status) {
       if (ejectedPlayerId === state.playerId) {
-        $('role-banner').textContent = t('game.out');
+        playGhostTransition();
         vibrate([120, 60, 120]);
       } else if (ejectedPlayerName) {
         $('game-phase-hint').textContent = `${ejectedPlayerName} ${t('game.ejected')}`;
@@ -792,6 +838,8 @@ const App = (() => {
       text.textContent = ejectLine;
       $('meeting-overlay').classList.add('hidden');
       overlay.classList.remove('hidden');
+      // Show the usual ejection result before the local ghost transition.
+      if (ejectedPlayerId === state.playerId) activateGhostSkin();
       sfx('eject_text');
       window.setTimeout(() => sfx('eject_splash'), 2400);
       const showOverMs = 4200;
@@ -1720,7 +1768,6 @@ const App = (() => {
     const taskbox = $('taskbox');
     taskbox.querySelector('summary').textContent =
       `${t('tasks.summary')} (${state.tasks?.filter((x) => !x.completed).length ?? 0})`;
-    $('screen-game').classList.toggle('ghost-mode', imAlive === false);
     const bodies = state.nearbyBodies ?? [];
     const reportBtn = $('btn-report');
     reportBtn.classList.remove('hidden');
@@ -2583,6 +2630,7 @@ const App = (() => {
 
   const mapSuit = new Path2D('M18 24C19 11 27 6 37 7C49 8 56 20 56 33L54 53 49 57 48 65 37 65 35 57 28 57 26 65 15 65 14 53 7 52 8 34 15 30Z');
   const mapVisor = new Path2D('M27 26C32 22 46 23 51 27L51 31C44 34 33 34 27 31Z');
+  const mapGhost = new Path2D('M12 25Q5 26 6 37L9 49l8 2c0 5-1 9-4 13 8 3 12-8 18-2 4 4 9 7 15-2 8-7 10 5 19-1-4-10-2-17-2-26C63 16 55 7 40 7 27 7 19 13 17 24Z');
 
   function drawGameMap() {
     const canvas = $('game-map');
@@ -2598,6 +2646,9 @@ const App = (() => {
     if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
     if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     const ctx = canvas.getContext('2d');
+    const ghostAccent = document.documentElement.dataset.role === 'ghost'
+      ? getComputedStyle(document.documentElement).getPropertyValue('--ghost-accent').trim()
+      : '';
     ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
@@ -2834,7 +2885,7 @@ const App = (() => {
       }
       const near = taskNear(task);
       const radius = near ? 12 : 8;
-      ctx.fillStyle = '#f5d84a';
+      ctx.fillStyle = ghostAccent || '#f5d84a';
       ctx.strokeStyle = near ? '#f2f6ff' : '#111a30';
       ctx.lineWidth = near ? 2 : 1.5;
       ctx.beginPath();
@@ -2900,7 +2951,7 @@ const App = (() => {
       const self = state.room.players.find(({ id }) => id === state.playerId);
       const suitColor = colorChipHex(self?.colorId);
       const turn = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : (Date.now() % 1600) / 1600;
-      ctx.strokeStyle = suitColor;
+      ctx.strokeStyle = ghostAccent || suitColor;
       ctx.lineWidth = 2;
       ctx.globalAlpha = .65 - turn * .32;
       ctx.beginPath();
@@ -2951,10 +3002,10 @@ const App = (() => {
       ctx.fillStyle = suitColor;
       ctx.strokeStyle = '#070a14';
       ctx.lineWidth = 4;
-      if (self?.isAlive === false) ctx.globalAlpha = .6;
-      ctx.fill(mapSuit);
-      ctx.stroke(mapSuit);
-      ctx.fillStyle = '#81e0f7';
+      if (ghostAccent) ctx.globalAlpha = .72;
+      ctx.fill(ghostAccent ? mapGhost : mapSuit);
+      ctx.stroke(ghostAccent ? mapGhost : mapSuit);
+      ctx.fillStyle = ghostAccent || '#81e0f7';
       ctx.fill(mapVisor);
       ctx.restore();
       ctx.fillStyle = '#f2f6ff';
@@ -3017,37 +3068,6 @@ const App = (() => {
     );
     // Abort braucht Klick-Doppelbestätigung (armed-Flag, kein Fehlklick).
     state.abortArmed = false;
-  }
-
-  /**
-   * Among-Us-Kill-Moment (Divo 4.11): roter Slash + Messer + beide Bohnen.
-   * Nur das Opfer ruft das auf — game:killed ist für Crew privat. Tapping
-   * überspringt den Rest der Animation.
-   */
-  function showKillAnim() {
-    const overlay = $('kill-anim');
-    if (!overlay) return;
-    // Farben: OPFER = eigene Spielerfarbe; KILLER = klassisches Impostor-Rot.
-    const victim = state.room?.players?.find((player) => player.id === state.playerId);
-    overlay.querySelector('.kill-bean.victim').replaceChildren(avatar(victim?.colorId, true));
-    overlay.querySelector('.kill-bean.killer').replaceChildren(avatar('red'));
-
-    // Reset laufende Animationen (Re-Trigger beim zweiten Kill).
-    overlay.classList.remove('kill-anim-out', 'hidden');
-    window.clearTimeout(showKillAnim._t);
-
-    const fade = () => {
-      overlay.classList.add('kill-anim-out');
-      showKillAnim._t = window.setTimeout(() => {
-        overlay.classList.remove('kill-anim-out');
-        overlay.classList.add('hidden');
-      }, 450);
-    };
-    showKillAnim._t = window.setTimeout(fade, 1600);
-    overlay.onclick = () => {
-      window.clearTimeout(showKillAnim._t);
-      fade();
-    };
   }
 
   /**
