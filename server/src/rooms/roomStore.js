@@ -886,9 +886,13 @@ class RoomStore {
 
   #panelNearby(room, playerId, spot, now) {
     const pos = this.#positions.get(room.code)?.get(playerId);
-    return isPlayerAlive(room, playerId) && isFreshPosition(pos, now)
-      && pos.confidence >= DEFAULT_MIN_CONFIDENCE && pos.roomId === spot.roomId
-      && Math.hypot(pos.x - spot.x, pos.y - spot.y) <= PANEL_USE_RADIUS_M;
+    if (!isPlayerAlive(room, playerId) || !isFreshPosition(pos, now)
+        || pos.confidence < DEFAULT_MIN_CONFIDENCE
+        || Math.hypot(pos.x - spot.x, pos.y - spot.y) > PANEL_USE_RADIUS_M) return false;
+    if (spot.roomType !== 'REACTOR') return pos.roomId === spot.roomId;
+    // Overlapping map rooms may give the same point a different primary room ID.
+    const polygon = room.map?.rooms?.find(({ id }) => id === spot.roomId)?.polygon;
+    return pointInPolygon(pos.x, pos.y, polygon);
   }
 
   #panelContext(code, playerId, roundId, panelId, now) {

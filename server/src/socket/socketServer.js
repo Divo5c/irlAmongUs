@@ -508,7 +508,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
     registerPanelEvent('hold', (code, playerId, roundId, panelId, { active }) => {
       const now = Date.now();
       if (active === true) {
-        if (now - (socket.data.lastPanelHeartbeat ?? -Infinity) < PANEL_HEARTBEAT_MIN_INTERVAL_MS) return;
+        if (now - (socket.data.lastPanelHeartbeat ?? -Infinity) < PANEL_HEARTBEAT_MIN_INTERVAL_MS) return { ignored: true };
         socket.data.lastPanelHeartbeat = now;
       }
       roomStore.holdSabotagePanel(code, playerId, roundId, panelId, active, now);

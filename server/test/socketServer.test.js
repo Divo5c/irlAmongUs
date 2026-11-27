@@ -227,6 +227,37 @@ after(async () => {
 });
 
 describe('socket flow security & gameplay', () => {
+  test('one connected player can open the reactor scanner before holding it', async (t) => {
+    const host = await connectClient();
+    t.after(() => host.disconnect());
+    const code = randomCode();
+    const created = waitForEvent(host, 'room:created');
+    host.emit('room:create', { code, hostId: 'host-1', hostName: 'Host', sabotagePanels: true });
+    await created;
+    roomStore.addPlayerToRoom(code, { id: 'offline-player', name: 'Offline' });
+    await makeMapReadyOverWire(host, code);
+    roomStore.startGame(code);
+    const room = roomStore.getRoom(code);
+    const impostor = room.players.find(({ role }) => role === 'IMPOSTOR');
+    const { room: snapshot } = roomStore.startSabotage(code, impostor.id, 'REACTOR');
+    const [spot] = snapshot.sabotage.fixSpots;
+    const request = { code, roundId: snapshot.sabotage.panelStatus.roundId, panelId: spot.id };
+    const send = (event, extra) => host.timeout(2000).emitWithAck(`game:sabotage_panel_${event}`, { ...request, ...extra });
+    assert.equal((await send('open')).error, 'SABOTAGE_NOT_AT_PANEL');
+    roomStore.updatePosition(code, 'host-1', { x: spot.x, y: spot.y, confidence: 1 });
+    const opened = await send('open');
+    assert.equal(opened.ok, true);
+    assert.deepEqual(opened.status.panels.map(({ state }) => state), ['OPEN', 'OPEN']);
+    assert.equal((await send('hold', { active: true })).ok, true);
+    const alone = await send('open');
+    assert.deepEqual(alone.status.panels.map(({ state }) => state), ['HELD', 'OPEN']);
+    assert.equal(alone.status.progress, 0);
+    assert.equal((await send('hold', { active: false })).ok, true);
+    const released = await send('open');
+    assert.deepEqual(released.status.panels.map(({ state }) => state), ['OPEN', 'OPEN']);
+    assert.ok(room.sabotage);
+  });
+
   test('panel clients repair reactor and share oxygen progress with a legacy client through rematch', async () => {
     const { clients, code } = await createRoomWithNPlayers(4, { killCooldownMs: 0 }, 3);
     const [host, partner, , legacy] = clients;

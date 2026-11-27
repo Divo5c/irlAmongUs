@@ -1,5 +1,19 @@
 import { buttonArt, element } from './ui.js';
 
+export function reactorContainsPosition({ x, y }, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i], b = polygon[j];
+    const cross = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+    const dot = (x - a.x) * (x - b.x) + (y - a.y) * (y - b.y);
+    if (Math.abs(cross) <= 1e-6 && dot <= 1e-6) return true;
+    if ((a.y > y) !== (b.y > y) && x < a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 export function createSabotagePanel({ t, tones, vibrate, notify, currentPanel }) {
   let view;
   let dialog;
@@ -17,8 +31,11 @@ export function createSabotagePanel({ t, tones, vibrate, notify, currentPanel })
   function release() {
     if (!view?.holding) return;
     view.holding = false;
+    view.holdToken = null;
+    view.holdConfirmed = false;
     view.hand?.classList.remove('is-held');
     clearInterval(view.heartbeat);
+    showStatus(view.status);
     send(view, 'hold', { active: false });
   }
 
@@ -30,7 +47,7 @@ export function createSabotagePanel({ t, tones, vibrate, notify, currentPanel })
     clearTimeout(entry.closeTimer);
     clearTimeout(entry.retryTimer);
     view = undefined;
-    if (dialog.open) dialog.close();
+    if (dialog?.open) dialog.close();
     entry.opener?.focus();
   }
 
@@ -38,13 +55,21 @@ export function createSabotagePanel({ t, tones, vibrate, notify, currentPanel })
     function hold() {
       if (view !== entry || entry.holding || entry.done || !entry.socket.connected) return;
       entry.holding = true;
+      const holdToken = Symbol();
+      entry.holdToken = holdToken;
       hand.classList.add('is-held');
       vibrate(25);
       const heartbeat = () => {
         tones([92], 190, 0.13);
         if (entry.progress > 0) vibrate(15);
         send(entry, 'hold', { active: true }, (reply) => {
-          if (!reply?.ok && entry.holding) {
+          if (entry.holdToken !== holdToken || reply?.ignored) return;
+          if (reply?.ok) {
+            entry.holdConfirmed = true;
+            showStatus(entry.status);
+          } else if (reply?.error === 'SABOTAGE_NOT_AT_PANEL') {
+            close();
+          } else {
             release();
             notify(t('panel.unavailable'));
           }
@@ -131,12 +156,13 @@ export function createSabotagePanel({ t, tones, vibrate, notify, currentPanel })
   function showStatus(status) {
     const entry = view;
     if (!entry?.display || status?.roundId !== entry.roundId) return;
+    entry.status = status;
     entry.progress = status.progress;
     const own = status.panels.find(({ id }) => id === entry.panelId)?.state;
     const partner = status.panels.some(({ id, state }) => id !== entry.panelId && state === 'HELD');
     if (own === 'DONE' && !entry.done) {
       entry.done = true;
-      release();
+      if (entry.holding) release();
       tones([523, 659, 784], 110, 0.5);
       vibrate(180);
       if (entry.type === 'REACTOR' || status.panels.every(({ state }) => state === 'DONE')) {
@@ -152,18 +178,20 @@ export function createSabotagePanel({ t, tones, vibrate, notify, currentPanel })
       }
       return;
     }
-    const waiting = entry.holding && own === 'HELD' && !partner;
+    const localHold = entry.holdConfirmed === true && own === 'HELD';
+    const waiting = localHold && !partner;
     const label = t(entry.done ? 'panel.nominal' : waiting ? 'panel.waiting' : 'panel.hold');
     if (entry.display.textContent !== label) entry.display.textContent = label;
     entry.hand.classList.toggle('is-waiting', waiting);
-    entry.hand.style.setProperty('--sab-progress', entry.done ? 1 : status.progress);
+    entry.hand.style.setProperty('--sab-progress', entry.done ? 1 : localHold ? status.progress : 0);
     entry.hand.setAttribute('aria-label', label);
-    const hint = partner && own !== 'HELD' && !entry.done ? t('panel.partner') : '';
+    const hint = partner && !localHold && !entry.done ? t('panel.partner') : '';
     if (entry.hint.textContent !== hint) entry.hint.textContent = hint;
   }
 
   function open(socket, code, sab, panelId) {
     if (!socket.connected || !sab?.panelStatus) return;
+    if (view?.roundId === sab.panelStatus.roundId && view.panelId === panelId) return;
     close();
     const entry = { socket, code, roundId: sab.panelStatus.roundId, panelId, type: sab.type, opener: document.activeElement };
     view = entry;
@@ -218,7 +246,11 @@ export function createSabotagePanel({ t, tones, vibrate, notify, currentPanel })
     } else showStatus(status);
   }
 
+  function checkReactorReach(canReach) {
+    if (view?.type === 'REACTOR' && !view.done && !canReach(view.panelId)) close();
+  }
+
   window.addEventListener('blur', release);
   document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
-  return { open, close, sync, showStatus };
+  return { open, close, sync, showStatus, checkReactorReach };
 }

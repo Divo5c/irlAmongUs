@@ -5,7 +5,7 @@
  */
 import { avatar, browserStorage, buttonArt, element, icon } from './ui.js';
 import { langActive, localText, roomErrorText, roomLabel, t, taskStageLabel, taskTitle } from './i18n.js';
-import { createSabotagePanel } from './sabotagePanels.js';
+import { createSabotagePanel, reactorContainsPosition } from './sabotagePanels.js';
 import { chooseUseAction } from './useAction.js';
 
 const App = (() => {
@@ -596,6 +596,10 @@ const App = (() => {
     socket.on('position:confirmed', (pos) => {
       state.selfPos = pos;
       state.panelPositionAt = performance.now();
+      sabotagePanel.checkReactorReach((panelId) => {
+        const spot = state.room?.sabotage?.fixSpots?.find(({ id }) => id === panelId);
+        return spot && canReachSabotageSpot(spot);
+      });
       if (meetingIntroActive && meetingAwaitActive()) renderMeetingAwaitContent();
       const wasRetrying = state.positionRetryAt > 0;
       state.positionRetryAt = 0;
@@ -1878,6 +1882,15 @@ const App = (() => {
     sfx('task_open');
   }
 
+  function canReachSabotageSpot(spot) {
+    const pos = state.selfPos;
+    if (!pos || !(pos.confidence >= 0.4 && performance.now() - state.panelPositionAt <= 8000 &&
+        Math.hypot(spot.x - pos.x, spot.y - pos.y) <= state.room.panelUseRadiusM)) return false;
+    if (spot.roomType !== 'REACTOR') return pos.roomId === spot.roomId;
+    const room = state.room.map?.rooms?.find(({ id }) => id === spot.roomId);
+    return reactorContainsPosition(pos, room?.polygon ?? []);
+  }
+
   /** Use-Knopf: nur erreichbare Ziele anbieten. */
   function useAction() {
     if (state.room?.status !== 'IN_GAME') return null;
@@ -1885,9 +1898,7 @@ const App = (() => {
     const alive = state.room.players.some(({ id, isAlive }) => id === state.playerId && isAlive);
     if (sab && alive) {
       if (sab.panelStatus && state.selfPos) {
-        const { x, y, roomId, confidence } = state.selfPos;
-        const spot = confidence >= 0.4 && performance.now() - state.panelPositionAt <= 8000 && sab.fixSpots.find((candidate) =>
-          roomId === candidate.roomId && Math.hypot(candidate.x - x, candidate.y - y) <= state.room.panelUseRadiusM);
+        const spot = sab.fixSpots.find(canReachSabotageSpot);
         if (spot) return { label: t('panel.open'), kind: 'PANEL', panel: spot.id };
       }
       if (sab.type === 'LIGHTS' && roomIdContains('ELECTRICAL')) {

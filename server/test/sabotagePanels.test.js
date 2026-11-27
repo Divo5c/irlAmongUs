@@ -52,6 +52,27 @@ test('oxygen panels require distinct locations with edge clearance', () => {
   assert.throws(() => store.startSabotage(code, impostor, 'O2'), { code: 'SABOTAGE_UNAVAILABLE' });
 });
 
+test('a lone player can open, hold and release a reactor scanner in overlapping rooms', () => {
+  const rooms = criticalRooms();
+  rooms[0].polygon = rooms[1].polygon;
+  const { store, room, impostor, place } = setup('REACTOR', rooms);
+  const { id, spots: [scanner] } = room.sabotage.controls;
+  const now = Date.now();
+  place(impostor, scanner);
+  assert.equal(store.getPlayerPosition(code, impostor).roomId, rooms[0].id);
+  const opened = store.openSabotagePanel(code, impostor, id, scanner.id, now);
+  assert.deepEqual(opened.status.panels.map(({ state }) => state), ['OPEN', 'OPEN']);
+  store.holdSabotagePanel(code, impostor, id, scanner.id, true, now);
+  store.holdSabotagePanel(code, impostor, id, scanner.id, true, now + 500);
+  const alone = store.tickReactorPanels(code, now + 1500);
+  assert.deepEqual(alone.status.panels.map(({ state }) => state), ['HELD', 'OPEN']);
+  assert.equal(alone.status.progress, 0);
+  assert.equal(alone.fixed, undefined);
+  store.holdSabotagePanel(code, impostor, id, scanner.id, false, now + 1501);
+  assert.deepEqual(store.tickReactorPanels(code, now + 1501).status.panels.map(({ state }) => state), ['OPEN', 'OPEN']);
+  assert.equal(room.sabotage.controls.open.get(impostor), scanner.id);
+});
+
 test('reactor requires two live nearby players at separate panels and continuous holds', () => {
   const { store, room, crew: [a, b, ghost], place } = setup('REACTOR');
   const { id, spots: [left, right] } = room.sabotage.controls;
