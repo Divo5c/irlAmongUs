@@ -1,19 +1,5 @@
 import { buttonArt, element } from './ui.js';
 
-export function reactorContainsPosition({ x, y }, polygon) {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i], b = polygon[j];
-    const cross = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
-    const dot = (x - a.x) * (x - b.x) + (y - a.y) * (y - b.y);
-    if (Math.abs(cross) <= 1e-6 && dot <= 1e-6) return true;
-    if ((a.y > y) !== (b.y > y) && x < a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y)) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
-
 export function createSabotagePanel({ t, tones, vibrate, notify, currentPanel }) {
   let view;
   let dialog;
@@ -247,7 +233,7 @@ export function createSabotagePanel({ t, tones, vibrate, notify, currentPanel })
   }
 
   function checkReactorReach(canReach) {
-    if (view?.type === 'REACTOR' && !view.done && !canReach(view.panelId)) close();
+    if (view?.type === 'REACTOR' && !view.done && !canReach(view.panelId, view.holding)) close();
   }
 
   window.addEventListener('blur', release);

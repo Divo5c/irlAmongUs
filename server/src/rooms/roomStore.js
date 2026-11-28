@@ -20,6 +20,7 @@ const {
   pushOutOfTable,
 } = require('../game/positioning');
 const { canKill, DEFAULT_MIN_CONFIDENCE } = require('../game/proximity');
+const { usableReactorPanel } = require('../../public/js/reactorZones.mjs');
 const {
   PANEL_USE_RADIUS_M, REACTOR_HOLD_MS, REACTOR_RELEASE_GRACE_MS,
   REACTOR_HEARTBEAT_TIMEOUT_MS, O2_RETRY_MS, panelLayout, makePanels,
@@ -909,15 +910,19 @@ class RoomStore {
     return { room: this.toPublicRoom(room), type, deadline: room.sabotage.deadline };
   }
 
-  #panelNearby(room, playerId, spot, now) {
+  #panelNearby(room, playerId, spot, now, locked = false) {
     const pos = this.#positions.get(room.code)?.get(playerId);
     if (!isPlayerAlive(room, playerId) || !isFreshPosition(pos, now)
-        || pos.confidence < DEFAULT_MIN_CONFIDENCE
-        || Math.hypot(pos.x - spot.x, pos.y - spot.y) > PANEL_USE_RADIUS_M) return false;
-    if (spot.roomType !== 'REACTOR') return pos.roomId === spot.roomId;
-    // Overlapping map rooms may give the same point a different primary room ID.
-    const polygon = room.map?.rooms?.find(({ id }) => id === spot.roomId)?.polygon;
-    return pointInPolygon(pos.x, pos.y, polygon);
+        || pos.confidence < DEFAULT_MIN_CONFIDENCE) return false;
+    if (spot.roomType !== 'REACTOR') {
+      return pos.roomId === spot.roomId && Math.hypot(pos.x - spot.x, pos.y - spot.y) <= PANEL_USE_RADIUS_M;
+    }
+    const { holds, spots } = room.sabotage.controls;
+    const active = [...holds].filter(([, hold]) =>
+      hold.releasedAt == null && now - hold.lastAt < REACTOR_HEARTBEAT_TIMEOUT_MS);
+    const own = active.find(([id]) => id === playerId)?.[1];
+    const panels = active.map(([id, hold]) => ({ id: hold.panelId, state: 'HELD', playerId: id }));
+    return usableReactorPanel(pos, spots, panels, playerId, locked ? spot.id : own?.panelId) === spot.id;
   }
 
   #panelContext(code, playerId, roundId, panelId, now) {
@@ -1010,7 +1015,7 @@ class RoomStore {
       const spot = controls.spots.find(({ id }) => id === hold.panelId);
       if (hold.releasedAt != null) {
         if (now - hold.releasedAt >= REACTOR_RELEASE_GRACE_MS) controls.holds.delete(playerId);
-      } else if (now - hold.lastAt >= REACTOR_HEARTBEAT_TIMEOUT_MS || !this.#panelNearby(room, playerId, spot, now)) {
+      } else if (now - hold.lastAt >= REACTOR_HEARTBEAT_TIMEOUT_MS || !this.#panelNearby(room, playerId, spot, now, true)) {
         controls.holds.delete(playerId);
         controls.togetherSince = null;
       }

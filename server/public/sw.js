@@ -27,6 +27,7 @@ const ASSETS = [
   ...['osm', 'mapEditor', 'tasks', 'app'].map((name) => `/js/${name}.js?v=${VERSION}`),
   '/js/ui.js',
   '/js/useAction.js',
+  '/js/reactorZones.mjs',
   '/js/i18n.js',
   '/js/sabotagePanels.js',
   '/img/sabotage/hand.svg',

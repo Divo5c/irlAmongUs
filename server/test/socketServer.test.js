@@ -345,6 +345,28 @@ describe('socket flow security & gameplay', () => {
       } finally {
         clearInterval(interval);
       }
+      const closeReactor = await start('REACTOR');
+      const [near, far] = closeReactor.spots;
+      await place(host, near);
+      await place(partner, near);
+      assert.equal((await send(host, 'open', closeReactor.id, near)).ok, true);
+      const nearbyBeat = () => send(host, 'hold', closeReactor.id, near, { active: true });
+      assert.equal((await nearbyBeat()).ok, true);
+      const nearbyTimer = setInterval(() => { nearbyBeat().catch(() => {}); }, 350);
+      try {
+        assert.equal((await send(partner, 'open', closeReactor.id, far)).ok, true);
+        const fixedNearby = waitForEvent(host, 'game:sabotage_fixed');
+        const otherBeat = () => send(partner, 'hold', closeReactor.id, far, { active: true });
+        assert.equal((await otherBeat()).ok, true);
+        const otherTimer = setInterval(() => { otherBeat().catch(() => {}); }, 350);
+        try {
+          assert.deepEqual((await fixedNearby).fixed, ['REACTOR']);
+        } finally {
+          clearInterval(otherTimer);
+        }
+      } finally {
+        clearInterval(nearbyTimer);
+      }
       const oxygen = await start('O2');
       await place(host, oxygen.spots[0]);
       await place(legacy, oxygen.spots[1]);

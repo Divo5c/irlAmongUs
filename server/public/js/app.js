@@ -5,7 +5,8 @@
  */
 import { avatar, browserStorage, buttonArt, element, icon } from './ui.js';
 import { langActive, localText, roomErrorText, roomLabel, t, taskStageLabel, taskTitle } from './i18n.js';
-import { createSabotagePanel, reactorContainsPosition } from './sabotagePanels.js';
+import { createSabotagePanel } from './sabotagePanels.js';
+import { usableReactorPanel } from './reactorZones.mjs';
 import { chooseUseAction } from './useAction.js';
 
 const App = (() => {
@@ -604,10 +605,8 @@ const App = (() => {
     socket.on('position:confirmed', (pos) => {
       state.selfPos = pos;
       state.panelPositionAt = performance.now();
-      sabotagePanel.checkReactorReach((panelId) => {
-        const spot = state.room?.sabotage?.fixSpots?.find(({ id }) => id === panelId);
-        return spot && canReachSabotageSpot(spot);
-      });
+      sabotagePanel.checkReactorReach((panelId, holding) =>
+        reactorPanelForPosition(holding ? panelId : null) === panelId);
       if (meetingIntroActive && meetingAwaitActive()) renderMeetingAwaitContent();
       const wasRetrying = state.positionRetryAt > 0;
       state.positionRetryAt = 0;
@@ -1892,13 +1891,19 @@ const App = (() => {
     sfx('task_open');
   }
 
-  function canReachSabotageSpot(spot) {
+  function reactorPanelForPosition(heldPanelId = null) {
+    const sab = state.room?.sabotage;
+    const pos = state.selfPos;
+    if (sab?.type !== 'REACTOR' || !pos || pos.confidence < 0.4 ||
+        performance.now() - state.panelPositionAt > 8000) return null;
+    return usableReactorPanel(pos, sab.fixSpots, sab.panelStatus?.panels ?? [], state.playerId, heldPanelId);
+  }
+
+  function canReachOxygenSpot(spot) {
     const pos = state.selfPos;
     if (!pos || !(pos.confidence >= 0.4 && performance.now() - state.panelPositionAt <= 8000 &&
         Math.hypot(spot.x - pos.x, spot.y - pos.y) <= state.room.panelUseRadiusM)) return false;
-    if (spot.roomType !== 'REACTOR') return pos.roomId === spot.roomId;
-    const room = state.room.map?.rooms?.find(({ id }) => id === spot.roomId);
-    return reactorContainsPosition(pos, room?.polygon ?? []);
+    return pos.roomId === spot.roomId;
   }
 
   /** Use-Knopf: nur erreichbare Ziele anbieten. */
@@ -1908,8 +1913,8 @@ const App = (() => {
     const alive = state.room.players.some(({ id, isAlive }) => id === state.playerId && isAlive);
     if (sab && alive) {
       if (sab.panelStatus && state.selfPos) {
-        const spot = sab.fixSpots.find(canReachSabotageSpot);
-        if (spot) return { label: t('panel.open'), kind: 'PANEL', panel: spot.id };
+        const panel = sab.type === 'REACTOR' ? reactorPanelForPosition() : sab.fixSpots.find(canReachOxygenSpot)?.id;
+        if (panel) return { label: t('panel.open'), kind: 'PANEL', panel };
       }
       if (sab.type === 'LIGHTS' && roomIdContains('ELECTRICAL')) {
         return { label: localText("Licht reparieren", "Restore lights"), kind: 'FIX', panel: 'LIGHTS' };

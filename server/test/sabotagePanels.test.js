@@ -200,6 +200,50 @@ test('reactor loses the hold when the player leaves or heartbeats expire', () =>
   assert.ok(room.sabotage);
 });
 
+test('shared reactor zones split by distance and panel ID, and pass the occupied zone to the free scanner', () => {
+  const { usableReactorPanel } = require('../public/js/reactorZones.mjs');
+  const spots = [{ id: 'b', x: 10, y: 0 }, { id: 'a', x: 0, y: 0 }];
+  const select = (x, panels = []) => usableReactorPanel({ x, y: 0 }, spots, panels, 'p2');
+  assert.equal(select(4), 'a');
+  assert.equal(select(6), 'b');
+  assert.equal(select(5), 'a');
+  assert.equal(select(-8), 'a');
+  assert.equal(select(-8.01), null);
+  const held = [{ id: 'a', state: 'HELD', playerId: 'p1' }];
+  assert.equal(select(-8, held), 'b');
+  assert.equal(select(10, held), 'b');
+});
+
+test('reactor holds remain locked across the zone union after a partner releases', () => {
+  const { store, room, crew: [a, b], place } = setup('REACTOR');
+  const { id, spots: [first, second] } = room.sabotage.controls;
+  const initial = Date.now();
+  for (const player of [a, b]) place(player, first);
+  store.openSabotagePanel(code, a, id, first.id, initial);
+  store.holdSabotagePanel(code, a, id, first.id, true, initial);
+  store.openSabotagePanel(code, b, id, second.id, initial);
+  store.holdSabotagePanel(code, b, id, second.id, true, initial);
+  store.holdSabotagePanel(code, a, id, first.id, false, initial + 100);
+  store.holdSabotagePanel(code, b, id, second.id, true, initial + 500);
+  assert.equal(store.tickReactorPanels(code, initial + 500).status.panels[1].state, 'HELD');
+  const distance = Math.hypot(first.x - second.x, first.y - second.y);
+  const move = (m) => place(b, { x: first.x + (first.x - second.x) * m / distance,
+    y: first.y + (first.y - second.y) * m / distance });
+  move(10.9);
+  assert.equal(store.tickReactorPanels(code, initial + 501).status.panels[1].state, 'HELD');
+  move(11.1);
+  assert.equal(store.tickReactorPanels(code, initial + 502).status.panels[1].state, 'OPEN');
+});
+
+test('oxygen still requires a distance of at most three metres', () => {
+  const { store, room, crew: [player], place } = setup('O2');
+  const { id, spots: [spot] } = room.sabotage.controls;
+  place(player, { x: spot.x + 3.01, y: spot.y });
+  assert.throws(() => store.openSabotagePanel(code, player, id, spot.id), { code: 'SABOTAGE_NOT_AT_PANEL' });
+  place(player, { x: spot.x + 3, y: spot.y });
+  assert.ok(store.openSabotagePanel(code, player, id, spot.id).note);
+});
+
 for (const order of [[0, 1], [1, 0]]) {
   test(`oxygen solves in either order (first panel ${order[0] + 1})`, () => {
     const { store, room, crew: [a, b, ghost], impostor, place } = setup('O2');
