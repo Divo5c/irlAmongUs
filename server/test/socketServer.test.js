@@ -174,7 +174,7 @@ async function createRoomWithNPlayers(playerCount, configPatch, panelClients = 0
   return { clients, code };
 }
 
-const SAMPLE_MAP = {
+const SAMPLE_MAP = require('./criticalRooms').withReactorRoad({
   nodes: [
     { id: 'n1', x: 10, y: 50 },
     { id: 'n2', x: 90, y: 50 },
@@ -182,7 +182,7 @@ const SAMPLE_MAP = {
   corridors: [{ id: 'c1', a: 'n1', b: 'n2' }],
   rooms: require('./criticalRooms').criticalRooms(),
   connections: [],
-};
+});
 
 /** Host runs the full map setup over the wire (start/update/save). */
 async function makeMapReadyOverWire(host, code) {
@@ -194,7 +194,7 @@ async function makeMapReadyOverWire(host, code) {
   const savedSeen = waitForRoomWhere(host, (r) => r.status === 'MAP_READY');
   host.emit('map:save', { code });
   const saved = await savedSeen;
-  assert.equal(saved.map.nodes.length, 2);
+  assert.deepEqual(saved.map.nodes.map(({ id }) => id), SAMPLE_MAP.nodes.map(({ id }) => id));
   return saved;
 }
 

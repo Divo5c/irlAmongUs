@@ -312,6 +312,7 @@ class RoomStore {
         : {}),
       taskProgress: getTaskProgress(room),
       sabotageTypes: this.#sabotageTypesFor(room),
+      reactorPlacementIssue: panelLayout(room.map).reactorPlacementIssue,
       panelUseRadiusM: PANEL_USE_RADIUS_M,
       createdAt: room.createdAt,
       updatedAt: room.updatedAt,

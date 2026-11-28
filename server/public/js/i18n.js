@@ -16,6 +16,7 @@ const TEXT = {
   "panel.state.FREE": ["Frei", "Free"],
   "panel.state.HELD": ["Wird gehalten", "Held"],
   "panel.state.DONE": ["Erledigt", "Done"],
+  "panel.reactorRoad": ["Reaktor-Panels passen nicht an begehbare Wege. Verbinde den Reaktorraum mit einem Weg oder zeichne ihn größer.", "Reactor panels cannot be placed near walkable paths. Connect the reactor room to a path or draw it larger."],
   "panel.reactorSmall": ["Reaktorraum zu klein: zeichne ihn größer.", "Reactor too small: draw a larger room."],
   "panel.oxygenSmall": ["O₂-Panels passen nicht: zeichne Sauerstoff und Admin größer oder weiter auseinander.", "O₂ panels do not fit: draw larger or more widely separated Oxygen and Admin rooms."],
   "ghost.status": ["Du bist ein Geist", "You are a ghost"],

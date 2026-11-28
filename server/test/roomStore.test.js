@@ -19,7 +19,7 @@ function assertGameError(fn, code) {
   assert.throws(fn, (error) => error instanceof RoomStoreError && error.code === code);
 }
 
-const SAMPLE_MAP = {
+const SAMPLE_MAP = require('./criticalRooms').withReactorRoad({
   nodes: [
     { id: 'n1', x: 10, y: 50 },
     { id: 'n2', x: 90, y: 50 },
@@ -27,7 +27,7 @@ const SAMPLE_MAP = {
   corridors: [{ id: 'c1', a: 'n1', b: 'n2' }],
   rooms: require('./criticalRooms').criticalRooms(),
   connections: [],
-};
+});
 
 /** Saves a minimal valid map so the room reaches MAP_READY (idempotent). */
 function makeMapReady(store, code = 'ABC234') {
@@ -957,7 +957,7 @@ describe('map setup lifecycle', () => {
     assert.equal(saved.map.version, 2);
     assert.deepEqual(
       saved.map.nodes.map((n) => n.id),
-      ['n1', 'n2'],
+      SAMPLE_MAP.nodes.map(({ id }) => id),
     );
     // Public projection includes the map (it is not secret):
     assert.equal(saved.map.nodes.length, updated.map.nodes.length);

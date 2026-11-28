@@ -51,4 +51,13 @@ function criticalRooms() {
   ];
 }
 
-module.exports = { criticalRooms };
+/** Add a traversable path through the standard reactor fixture. */
+function withReactorRoad(map) {
+  return {
+    ...map,
+    nodes: [...map.nodes, { id: 'reactor-road-a', x: 35, y: 104 }, { id: 'reactor-road-b', x: 51, y: 104 }],
+    corridors: [...map.corridors, { id: 'reactor-road', a: 'reactor-road-a', b: 'reactor-road-b' }],
+  };
+}
+
+module.exports = { criticalRooms, withReactorRoad };

@@ -2196,11 +2196,15 @@ const App = (() => {
     return state.room?.sabotageTypes ?? [];
   }
 
+  function reactorPlacementReason() {
+    return state.room?.reactorPlacementIssue === 'NO_WALKABLE_PAIR' ? 'panel.reactorRoad' : 'panel.reactorSmall';
+  }
+
   function renderPanelMapWarning() {
     const warning = $('map-panel-warning');
     const roomTypes = state.room?.map?.rooms?.map(({ type }) => type) ?? [];
     const errors = [];
-    if (roomTypes.includes('REACTOR') && !sabotageTypesAvailable().includes('REACTOR')) errors.push(t('panel.reactorSmall'));
+    if (roomTypes.includes('REACTOR') && !sabotageTypesAvailable().includes('REACTOR')) errors.push(t(reactorPlacementReason()));
     if (roomTypes.includes('O2') && roomTypes.includes('ADMIN') && !sabotageTypesAvailable().includes('O2')) errors.push(t('panel.oxygenSmall'));
     warning.textContent = errors.join(' · ');
     warning.hidden = errors.length === 0;
@@ -3851,7 +3855,7 @@ const App = (() => {
     if (state.room.sabotage) return 'settings.adminActive';
     if (state.room.sabotageTypes?.includes(type.toUpperCase())) return null;
     const roomTypes = state.room.map?.rooms?.map((room) => room.type) ?? [];
-    if (type === 'reactor' && roomTypes.includes('REACTOR')) return 'panel.reactorSmall';
+    if (type === 'reactor' && roomTypes.includes('REACTOR')) return reactorPlacementReason();
     if (type === 'o2' && roomTypes.includes('O2') && roomTypes.includes('ADMIN')) return 'panel.oxygenSmall';
     return 'settings.adminUnavailable';
   }

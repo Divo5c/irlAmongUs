@@ -2,17 +2,17 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { RoomStore } = require('../src/rooms/roomStore');
 const { panelLayout, REACTOR_HOLD_MS, REACTOR_HEARTBEAT_TIMEOUT_MS, O2_RETRY_MS } = require('../src/game/sabotagePanels');
-const { pointInPolygon } = require('../src/game/positioning');
-const { criticalRooms } = require('./criticalRooms');
+const { pointInPolygon, nearestCorridorDistanceM } = require('../src/game/positioning');
+const { criticalRooms, withReactorRoad } = require('./criticalRooms');
 
 const code = 'ABC234';
 function setup(type, rooms = criticalRooms()) {
   const store = new RoomStore();
-  const map = {
+  const map = withReactorRoad({
     nodes: [{ id: 'a', x: 10, y: 80 }, { id: 'b', x: 110, y: 80 }],
     corridors: [{ id: 'c', a: 'a', b: 'b' }],
     rooms, connections: [],
-  };
+  });
   const room = store.createRoom({ code, hostId: 'host' });
   for (const id of ['p2', 'p3', 'p4']) store.addPlayerToRoom(code, { id, name: id });
   store.startMapSetup(code);
@@ -115,6 +115,33 @@ test('deterministic reactor panels sit inside the polygon and small rooms keep t
   const { room, store, impostor } = setup(null, rooms);
   assert.ok(room.map.rooms.find(({ type }) => type === 'REACTOR'));
   assert.deepEqual(store.toPublicRoom(room).sabotageTypes, ['O2']);
+  assert.throws(() => store.startSabotage(code, impostor, 'REACTOR'), { code: 'SABOTAGE_UNAVAILABLE' });
+});
+
+test('reactor placement selects the widest reachable pair and retains the old no-road layout', () => {
+  const rooms = criticalRooms();
+  const fallback = panelLayout({ rooms }).REACTOR;
+  assert.deepEqual(fallback.map(({ x, y }) => [x, y]), [[43, 100.8], [43, 111.2]]);
+  const roadMap = withReactorRoad({ rooms, nodes: [], corridors: [] });
+  const [a, b] = panelLayout(roadMap).REACTOR;
+  assert.deepEqual(panelLayout(structuredClone(roadMap)), panelLayout(roadMap));
+  for (const spot of [a, b]) {
+    assert.ok(pointInPolygon(spot.x, spot.y, rooms[1].polygon));
+    assert.ok(spot.x >= 36.5 && spot.x <= 49.5 && spot.y >= 100.5 && spot.y <= 115.5);
+    assert.ok(nearestCorridorDistanceM(spot.x, spot.y, roadMap.nodes, roadMap.corridors) <= 2);
+  }
+  assert.ok(Math.hypot(a.x - b.x, a.y - b.y) > 12);
+  const { usableReactorPanel } = require('../public/js/reactorZones.mjs');
+  for (const spot of [a, b]) assert.equal(usableReactorPanel(spot, [a, b], [], 'p1'), spot.id);
+});
+
+test('a map with a distant road remains playable without reactor sabotage', () => {
+  const { store, room, impostor } = setup(null);
+  room.map = { ...room.map, corridors: room.map.corridors.filter(({ id }) => id !== 'reactor-road') };
+  const view = store.toPublicRoom(room);
+  assert.ok(view.map.rooms.find(({ type }) => type === 'REACTOR'));
+  assert.ok(!view.sabotageTypes.includes('REACTOR'));
+  assert.equal(view.reactorPlacementIssue, 'NO_WALKABLE_PAIR');
   assert.throws(() => store.startSabotage(code, impostor, 'REACTOR'), { code: 'SABOTAGE_UNAVAILABLE' });
 });
 
