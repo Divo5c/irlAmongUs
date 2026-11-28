@@ -351,6 +351,7 @@ const App = (() => {
       const wasAlive = state.room?.code === room.code
         && state.room?.players?.some(({ id, isAlive }) => id === state.playerId && isAlive);
       if (state.room?.status === 'IN_GAME' && room.status !== 'IN_GAME') closeGameDialogs();
+      if (state.room?.code !== room.code || room.status !== 'IN_GAME') state.killTargets = [];
       state.room = room;
       renderAdminSabotage();
       sabotagePanel.sync(room.sabotage?.panelStatus,
@@ -571,7 +572,8 @@ const App = (() => {
       show('game');
       beep(520);
     });
-    socket.on('game:kill_targets', ({ targets }) => {
+    socket.on('game:kill_targets', ({ code, targets }) => {
+      if (code !== state.code || state.room?.status !== 'IN_GAME') return;
       state.killTargets = (targets ?? []).filter(({ playerId }) => !isImpostorPartner(playerId));
       renderGameHud();
     });
@@ -703,6 +705,7 @@ const App = (() => {
         (player) => player.id === killedPlayerId,
       );
       if (victim) victim.isAlive = false;
+      state.killTargets = (state.killTargets ?? []).filter(({ playerId }) => playerId !== killedPlayerId);
       renderGameHud();
       if (killedPlayerId === state.playerId) {
         sabotagePanel.close();
@@ -1582,7 +1585,7 @@ const App = (() => {
     const cfg = room.config ?? {};
     $('cfg-impostors').value = `${cfg.impostorCount ?? 1}`;
     $('cfg-tasks').value = `${cfg.tasksPerCrewmate ?? 4}`;
-    $('cfg-kill-radius').value = `${cfg.killRadiusM ?? 2}`;
+    $('cfg-kill-radius').value = `${cfg.killRadiusM ?? 6}`;
     $('cfg-taskradius').value = `${cfg.taskRadiusM ?? 8}`;
     $('cfg-cooldown').value = `${Math.round((cfg.killCooldownMs ?? 0) / 1000)}`;
     $('cfg-discuss').value = `${Math.round((cfg.discussionDurationMs ?? 0) / 1000)}`;
@@ -1815,27 +1818,18 @@ const App = (() => {
     reportBtn.disabled = !(bodies.length && imAlive !== false);
     reportBtn.classList.toggle('ready', bodies.length > 0 && imAlive !== false);
     const killBtn = $('btn-kill');
-    if (!killBtn.classList.contains('hidden')) {
-      // Divo (v19.13.7): als (toter) Geist gibt es keinen Kill mehr.
-      if (imAlive === false) {
-        killBtn.classList.add('hidden');
-        killBtn.disabled = true;
-      } else {
-        const killLabel = killBtn.querySelector('.icon-label');
-        const targets = state.killTargets ?? [];
-        const cooldownLeft = Math.max(0, state.killReadyAt - Date.now());
-        if (cooldownLeft > 0) {
-          // Cooldown IMMER auf dem Knopf sichtbar (auch ohne Ziel in	range).
-          killBtn.disabled = true;
-          if (killLabel) killLabel.textContent = `${Math.ceil(cooldownLeft / 1000)}s`;
-        } else {
-          killBtn.disabled = !targets.length;
-          if (killLabel) killLabel.textContent = t('btn.kill');
-        }
-        setActionCooldown(killBtn, cooldownLeft, room.config?.killCooldownMs ?? 20000);
-        killBtn.classList.toggle('ready', targets.length > 0 && cooldownLeft <= 0);
-      }
+    const canKill = state.role?.role === 'IMPOSTOR' && imAlive === true;
+    killBtn.classList.toggle('hidden', !canKill);
+    const cooldownLeft = Math.max(0, state.killReadyAt - Date.now());
+    const hasTarget = Boolean(state.socket?.connected && state.killTargets?.length);
+    killBtn.disabled = !canKill || !hasTarget || cooldownLeft > 0;
+    if (canKill) {
+      const killLabel = killBtn.querySelector('.icon-label');
+      if (killLabel) killLabel.textContent = cooldownLeft > 0
+        ? `${Math.ceil(cooldownLeft / 1000)}s` : t(hasTarget ? 'btn.kill' : 'btn.killNoTarget');
+      setActionCooldown(killBtn, cooldownLeft, room.config?.killCooldownMs ?? 20000);
     }
+    killBtn.classList.toggle('ready', !killBtn.disabled);
     updateUseButton();
     updateEmergencyPanel();
     updateSabotageButton();
@@ -3284,6 +3278,7 @@ const App = (() => {
   });
 
   $('btn-kill').addEventListener('click', () => {
+    if (state.room?.status !== 'IN_GAME' || !state.socket?.connected) return;
     const targets = (state.killTargets ?? []).filter(({ playerId }) => !isImpostorPartner(playerId));
     if (!targets.length) {
       showToast(localText("Kein Crewmitglied in Reichweite.", "No crewmate in range. Move closer."));
@@ -3294,7 +3289,6 @@ const App = (() => {
       return;
     }
     // Nearest victim wins: no extra pick dialog needed.
-    sfx('kill_knife');
     ensureSocket().emit('game:kill', { code: state.code, targetPlayerId: targets[0].playerId });
     $('btn-kill').disabled = true;
     const killLabel2 = $('btn-kill').querySelector('.icon-label');

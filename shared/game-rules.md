@@ -52,6 +52,7 @@ Alle Werte serverseitig validiert; öffentlicher Teil jeder Room-Projektion.
 |---|---|---|---|
 | impostorCount | 1–5 (+Spielerregel) | 1 | Anzahl Impostors |
 | tasksPerCrewmate | 1–6 | 2 | Tasks pro Crewmate |
+| killRadiusM | 1–6 m | 6 m | Maximale gemessene Distanz zum Ziel |
 | killCooldownMs | 0–180000 | 20000 | Pause zwischen Kills (0 = aus) |
 | discussionDurationMs | 0–180000 | 15000 | Diskussionsphase vor dem Voting (0 = überspringen) |
 | votingDurationMs | 5000–300000 | 30000 | Maximale Votingdauer |

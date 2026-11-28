@@ -28,6 +28,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
   botHooks.onGameOver = (code, winner) => broadcastGameOver(io, code, winner);
   botHooks.onSabotageStarted = (code) => armSabotageDeadlineTimer(code, io);
   botHooks.onVote = broadcastVoteProgress;
+  botHooks.onPositionsChanged = publishKillTargets;
   const meetingTimers = new Map();
   const pendingDisconnects = new Map();
 
@@ -610,7 +611,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
         // Synchronized cooldown info for every impostor (private).
         const cooldownMs = roomStore.getRequiredRoom(code).config.killCooldownMs;
         if (cooldownMs > 0) {
-          const killReadyAt = Date.now() + cooldownMs;
+          const killReadyAt = roomStore.getRequiredRoom(code).lastKillAt + cooldownMs;
           for (const [playerId, role] of Object.entries(
             getRolesSnapshot(roomStore.getRequiredRoom(code)),
           )) {
@@ -625,6 +626,8 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
 
         if (result.winner) {
           broadcastGameOver(io, code, result.winner);
+        } else {
+          publishKillTargets(code);
         }
       } catch (error) {
         emitRoomError(socket, error);
@@ -696,10 +699,8 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
           });
         }
 
-        // Kill targets in range: the red button lights up only with real
-        // targets (impostor sees names of the closest candidates).
-        const killTargets = roomStore.getKillTargetsFor(code, socket.data.playerId);
-        socket.emit('game:kill_targets', { code, targets: killTargets });
+        // Either player's confirmed movement can change the target list.
+        publishKillTargets(code);
 
         // Broadcast to admin room if any admin is tracking
         if (roomStore.isAdmin(code, socket.data.playerId) || io.sockets.adapter.rooms.has(`admin:${code}`)) {
@@ -884,6 +885,16 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
     }, disconnectGraceMs);
     timer.unref();
     pendingDisconnects.set(key, timer);
+  }
+
+  function publishKillTargets(code) {
+    const room = roomStore.getRoom(code);
+    if (room?.status !== 'IN_GAME') return;
+    for (const player of room.players) {
+      if (player.role !== 'IMPOSTOR' || !player.isAlive) continue;
+      const targets = roomStore.getKillTargetsFor(code, player.id);
+      emitToPlayer(code, player.id, 'game:kill_targets', { code, targets });
+    }
   }
 
   function emitToPlayer(code, playerId, event, payload) {

@@ -1474,9 +1474,6 @@ class RoomStore {
       throw new GameError('PLAYER_DEAD', 'Dead players cannot kill.');
     }
 
-    // PROXIMITY HOOK: a future zone/proximity check for real-life play
-    // slots in here (server-verified zone membership of killer & target).
-
     if (room.config.killCooldownMs > 0) {
       const sinceLastKill = Date.now() - (room.lastKillAt ?? 0);
       if (sinceLastKill < room.config.killCooldownMs) {
@@ -1520,7 +1517,7 @@ class RoomStore {
     });
     if (!check.allowed) {
       throw new GameError(
-        check.reason === 'TOO_FAR' ? 'TARGET_TOO_FAR' : 'KILL_REJECTED',
+        check.reason === 'TOO_FAR' ? 'TARGET_TOO_FAR' : check.reason,
         check.reason === 'TOO_FAR'
           ? `Ziel ist zu weit entfernt (${Math.round(check.distance)}m, Radius ${room.config.killRadiusM}m).`
           : check.reason,
@@ -2030,11 +2027,11 @@ class RoomStore {
         maxDistance,
       });
       if (check.allowed) {
-        targets.push({ playerId: player.id, name: player.name, distanceM: Math.round(check.distance ?? 0) });
+        targets.push({ playerId: player.id, name: player.name, distanceM: check.distance });
       }
     }
     targets.sort((a, b) => a.distanceM - b.distanceM);
-    return targets;
+    return targets.map((target) => ({ ...target, distanceM: Math.round(target.distanceM) }));
   }
 
   /**

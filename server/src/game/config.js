@@ -16,7 +16,7 @@ const DEFAULT_GAME_CONFIG = Object.freeze({
   confirmEjects: true,
   anonymousVoting: false,
   // Real-life layer: the impostor must physically reach the target.
-  killRadiusM: 2,
+  killRadiusM: 6,
   // Task-Interaktionsweite: GPS viel zu ungenau fuer 4m (Draußen-Test
   // schrief "stand drauf, kam trotzdem 'zu weit weg'").
   taskRadiusM: 8,
@@ -34,7 +34,7 @@ const NUMERIC_BOUNDS = Object.freeze({
   killCooldownMs: { min: 0, max: 180000 },
   discussionDurationMs: { min: 0, max: 180000 },
   votingDurationMs: { min: 5000, max: 300000 },
-  killRadiusM: { min: 1, max: 5 },
+  killRadiusM: { min: 1, max: 6 },
   taskRadiusM: { min: 3, max: 25 },
   boundaryWarnM: { min: 1, max: 30 },
   emergencyMeetingsPerPlayer: { min: 0, max: 3 },

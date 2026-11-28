@@ -156,6 +156,7 @@ function createBotEngine(roomStore, {
         tryBotSabotage(code, room, bots);
       }
       broadcastBotPositions(code, room, bots);
+      botHooks?.onPositionsChanged?.(code);
       return;
     }
 
@@ -368,7 +369,7 @@ function botCrewFixSabotage(code, room, bots) {
    * bot kill is as verifiable as a human kill).
    */
   function tryBotImpostorKill(code, room, bots) {
-    const radius = room.config?.killRadiusM ?? 2;
+    const radius = room.config.killRadiusM;
     const cooldownMs = room.config?.killCooldownMs ?? 20_000;
     if (Date.now() - (room.lastKillAt ?? 0) < cooldownMs) return;
     for (const bot of bots) {

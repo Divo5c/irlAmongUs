@@ -351,7 +351,13 @@ describe('socket flow security & gameplay', () => {
       await place(partner, near);
       assert.equal((await send(host, 'open', closeReactor.id, near)).ok, true);
       const nearbyBeat = () => send(host, 'hold', closeReactor.id, near, { active: true });
-      assert.equal((await nearbyBeat()).ok, true);
+      let firstBeat = await nearbyBeat();
+      if (firstBeat.ignored) {
+        await sleep(150);
+        firstBeat = await nearbyBeat();
+      }
+      assert.equal(firstBeat.ok, true);
+      assert.notEqual(firstBeat.ignored, true);
       const nearbyTimer = setInterval(() => { nearbyBeat().catch(() => {}); }, 350);
       try {
         assert.equal((await send(partner, 'open', closeReactor.id, far)).ok, true);
@@ -635,6 +641,34 @@ describe('socket flow security & gameplay', () => {
     } finally {
       for (const client of clients) client.disconnect();
     }
+  });
+
+  test('a teammate-free kill target refreshes on the crewmate’s position update', async (t) => {
+    const { clients, code } = await createRoomWithNPlayers(4, { killCooldownMs: 0 });
+    t.after(() => clients.forEach((client) => client.disconnect()));
+    await makeMapReadyOverWire(clients[0], code);
+    const assigned = Promise.all(clients.map((client) => waitForEvent(client, 'game:role_assigned')));
+    clients[0].emit('game:start', { code });
+    const roles = await assigned;
+    const killerIndex = roles.findIndex(({ role }) => role === 'IMPOSTOR');
+    const victimIndex = roles.findIndex(({ role }) => role === 'CREWMATE');
+    const idFor = (index) => index === 0 ? 'host-1' : `player-${index + 1}`;
+    const killer = clients[killerIndex];
+    const victim = clients[victimIndex];
+    const targetPlayerId = idFor(victimIndex);
+    const rejected = waitForEvent(killer, 'room:error');
+    killer.emit('game:kill', { code, targetPlayerId });
+    assert.equal((await rejected).code, 'POSITION_MISSING');
+    placeOnStreet(roomStore, code, idFor(killerIndex), 20, 50);
+    const undisclosed = waitForNoEvent(victim, 'game:kill_targets', 150);
+    const targets = waitForEvent(killer, 'game:kill_targets');
+    victim.emit('position:update', { code, x: 26, y: 50, confidence: 1 });
+    assert.deepEqual((await targets).targets.map(({ playerId, distanceM }) => [playerId, distanceM]),
+      [[targetPlayerId, 6]]);
+    const killed = waitForEvent(victim, 'game:killed');
+    killer.emit('game:kill', { code, targetPlayerId });
+    assert.equal((await killed).killedPlayerId, targetPlayerId);
+    assert.equal(await undisclosed, false);
   });
 
   test('kill notifications stay private: victim + impostors only (Among Us)', async () => {

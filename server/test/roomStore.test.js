@@ -1533,6 +1533,29 @@ test('admin table: anonymous alive room counts; dead vanish; COMMS blocks', () =
 });
 
 describe('Divo-Meeting-Upgrade: meeting kind + unfound deaths (v19.14)', () => {
+  test('kill target selection and the action enforce the same six-metre and GPS gates', () => {
+    const store = new RoomStore();
+    createRoomWithPlayers(store, 4, 'ABC234', { killCooldownMs: 0 });
+    const { assignments } = beginGame(store);
+    const [impostor] = impostorsOf(assignments);
+    const [victim] = crewmatesOf(assignments);
+    const update = (id, x, confidence) => store.updatePosition('ABC234', id, { x, y: 50, confidence },
+      { skipPlausibilityCheck: true });
+
+    update(impostor, 20, 0.39);
+    update(victim, 26, 1);
+    assertGameError(() => store.killPlayer('ABC234', impostor, victim), 'KILLER_CONFIDENCE_TOO_LOW');
+    update(impostor, 20, 0.4);
+    update(victim, 26, 0.39);
+    assertGameError(() => store.killPlayer('ABC234', impostor, victim), 'TARGET_CONFIDENCE_TOO_LOW');
+    update(victim, 26.01, 1);
+    assert.deepEqual(store.getKillTargetsFor('ABC234', impostor), []);
+    assertGameError(() => store.killPlayer('ABC234', impostor, victim), 'TARGET_TOO_FAR');
+    update(victim, 26, 0.4);
+    assert.equal(store.getKillTargetsFor('ABC234', impostor)[0].playerId, victim);
+    assert.equal(store.killPlayer('ABC234', impostor, victim).killedPlayerId, victim);
+  });
+
   test('stale GPS and rejected kills leave the death ledger untouched', (t) => {
     const store = new RoomStore();
     createRoomWithPlayers(store, 4, 'ABC234', { killCooldownMs: 0 });
