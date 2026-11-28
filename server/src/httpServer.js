@@ -17,6 +17,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
@@ -46,6 +47,7 @@ function serveStaticFile(response, relativePath) {
       resolved.endsWith('.webmanifest') ||
       resolved.endsWith('sw.js') ||
       ext === '.js' ||
+      ext === '.mjs' ||
       ext === '.css';
     const cache = alwaysFresh ? 'no-cache' : 'public, max-age=300';
     response.writeHead(200, {
