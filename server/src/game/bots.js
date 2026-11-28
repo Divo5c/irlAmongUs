@@ -68,8 +68,9 @@ function createBotEngine(roomStore, {
     }
 
     let current = room;
-    for (let i = 0; i < wanted; i += 1) {
-      const index = existingBots + i + 1;
+    let index = existingBots + 1;
+    for (let i = 0; i < wanted; i += 1, index += 1) {
+      while (roomStore.isPlayerNameTaken(current, `Bot ${index}`)) index += 1;
       current = roomStore.addPlayerToRoom(code, {
         id: `bot-${code.toLowerCase()}-${index}-${Math.random()
           .toString(36)

@@ -227,6 +227,40 @@ after(async () => {
 });
 
 describe('socket flow security & gameplay', () => {
+  test('duplicate join on one socket is idempotent and explicit leave frees the device', async (t) => {
+    const host = await connectClient();
+    const guest = await connectClient();
+    const freshSocket = await connectClient();
+    t.after(() => [host, guest, freshSocket].forEach((client) => client.disconnect()));
+    const code = randomCode();
+    const deviceId = require('node:crypto').randomUUID();
+    const created = waitForEvent(host, 'room:created');
+    host.emit('room:create', { code, hostId: 'host-1', hostName: 'Host' });
+    await created;
+    const session = waitForEvent(guest, 'session:created');
+    const joined = waitForRoomWhere(host, (room) => room.players.length === 2);
+    guest.emit('room:join', { code, playerId: 'guest', playerName: 'Diraj', deviceId });
+    guest.emit('room:join', { code, playerId: 'duplicate', playerName: 'Duplicate', deviceId });
+    const credentials = await session;
+    assert.equal(credentials.canTriggerSabotage, true);
+    assert.ok(!JSON.stringify(await joined).includes(deviceId));
+    assert.ok(!Object.hasOwn(credentials, 'deviceId'));
+    const rejected = waitForEvent(freshSocket, 'room:error');
+    freshSocket.emit('room:join', { code, playerId: 'fresh', playerName: 'Fresh', deviceId });
+    assert.equal((await rejected).code, 'DEVICE_ALREADY_JOINED');
+    assert.equal(roomStore.getRoom(code).players.length, 2);
+
+    const rejoined = waitForEvent(freshSocket, 'room:rejoined');
+    freshSocket.emit('room:rejoin', { code, playerId: 'guest', token: credentials.token });
+    assert.ok(!JSON.stringify(await rejoined).includes(deviceId));
+    assert.deepEqual(await freshSocket.timeout(2000).emitWithAck('room:leave', { code }), { ok: true });
+
+    const returned = waitForEvent(freshSocket, 'session:created');
+    freshSocket.emit('room:join', { code, playerId: 'fresh', playerName: 'Fresh', deviceId });
+    assert.equal((await returned).playerId, 'fresh');
+    assert.equal(roomStore.getRoom(code).players.length, 2);
+  });
+
   test('admin trigger broadcasts a normal sabotage and nearby players can open its panel', async (t) => {
     const host = await connectClient();
     const guest = await connectClient();

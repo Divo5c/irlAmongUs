@@ -158,6 +158,40 @@ describe('RoomStore.createRoom', () => {
 });
 
 describe('lobby membership', () => {
+  test('normalized names are unique, including bots, and Diraj remains admin', () => {
+    const store = new RoomStore();
+    store.createRoom({ code: 'ABC234', hostId: 'host', hostName: '  Ｄｉｒａｊ  ' });
+    assert.equal(store.isAdminPlayer('ABC234', 'host'), true);
+    assertGameError(() => store.addPlayerToRoom('ABC234', { id: 'copy', name: 'DIRAJ' }), 'NAME_TAKEN');
+    store.addPlayerToRoom('ABC234', { id: 'bot', name: 'Böt One', isBot: true });
+    assertGameError(() => store.addPlayerToRoom('ABC234', { id: 'copy', name: '  BÖT   ONE  ' }), 'NAME_TAKEN');
+    const room = store.addPlayerToRoom('ABC234', { id: 'new', name: 'Other' });
+    assert.equal(room.players.length, 3);
+  });
+
+  test('optional device identity stays private and is freed on removal or room deletion', () => {
+    const store = new RoomStore();
+    const device = require('node:crypto').randomUUID();
+    const other = require('node:crypto').randomUUID();
+    const code = 'ABC234';
+    store.createRoom({ code, hostId: 'host', deviceId: device });
+    assertGameError(() => store.addPlayerToRoom(code, { id: 'copy', name: 'Copy', deviceId: device.toUpperCase() }),
+      'DEVICE_ALREADY_JOINED');
+    assertGameError(() => store.addPlayerToRoom(code, { id: 'bad', name: 'Bad', deviceId: 'wrong' }), 'INVALID_DEVICE_ID');
+    const room = store.addPlayerToRoom(code, { id: 'guest', name: 'Guest', deviceId: other });
+    const token = store.issueToken(code, 'guest');
+    assert.equal(store.verifyToken(code, 'guest', token), true);
+    assert.ok(!JSON.stringify(store.toPublicRoom(room)).includes(other));
+    assert.ok(!Object.hasOwn(room.players[1], 'deviceId'));
+    store.removePlayer(code, 'guest');
+    store.addPlayerToRoom(code, { id: 'again', name: 'Guest', deviceId: other });
+    store.removePlayer(code, 'again');
+    store.removePlayer(code, 'host');
+    assert.equal(store.getRoom(code), null);
+    store.createRoom({ code, hostId: 'next', deviceId: device });
+    assert.equal(store.addPlayerToRoom(code, { id: 'legacy', name: 'Guest' }).players.length, 2);
+  });
+
   test('removing a regular player keeps the room intact', () => {
     const store = new RoomStore();
     createRoomWithPlayers(store, 3);

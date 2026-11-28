@@ -75,6 +75,11 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
 
     socket.on('room:create', (payload) => {
       try {
+        const attached = attachedRoom(socket);
+        if (attached) {
+          if (attached.hostId === socket.data.playerId && (!payload?.code || payload.code === attached.code)) return;
+          throw new RoomStoreError('DEVICE_ALREADY_JOINED', 'This connection is already in a room.');
+        }
         if (hostAccess && !hostAccess.allowed(socket.request)) {
           throw new RoomStoreError('HOST_DEVICE_REQUIRED', 'Only an approved device can create rooms.');
         }
@@ -89,10 +94,14 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
 
     socket.on('room:join', (payload) => {
       try {
-        const { code, playerId, playerName } = payload ?? {};
+        const { code, playerId, playerName, deviceId } = payload ?? {};
+        const attached = attachedRoom(socket);
+        if (attached && attached.code === code) return;
+        if (attached) throw new RoomStoreError('DEVICE_ALREADY_JOINED', 'This connection is already in a room.');
         const room = roomStore.addPlayerToRoom(code, {
           id: playerId,
           name: playerName,
+          deviceId,
         });
         bindSocketToPlayer(socket, code, playerId, payload?.sabotagePanels);
         io.to(code).emit('room:updated', roomStore.toPublicRoom(room));
@@ -100,6 +109,16 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
       } catch (error) {
         emitRoomError(socket, error);
       }
+    });
+
+    socket.on('room:leave', (payload, reply) => {
+      const { code } = payload ?? {};
+      if (typeof code !== 'string' || code !== socket.data.roomCode) return;
+      handleDisconnect(socket, true);
+      socket.leave(code);
+      socket.data.roomCode = null;
+      socket.data.playerId = null;
+      if (typeof reply === 'function') reply({ ok: true });
     });
 
     /**
@@ -852,7 +871,12 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
     }
   }
 
-  function handleDisconnect(socket) {
+  function attachedRoom(socket) {
+    const room = roomStore.getRoom(socket.data.roomCode);
+    return room?.players.some(({ id }) => id === socket.data.playerId) ? room : null;
+  }
+
+  function handleDisconnect(socket, explicit = false) {
     const { roomCode, playerId } = socket.data;
     if (!roomCode || !playerId) {
       return; // never bound to a room
@@ -871,7 +895,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
       ['IN_GAME', 'MEETING', 'GAME_OVER'].includes(room.status)
     ) return;
 
-    const timer = setTimeout(() => {
+    const remove = () => {
       pendingDisconnects.delete(key);
       if (primarySockets.has(key) || !roomStore.getRoom(roomCode)) return;
 
@@ -882,7 +906,12 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
       } else if (outcome.removed && outcome.room) {
         io.to(roomCode).emit('room:updated', outcome.room);
       }
-    }, disconnectGraceMs);
+    };
+    if (explicit) {
+      remove();
+      return;
+    }
+    const timer = setTimeout(remove, disconnectGraceMs);
     timer.unref();
     pendingDisconnects.set(key, timer);
   }

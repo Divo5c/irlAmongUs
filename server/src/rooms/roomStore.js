@@ -122,6 +122,7 @@ const SOFT_SABOTAGE_COOLDOWN_MS = 60_000;
  * Pure game rules live in ../game/* (config, taskCatalog, victory).
  */
 class RoomStore {
+  #devicesByRoom = new WeakMap();
   #roomsByCode = new Map();
 
   /** Session tokens per room/player. Never included in any projection. */
@@ -177,7 +178,8 @@ class RoomStore {
     this.#baseConfig = sanitizeGameConfig(config ?? {});
   }
 
-  createRoom({ code, hostId, hostName = 'Host', config } = {}) {
+  createRoom({ code, hostId, hostName = 'Host', config, deviceId } = {}) {
+    assertDeviceId(deviceId);
     // Room codes come from the SERVER when the client offers none: no
     // collision UX, and a spoofer cannot pick "his" future codes.
     let roomCode = code;
@@ -228,6 +230,7 @@ class RoomStore {
     };
 
     this.#roomsByCode.set(roomCode, room);
+    if (deviceId !== undefined) this.#devicesByRoom.set(room, new Map([[deviceId.toLowerCase(), hostId]]));
     return room;
   }
 
@@ -270,6 +273,8 @@ class RoomStore {
   }
 
   #deleteRoom(code) {
+    const room = this.getRoom(code);
+    if (room) this.#devicesByRoom.delete(room);
     this.#roomsByCode.delete(code);
     this.#positions.delete(code);
     this.#authTokens.delete(code);
@@ -422,6 +427,14 @@ class RoomStore {
 
   addPlayerToRoom(code, player) {
     const room = this.getRequiredRoom(code);
+    const { deviceId: providedDevice, ...playerFields } = player ?? {};
+    const deviceId = playerFields.isBot === true ? undefined : providedDevice;
+    assertDeviceId(deviceId);
+    const deviceKey = deviceId?.toLowerCase();
+    const devices = this.#devicesByRoom.get(room);
+    if (deviceKey && devices?.has(deviceKey)) {
+      throw new GameError('DEVICE_ALREADY_JOINED', 'This device has already joined this room.');
+    }
 
     if (room.players.length >= MAX_PLAYERS) {
       throw new GameError(
@@ -442,8 +455,8 @@ class RoomStore {
     }
 
     const playerWithDefaults = {
-      ...player,
-      role: player?.role ?? ROLE_CREWMATE,
+      ...playerFields,
+      role: playerFields.role ?? ROLE_CREWMATE,
     };
 
     if (!isValidPlayer(playerWithDefaults)) {
@@ -454,14 +467,24 @@ class RoomStore {
       throw new GameError('PLAYER_EXISTS', 'A player with this ID has already joined.');
     }
 
+    const name = sanitizeDisplayName(playerWithDefaults.name);
+    if (this.isPlayerNameTaken(room, name)) {
+      throw new GameError('NAME_TAKEN', 'This name is already in use in the room.');
+    }
+
     room.players.push({
       ...playerWithDefaults,
-      name: sanitizeDisplayName(playerWithDefaults.name),
+      name,
       isAlive: true,
       isHost: false,
       colorId: pickFreeColor(room.players) ?? 'gray',
       joinedAt: new Date().toISOString(),
     });
+    if (deviceKey) {
+      const roomDevices = devices ?? new Map();
+      roomDevices.set(deviceKey, playerWithDefaults.id);
+      this.#devicesByRoom.set(room, roomDevices);
+    }
     room.updatedAt = new Date().toISOString();
     return room;
   }
@@ -510,6 +533,11 @@ class RoomStore {
    * the last player leaves, the room is deleted entirely. During an ongoing
    * game players always persist so that win conditions stay stable.
    */
+  isPlayerNameTaken(room, name) {
+    const key = playerNameKey(sanitizeDisplayName(name));
+    return room.players.some((player) => playerNameKey(player.name) === key);
+  }
+
   removePlayer(code, playerId) {
     const room = this.getRoom(code);
 
@@ -529,6 +557,10 @@ class RoomStore {
     const wasHost = room.players[index].isHost;
     room.players.splice(index, 1);
     this.#authTokens.get(code)?.delete(playerId);
+    const devices = this.#devicesByRoom.get(room);
+    for (const [device, id] of devices ?? []) {
+      if (id === playerId) devices.delete(device);
+    }
 
     if (room.players.length === 0) {
       this.#deleteRoom(code);
@@ -2324,8 +2356,20 @@ function sanitizeDisplayName(raw) {
   const value = typeof raw === 'string' ? raw : '';
   const cleaned = value.normalize('NFKC')
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, '')
+    .replace(/\s+/gu, ' ')
     .trim();
-  return cleaned.slice(0, MAX_NAME_LEN) || 'Spieler';
+  return cleaned.slice(0, MAX_NAME_LEN).trimEnd() || 'Spieler';
+}
+
+function playerNameKey(name) {
+  return name.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLowerCase();
+}
+
+function assertDeviceId(deviceId) {
+  if (deviceId !== undefined && (typeof deviceId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId))) {
+    throw new GameError('INVALID_DEVICE_ID', 'Invalid device identifier.');
+  }
 }
 
 function isValidPlayer(player) {
