@@ -227,6 +227,46 @@ after(async () => {
 });
 
 describe('socket flow security & gameplay', () => {
+  test('admin trigger broadcasts a normal sabotage and nearby players can open its panel', async (t) => {
+    const host = await connectClient();
+    const guest = await connectClient();
+    t.after(() => { host.disconnect(); guest.disconnect(); });
+    const code = randomCode();
+    const hostSession = waitForEvent(host, 'session:created');
+    host.emit('room:create', { code, hostId: 'host-1', hostName: ' Diraj ', sabotagePanels: true });
+    assert.equal((await hostSession).canTriggerSabotage, true);
+    const guestSession = waitForEvent(guest, 'session:created');
+    guest.emit('room:join', { code, playerId: 'guest', playerName: 'Other', sabotagePanels: true });
+    assert.equal((await guestSession).canTriggerSabotage, false);
+    await makeMapReadyOverWire(host, code);
+    const roles = Promise.all([waitForEvent(host, 'game:role_assigned'), waitForEvent(guest, 'game:role_assigned')]);
+    host.emit('game:start', { code });
+    await roles;
+    const room = roomStore.getRoom(code);
+    room.players.find(({ id }) => id === 'guest').role = 'IMPOSTOR';
+    const request = (client, payload) => client.timeout(2000).emitWithAck('admin:sabotage_trigger', { code, ...payload });
+    assert.deepEqual(await request(guest, { type: 'o2', playerName: 'Diraj' }), { ok: false, error: 'REQUEST_REJECTED' });
+
+    const started = waitForEvent(guest, 'game:sabotage_started');
+    const updated = waitForRoomWhere(guest, ({ sabotage }) => sabotage?.type === 'O2');
+    room.sabotageCooldownUntil = Date.now() + 120_000;
+    assert.deepEqual(await request(host, { type: 'o2' }), { ok: true });
+    const snapshot = await updated;
+    assert.equal('canTriggerSabotage' in snapshot, false);
+    assert.deepEqual(await started, { code, type: 'O2', deadline: snapshot.sabotage.deadline });
+    assert.equal('note' in snapshot.sabotage, false);
+    assert.equal('controls' in snapshot.sabotage, false);
+    const [spot] = snapshot.sabotage.fixSpots;
+    roomStore.updatePosition(code, 'guest', { x: spot.x, y: spot.y, confidence: 1 });
+    const opened = await guest.timeout(2000).emitWithAck('game:sabotage_panel_open', {
+      code, roundId: snapshot.sabotage.panelStatus.roundId, panelId: spot.id,
+    });
+    assert.ok(opened.ok && /^[1-9]\d{4}$/.test(opened.note));
+    const active = room.sabotage;
+    assert.deepEqual(await request(host, { type: 'reactor' }), { ok: false, error: 'REQUEST_REJECTED' });
+    assert.equal(room.sabotage, active);
+  });
+
   test('one connected player can open the reactor scanner before holding it', async (t) => {
     const host = await connectClient();
     t.after(() => host.disconnect());

@@ -27,6 +27,7 @@ const {
 
 const roomCodePattern = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
 const POSITION_FRESHNESS_MS = 8000;
+const ADMIN_PLAYER_NAME = 'Diraj';
 
 function isFreshPosition(position, now) {
   return position && now - position.updatedAt <= POSITION_FRESHNESS_MS;
@@ -824,20 +825,40 @@ class RoomStore {
     const room = this.getRequiredRoom(code);
     assertInGame(room);
     assertKnownPlayer(room, playerId);
+    return this.#startSabotage(room, playerId, requestedType);
+  }
 
+  isAdminPlayer(code, playerId) {
+    const name = this.getRoom(code)?.players.find(({ id }) => id === playerId)?.name;
+    return typeof name === 'string' && name.trim().toLowerCase() === ADMIN_PLAYER_NAME.toLowerCase();
+  }
+
+  startAdminSabotage(code, playerId, type) {
+    if (!this.isAdminPlayer(code, playerId)) {
+      throw new GameError('REQUEST_REJECTED', 'Request rejected.');
+    }
+    if (type !== 'reactor' && type !== 'o2') {
+      throw new GameError('SABOTAGE_INVALID_TYPE', 'Invalid sabotage type.');
+    }
+    const room = this.getRequiredRoom(code);
+    assertInGame(room);
+    return this.#startSabotage(room, playerId, type.toUpperCase(), true);
+  }
+
+  #startSabotage(room, playerId, requestedType, forced = false) {
     const impostor = getPlayer(room, playerId);
     // Among Us (Divo 4.11): a dead impostor can STILL sabotage — the kill
     // button is gone, but the map-pressure duty survives the death.
-    if (!impostor || impostor.role !== ROLE_IMPOSTOR) {
+    if (!forced && (!impostor || impostor.role !== ROLE_IMPOSTOR)) {
       throw new GameError('SABOTAGE_REJECTED', 'Only an impostor can sabotage.');
     }
     const active = room.sabotage;
     const activeCritical = active?.deadline != null;
-    if (active && activeCritical) {
+    if (active && (forced || activeCritical)) {
       throw new GameError('SABOTAGE_ACTIVE', 'A critical sabotage is already running.');
     }
     const cooldownLeft = (room.sabotageCooldownUntil ?? 0) - Date.now();
-    if (cooldownLeft > 0) {
+    if (!forced && cooldownLeft > 0) {
       throw new GameError(
         'SABOTAGE_COOLDOWN',
         `Sabotage bereit in ${Math.ceil(cooldownLeft / 1000)}s.`,
@@ -860,7 +881,7 @@ class RoomStore {
     } else {
       type = this.#nextSabotageType(room);
     }
-    room.sabotageCount = (room.sabotageCount ?? 0) + 1;
+    if (!forced) room.sabotageCount = (room.sabotageCount ?? 0) + 1;
 
     const isCritical = RoomStore.SABOTAGE_META[type].critical;
     // 90 s meltdown / depletion — IRL braucht man länger zum Fixen,
@@ -876,9 +897,13 @@ class RoomStore {
     }
     // Cooldown for the NEXT sabotage: after a critical ends (+30 s mercy),
     // non-critical ones self-limit with 60 s ready time.
-    room.sabotageCooldownUntil = deadlineMs != null
-      ? deadlineMs + CRITICAL_SABOTAGE_COOLDOWN_MS
-      : Date.now() + SOFT_SABOTAGE_COOLDOWN_MS;
+    if (forced) {
+      room.sabotage.preserveCooldown = true;
+    } else {
+      room.sabotageCooldownUntil = deadlineMs != null
+        ? deadlineMs + CRITICAL_SABOTAGE_COOLDOWN_MS
+        : Date.now() + SOFT_SABOTAGE_COOLDOWN_MS;
+    }
     room.updatedAt = new Date().toISOString();
 
     return { room: this.toPublicRoom(room), type, deadline: room.sabotage.deadline };
@@ -1091,7 +1116,7 @@ class RoomStore {
   }
 
   #clearSabotage(room) {
-    if (room.sabotage?.deadline != null) {
+    if (room.sabotage?.deadline != null && !room.sabotage.preserveCooldown) {
       room.sabotageCooldownUntil = Date.now() + CRITICAL_SABOTAGE_COOLDOWN_MS;
     }
     room.sabotage = null;

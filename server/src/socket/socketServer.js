@@ -6,6 +6,7 @@ const { createBotEngine } = require('../game/bots');
 const DISCONNECT_GRACE_MS = 30_000;
 const SABOTAGE_SWEEP_INTERVAL_MS = 5_000;
 const REACTOR_PANEL_TICK_MS = 100;
+const ADMIN_SABOTAGE_INTERVAL_MS = 500;
 const PANEL_HEARTBEAT_MIN_INTERVAL_MS = 120;
 const PANEL_SUBMIT_MIN_INTERVAL_MS = 250;
 
@@ -125,7 +126,8 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
         bindSocketToPlayer(socket, code, playerId, payload?.sabotagePanels);
 
         const publicRoom = roomStore.toPublicRoom(room);
-        socket.emit('room:rejoined', { ...publicRoom, playerId });
+        socket.emit('room:rejoined', { ...publicRoom, playerId,
+          canTriggerSabotage: roomStore.isAdminPlayer(code, playerId) });
         socket.emit('room:updated', publicRoom);
 
         if (room.status === 'IN_GAME' || room.status === 'MEETING') {
@@ -439,15 +441,29 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
           payload?.type ?? null,
         );
 
-        io.to(code).emit('room:updated', result.room);
-        io.to(code).emit('game:sabotage_started', {
-          code,
-          type: result.type,
-          deadline: result.deadline,
-        });
-        armSabotageDeadlineTimer(code, io);
+        broadcastSabotageStart(code, result);
       } catch (error) {
         emitRoomError(socket, error);
+      }
+    });
+
+    socket.on('admin:sabotage_trigger', (payload, reply) => {
+      const ack = typeof reply === 'function' ? reply : () => {};
+      try {
+        const { code, type } = payload ?? {};
+        assertSocketInRoom(socket, code);
+        const now = Date.now();
+        if (now - (socket.data.lastAdminSabotageRequest ?? -Infinity) < ADMIN_SABOTAGE_INTERVAL_MS) {
+          return ack({ ok: false, error: 'REQUEST_REJECTED' });
+        }
+        socket.data.lastAdminSabotageRequest = now;
+        const result = roomStore.startAdminSabotage(code, socket.data.playerId, type);
+        broadcastSabotageStart(code, result);
+        ack({ ok: true });
+      } catch (error) {
+        const publicErrors = ['NOT_IN_GAME', 'SABOTAGE_ACTIVE', 'SABOTAGE_UNAVAILABLE', 'SABOTAGE_INVALID_TYPE'];
+        ack({ ok: false, error: error instanceof RoomStoreError && publicErrors.includes(error.code)
+          ? error.code : 'REQUEST_REJECTED' });
       }
     });
 
@@ -787,6 +803,7 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
 
   function emitSessionCreated(socket, code, playerId) {
     socket.emit('session:created', {
+      canTriggerSabotage: roomStore.isAdminPlayer(code, playerId),
       code,
       playerId,
       token: roomStore.issueToken(code, playerId),
@@ -913,6 +930,12 @@ function createSocketServer(httpServer, roomStore, { disconnectGraceMs = DISCONN
   }
 
   /** Countdown end: not fixed in time -> instant impostor victory. */
+  function broadcastSabotageStart(code, { room, type, deadline }) {
+    io.to(code).emit('room:updated', room);
+    io.to(code).emit('game:sabotage_started', { code, type, deadline });
+    armSabotageDeadlineTimer(code, io);
+  }
+
   function armSabotageDeadlineTimer(code, ioInstance) {
     clearSabotageTimer(code);
     const room = roomStore.getRoom(code);

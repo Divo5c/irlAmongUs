@@ -27,6 +27,83 @@ function setup(type, rooms = criticalRooms()) {
   return { store, room, impostor, crew, place, map };
 }
 
+test('admin access uses the stored name, including case and surrounding spaces', () => {
+  const { store, room, impostor } = setup(null);
+  const player = room.players.find(({ id }) => id === impostor);
+  for (const name of ['diraj', ' Diraj ', 'DIRAJ']) {
+    player.name = name;
+    assert.equal(store.isAdminPlayer(code, player.id), true);
+  }
+  for (const name of ['Diraj2', 'Dira']) {
+    player.name = name;
+    assert.throws(() => store.startAdminSabotage(code, player.id, 'reactor'), { code: 'REQUEST_REJECTED' });
+  }
+});
+
+test('admin starts either sabotage with the normal panel state, ignoring role and cooldown', (t) => {
+  const { store, room, crew, impostor, place } = setup(null);
+  const player = room.players.find(({ id }) => id === crew[0]);
+  player.name = 'Diraj';
+  const now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  for (const [type, role, isAlive] of [['reactor', 'CREWMATE', true], ['o2', 'IMPOSTOR', true], ['o2', 'CREWMATE', false]]) {
+    const normal = store.startSabotage(code, impostor, type.toUpperCase());
+    room.sabotage = null;
+    const cooldown = room.sabotageCooldownUntil;
+    const count = room.sabotageCount;
+    Object.assign(player, { role, isAlive });
+    const forced = store.startAdminSabotage(code, player.id, type);
+    assert.equal(Date.parse(forced.deadline) - now, 90_000);
+    const { roundId, ...panels } = forced.room.sabotage.panelStatus;
+    const { roundId: normalRound, ...normalPanels } = normal.room.sabotage.panelStatus;
+    assert.notEqual(roundId, normalRound);
+    assert.deepEqual(panels, normalPanels);
+    assert.deepEqual(forced.room.sabotage.fixSpots, normal.room.sabotage.fixSpots);
+    assert.equal(room.sabotageCooldownUntil, cooldown);
+    assert.equal(room.sabotageCount, count);
+    const active = room.sabotage;
+    assert.throws(() => store.startAdminSabotage(code, player.id, 'reactor'), { code: 'SABOTAGE_ACTIVE' });
+    assert.equal(room.sabotage, active);
+    if (type === 'o2') {
+      const [first, second] = forced.room.sabotage.fixSpots;
+      const [a, b] = crew.slice(1);
+      place(a, first);
+      place(b, second);
+      const note = store.openSabotagePanel(code, a, roundId, first.id).note;
+      assert.ok(/^[1-9]\d{4}$/.test(note));
+      assert.equal('note' in forced.room.sabotage, false);
+      assert.equal('controls' in forced.room.sabotage, false);
+      store.submitOxygenPanel(code, a, roundId, first.id, note);
+      store.openSabotagePanel(code, b, roundId, second.id);
+      store.submitOxygenPanel(code, b, roundId, second.id, note);
+      assert.equal(room.sabotageCooldownUntil, cooldown);
+    }
+    room.sabotage = null;
+    room.sabotageCooldownUntil = 0;
+  }
+});
+
+test('admin requests still require an active game, compatible map and supported type', () => {
+  const { store, room, impostor } = setup(null);
+  const player = room.players.find(({ id }) => id === impostor);
+  player.name = 'Diraj';
+  for (const phase of ['LOBBY', 'MEETING', 'GAME_OVER']) {
+    room.status = phase;
+    assert.throws(() => store.startAdminSabotage(code, player.id, 'reactor'), { code: 'NOT_IN_GAME' });
+  }
+  room.status = 'IN_GAME';
+  for (const type of [null, 1, {}, 'REACTOR', 'lights']) {
+    assert.throws(() => store.startAdminSabotage(code, player.id, type), { code: 'SABOTAGE_INVALID_TYPE' });
+  }
+  room.sabotage = { type: 'LIGHTS', deadline: null };
+  assert.throws(() => store.startAdminSabotage(code, player.id, 'o2'), { code: 'SABOTAGE_ACTIVE' });
+  room.sabotage = null;
+  room.map = { ...room.map, rooms: room.map.rooms.filter(({ type }) => type !== 'ADMIN' && type !== 'REACTOR') };
+  for (const type of ['reactor', 'o2']) {
+    assert.throws(() => store.startAdminSabotage(code, player.id, type), { code: 'SABOTAGE_UNAVAILABLE' });
+  }
+});
+
 test('deterministic reactor panels sit inside the polygon and small rooms keep their maps', () => {
   const map = { rooms: criticalRooms() };
   const [first, second] = panelLayout(map).REACTOR;
