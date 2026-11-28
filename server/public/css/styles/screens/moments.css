@@ -117,6 +117,24 @@
   background: linear-gradient(180deg, var(--tone-ef4444), var(--tone-b91c1c)); color: var(--tone-fff); font-weight: 800;
   cursor: pointer; box-shadow: 0 var(--size-8px) var(--size-22px) var(--tone-185-28-28-0p4);
   animation: leave-pulse var(--duration-2s) infinite; }
+.gps-help:not([hidden]) {
+  position: fixed;
+  top: max(env(safe-area-inset-top), var(--size-16px));
+  right: var(--size-12px);
+  width: min(calc(100% - 2 * var(--size-12px)), var(--size-360px, 360px));
+  max-height: min(45dvh, 22rem);
+  overflow: auto;
+  z-index: var(--layer-40);
+  background: var(--panel-fill);
+  color: var(--text-primary);
+  border: 1px solid var(--panel-border-dim);
+  border-radius: var(--size-12px);
+  padding: var(--size-12px);
+}
+.gps-help h2, .gps-help p { margin: 0 0 var(--size-8px); }
+.gps-help summary, .gps-help button { min-height: var(--touch-target); }
+.gps-help summary { align-content: center; cursor: pointer; }
+
 /* GPS-Status-Zeile im Spiel: rotes Fix-Banner, nur wenn GPS fehlt */
 .gps-status { position: fixed; top: var(--size-46px); left: var(--size-10px); right: var(--size-10px); z-index: var(--layer-40);
   background: var(--tone-127-29-29-0p94); color: var(--tone-fff); font-weight: 700;

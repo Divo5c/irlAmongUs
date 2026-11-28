@@ -8,6 +8,7 @@ import { langActive, localText, roomErrorText, roomLabel, t, taskStageLabel, tas
 import { createSabotagePanel } from './sabotagePanels.js';
 import { usableReactorPanel } from './reactorZones.mjs';
 import { chooseUseAction } from './useAction.js';
+import { GAME_GPS_STALE_MS, gpsErrorState, gpsPermissionState, requestPosition, validPositionFix } from './gpsPermission.mjs';
 
 const App = (() => {
   const $ = (id) => document.getElementById(id);
@@ -36,6 +37,7 @@ const App = (() => {
   function setLang(lang) {
     browserStorage.setItem('rlaus_lang', lang === 'en' ? 'en' : 'de');
     applyStaticI18n();
+    renderGpsHelp();
     renderAdminSabotage();
     if (state.role) renderRole(state.role);
     if (state.room) renderLobbyPlayers(state.room);
@@ -472,6 +474,7 @@ const App = (() => {
       }
     });
     socket.on('session:created', ({ code, playerId, token, canTriggerSabotage }) => {
+      setJoinPending(null);
       Object.assign(state, { code, playerId, token, canTriggerSabotage });
       renderAdminSabotage();
       state.sessionAttached = true;
@@ -514,6 +517,12 @@ const App = (() => {
       show('lobby');
     });
     socket.on('room:error', ({ code: errorCode, message, details }) => {
+      if (joinIntent?.sent && document.body.dataset.screen === 'home') setJoinPending(null);
+      if (errorCode === 'NAME_TAKEN' || errorCode === 'DEVICE_ALREADY_JOINED') {
+        showNameError(errorCode);
+        $('player-name').focus();
+        return;
+      }
       // Server meldet teils englische Fachtexte — unten deutsche Klartexte.
       logAppError('server', `${errorCode}: ${message ?? ''}`);
       if (errorCode === 'HOST_DEVICE_REQUIRED') {
@@ -1084,41 +1093,194 @@ const App = (() => {
     }
   }
 
-  async function joinRoom({ asHost }) {
-    if (asHost && !state.canHost) return;
-    const name = $('player-name').value.trim() || 'Spieler';
-    state.name = name;
-    state.canTriggerSabotage = false;
+  let joinIntent = null;
+  let joinTimer;
+  let gpsPermission;
+  let gpsRequested = false;
+  let gpsProbePending = false;
+  let gpsHelpFocused = false;
+  let gameGpsSince = 0;
+  let deviceId;
+  const gpsPlatform = /Android/i.test(navigator.userAgent) ? 'android'
+    : /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ? 'ios' : 'desktop';
+
+  function currentGpsPermission() {
+    const permission = gpsPermission?.state;
+    return gpsPermissionState({
+      supported: Boolean(navigator.geolocation), permission, requested: gpsRequested,
+      error: state.gpsError, fix: { coords: state.gpsFix, timestamp: state.gpsFixAt },
+    });
+  }
+
+  function renderGpsHelp() {
+    const inGame = document.body.dataset.screen === 'game' && state.room?.status === 'IN_GAME';
+    if (inGame) gameGpsSince ||= Date.now();
+    else gameGpsSince = 0;
+    const status = currentGpsPermission();
+    const showHelp = status !== 'ready' && Boolean(joinIntent && !joinIntent.sent ||
+      inGame && (status === 'denied' || status === 'unsupported' ||
+        Date.now() - Math.max(state.gpsFixAt ?? 0, gameGpsSince) >= GAME_GPS_STALE_MS));
+    const help = $('gps-help');
+    help.hidden = !showHelp;
+    if (!showHelp) {
+      if (help.contains(document.activeElement)) {
+        if (document.body.dataset.screen === 'home') $('player-name').focus();
+        else if (inGame) $('btn-settings').focus();
+      }
+      gpsHelpFocused = false;
+      return;
+    }
+    const text = t('gps.help.' + status);
+    if ($('gps-help-status').textContent !== text) $('gps-help-status').textContent = text;
+    const platforms = $('gps-platforms');
+    platforms.hidden = status !== 'denied';
+    if (status === 'denied' && help.dataset.status !== status) {
+      for (const guide of platforms.querySelectorAll('details')) guide.open = guide.dataset.platform === gpsPlatform;
+    }
+    help.dataset.status = status;
+    const button = $('btn-gps-check');
+    button.hidden = status === 'unsupported';
+    button.disabled = gpsProbePending;
+    button.textContent = t(status === 'prompt' ? 'gps.help.allow' : 'gps.help.retry');
+    // Focus an explicitly requested pre-join dialog, never interrupt live play.
+    if (joinIntent && !gpsHelpFocused) {
+      gpsHelpFocused = true;
+      $('gps-help-title').focus();
+    }
+  }
+
+  function checkGps({ userGesture = false } = {}) {
+    const status = currentGpsPermission();
+    if (status === 'ready') {
+      submitJoin();
+      renderGpsHelp();
+      return;
+    }
+    if (gpsProbePending || status === 'unsupported' || gpsPermission?.state === 'denied' ||
+        (!userGesture && (status === 'prompt' || (status === 'denied' && !gpsRequested)))) {
+      renderGpsHelp();
+      return;
+    }
+    gpsRequested = true;
+    gpsProbePending = true;
+    state.gpsError = null;
+    renderGpsHelp();
+    requestPosition(navigator.geolocation, (position) => {
+      gpsProbePending = false;
+      if (validPositionFix(position) && gpsPermission?.state !== 'denied') {
+        acceptGpsFix(position);
+        if (state.room) ensureGpsLoop();
+      } else if (gpsPermission?.state !== 'denied') {
+        state.gpsError = 'waiting';
+      }
+      renderGpsHelp();
+    }, (error) => {
+      gpsProbePending = false;
+      state.gpsError = gpsErrorState(error?.code);
+      renderGpsHelp();
+    });
+  }
+
+  let observedGpsPermission;
+
+  function updateGpsPermission() {
+    const permission = gpsPermission.state;
+    if (observedGpsPermission === permission) return;
+    observedGpsPermission = permission;
+    if (permission === 'denied' || permission === 'prompt') {
+      state.gpsError = permission === 'denied' ? 'denied' : null;
+      state.gpsFixAt = 0;
+      state.gpsFallbackFix = null;
+      clearGpsWatchers();
+    } else if (permission === 'granted') {
+      if (state.gpsError === 'denied') state.gpsError = null;
+      if (state.room) ensureGpsLoop();
+    }
+    renderGpsHelp();
+    if (permission === 'granted' && (joinIntent || state.room?.status === 'IN_GAME')) checkGps();
+  }
+
+  async function observeGpsPermission() {
+    try {
+      const result = await navigator.permissions?.query({ name: 'geolocation' });
+      if (!result) return;
+      if (gpsPermission !== result) {
+        gpsPermission?.removeEventListener?.('change', updateGpsPermission);
+        gpsPermission = result;
+        result.addEventListener?.('change', updateGpsPermission);
+      }
+      updateGpsPermission();
+    } catch { /* Browsers without this permission API use geolocation callbacks. */ }
+  }
+
+  async function recheckGpsOnReturn() {
+    if (document.visibilityState === 'hidden') return;
+    if (!joinIntent && state.room?.status !== 'IN_GAME') return;
+    await observeGpsPermission();
+    if (joinIntent || currentGpsPermission() !== 'ready') checkGps();
+  }
+
+  function setJoinPending(intent) {
+    joinIntent = intent;
+    $('btn-host').disabled = $('btn-join').disabled = Boolean(intent);
+    clearTimeout(joinTimer);
+    renderGpsHelp();
+  }
+
+  function showNameError(code) {
+    const text = $('name-error');
+    text.textContent = code ? roomErrorText(code) : '';
+    text.hidden = !code;
+    $('player-name').setAttribute('aria-invalid', String(Boolean(code)));
+    const saved = code === 'DEVICE_ALREADY_JOINED' ? recentSession() : null;
+    $('btn-device-rejoin').hidden = !saved ||
+      saved.code !== $('join-code').value.trim().toUpperCase();
+  }
+
+  function browserDeviceId() {
+    const key = 'rlaus_device';
+    const saved = browserStorage.getItem(key);
+    if (saved && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(saved)) return saved;
+    deviceId ??= window.crypto.randomUUID?.();
+    if (deviceId) browserStorage.setItem(key, deviceId);
+    return deviceId;
+  }
+
+  function submitJoin() {
+    if (!joinIntent || joinIntent.sent || currentGpsPermission() !== 'ready') return;
+    const { asHost, code, name } = joinIntent;
+    joinIntent.sent = true;
+    renderGpsHelp();
+    const socket = ensureSocket();
+    const playerId = uuid();
+    Object.assign(state, { playerId, name, canTriggerSabotage: false });
     renderAdminSabotage();
     browserStorage.setItem('rlaus_name', name);
-    ensureSocket();
+    const common = { deviceId: browserDeviceId(), sabotagePanels: true };
+    if (asHost) socket.emit('room:create', { ...common, hostId: playerId, hostName: name });
+    else socket.emit('room:join', { ...common, code, playerId, playerName: name });
+    joinTimer = setTimeout(() => {
+      if (!joinIntent) return;
+      // Drop an undelivered Socket.IO send buffer before enabling another attempt.
+      socket.disconnect();
+      if (state.socket === socket) state.socket = null;
+      setJoinPending(null);
+      errorHome(t('join.timeout'));
+    }, 12_000);
+  }
 
-    if (asHost) {
-      const playerId = uuid();
-      state.playerId = playerId;
-      state.socket.emit('room:create', {
-        // Der Server vergibt den Code (Kollision + Bunny-Squatting auss).
-        hostId: playerId,
-        hostName: name,
-        sabotagePanels: true,
-      });
-    } else {
-      const code = $('join-code').value.trim().toUpperCase();
-      if (!/^[A-Z2-9]{6}$/.test(code)) {
-        errorHome(localText('Code hat 6 Zeichen (Buchstaben/Zahlen, ohne l/I/O/1).', "Lobby codes use six characters, excluding I, O and 1."));
-        return;
-      }
-      state.playerId = uuid();
-      state.socket.emit('room:join', {
-        code,
-        playerId: state.playerId,
-        playerName: name,
-        sabotagePanels: true,
-      });
+  function joinRoom({ asHost }) {
+    if (joinIntent || (asHost && !state.canHost)) return;
+    const code = $('join-code').value.trim().toUpperCase();
+    if (!asHost && !/^[A-Z2-9]{6}$/.test(code)) {
+      errorHome(localText('Der Lobby-Code muss sechs Zeichen haben.', 'Lobby codes must contain six characters.'));
+      return;
     }
-
-    // The room:updated handler routes to the lobby automatically; nothing
-    // else to do here.
+    $('home-error').classList.add('hidden');
+    showNameError(null);
+    setJoinPending({ asHost, code, name: $('player-name').value.trim() || 'Spieler' });
+    checkGps();
   }
 
   $('player-name').value = browserStorage.getItem('rlaus_name') ?? '';
@@ -1136,13 +1298,24 @@ const App = (() => {
     ensureSocket().emit('game:bot_remove', { code: state.code });
   });
 
-  $('btn-leave').addEventListener('click', () => {
-    browserStorage.removeItem('rlaus_session');
-    state.socket?.disconnect();
-    state.socket = null;
-    state.room = null;
-    show('home');
-  });
+  let leaving = false;
+  function leaveRoom() {
+    if (leaving) return;
+    leaving = true;
+    const socket = state.socket;
+    const finish = () => {
+      browserStorage.removeItem(SESSION_KEY);
+      socket?.disconnect();
+      state.socket = null;
+      Object.assign(state, { room: null, role: null, selfPos: null, posSmooth: null,
+        botPositions: null, canTriggerSabotage: false, sessionAttached: false });
+      leaving = false;
+      show('home');
+    };
+    if (socket?.connected && state.code) socket.timeout(2500).emit('room:leave', { code: state.code }, finish);
+    else finish();
+  }
+  $('btn-leave').addEventListener('click', leaveRoom);
 
   // --------------------------------------------------------------- lobby //
 
@@ -2386,19 +2559,22 @@ const App = (() => {
 
   document.addEventListener('pointerdown', () => attachMotionSensors(), { once: true });
 
-  const GPS_FIX_MAX_AGE_MS = 10000;
+  const GPS_FIX_MAX_AGE_MS = GAME_GPS_STALE_MS;
 
   function isFreshGpsFix(timestamp, now = Date.now()) {
     return timestamp > 0 && now - timestamp <= GPS_FIX_MAX_AGE_MS;
   }
 
   function acceptGpsFix(pos) {
+    gpsRequested = true;
     state.gpsFix = pos.coords;
     state.gpsFixAt = pos.timestamp;
     state.gpsError = null;
     state.gpsAccM = pos.coords.accuracy ?? null;
     state.gpsHeading = (pos.coords.speed ?? 0) > 0.5 && Number.isFinite(pos.coords.heading)
       ? pos.coords.heading : null;
+    if (validPositionFix(pos)) submitJoin();
+    renderGpsHelp();
   }
 
   function useGpsFallback(now = Date.now()) {
@@ -2411,30 +2587,36 @@ const App = (() => {
 
   let gpsWatchIds = [];
   function ensureGpsLoop() {
-    if (!navigator.geolocation || gpsWatchIds.length) return;
+    const permission = currentGpsPermission();
+    if (!navigator.geolocation || gpsWatchIds.length || permission === 'prompt' || permission === 'denied') return;
     attachMotionSensors();
     const preciseWatch = navigator.geolocation.watchPosition((pos) => {
-      if (!isFreshGpsFix(pos.timestamp) || pos.timestamp < (state.gpsFixAt ?? 0)) return;
+      if (!validPositionFix(pos) || pos.timestamp < (state.gpsFixAt ?? 0)) return;
       state.gpsPreciseFixAt = pos.timestamp;
       acceptGpsFix(pos);
     }, (err) => {
       // Kein stillschweigendes Schlucken mehr: der Spieler sieht WARUM
       // sein Marker fehlt (Berechtigung verweigert / kein Fix / Timeout).
-      state.gpsError = err?.code === 1 ? 'denied'
-        : err?.code === 2 ? 'unavailable' : 'waiting';
+      gpsRequested = true;
+      state.gpsError = gpsErrorState(err?.code);
+      renderGpsHelp();
     }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 });
     // Den letzten groben Fix für den Wechsel bereithalten.
     const fallbackWatch = navigator.geolocation.watchPosition((pos) => {
-      if (pos.timestamp <= (state.gpsFallbackFix?.timestamp ?? 0) || !isFreshGpsFix(pos.timestamp)) return;
+      if (pos.timestamp <= (state.gpsFallbackFix?.timestamp ?? 0) || !validPositionFix(pos)) return;
       state.gpsFallbackFix = pos;
       useGpsFallback();
     }, () => {}, { enableHighAccuracy: false, maximumAge: GPS_FIX_MAX_AGE_MS, timeout: 30000 });
     gpsWatchIds = [preciseWatch, fallbackWatch];
   }
 
-  function stopGpsWatchers() {
+  function clearGpsWatchers() {
     for (const id of gpsWatchIds) navigator.geolocation.clearWatch(id);
     gpsWatchIds = [];
+  }
+
+  function stopGpsWatchers() {
+    clearGpsWatchers();
     Object.assign(state, {
       gpsFix: null,
       gpsFixAt: 0,
@@ -2449,6 +2631,7 @@ const App = (() => {
 
   /** GPS-Hinweiszeile im Spiel: nur sichtbar, wenn etwas nicht stimmt. */
   function renderGpsStatus() {
+    renderGpsHelp();
     const el = document.getElementById('gps-status');
     if (!el) return;
     const inGame = state.room?.status === 'IN_GAME';
@@ -3903,15 +4086,7 @@ const App = (() => {
       $('settings-menu').classList.add('hidden');
     } else if (target.id === 'btn-leave-from-menu') {
       $('settings-menu').classList.add('hidden');
-      state.role = null;
-      state.socket?.disconnect();
-      state.socket = null;
-      state.room = null;
-      state.selfPos = null;
-      state.posSmooth = null;
-      state.botPositions = null;
-      browserStorage.removeItem('rlaus_session');
-      show('home');
+      leaveRoom();
     }
   });
   document.addEventListener('change', (event) => {
@@ -4383,7 +4558,11 @@ const App = (() => {
   });
   const nameInput = $('player-name');
   const syncNameCount = () => { $('name-count').textContent = nameInput.value.length + ' / 20'; };
-  nameInput.addEventListener('input', syncNameCount);
+  nameInput.addEventListener('input', () => {
+    syncNameCount();
+    showNameError(null);
+    if (joinIntent && !joinIntent.sent) setJoinPending(null);
+  });
   syncNameCount();
   const codeInput = $('join-code');
   const codeTiles = [...document.querySelectorAll('.code-field__tiles span')];
@@ -4394,7 +4573,11 @@ const App = (() => {
       tile.toggleAttribute('data-next', index === codeInput.value.length);
     });
   }
-  codeInput.addEventListener('input', syncCodeTiles);
+  codeInput.addEventListener('input', () => {
+    syncCodeTiles();
+    showNameError(null);
+    if (joinIntent && !joinIntent.sent) setJoinPending(null);
+  });
   syncCodeTiles();
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
@@ -4410,6 +4593,13 @@ const App = (() => {
   // ------------------------------------------------------------ bootstrap //
 
   void refreshHostAccess();
+  void observeGpsPermission();
+  $('btn-gps-check').addEventListener('click', () => {
+    if (gpsPermission?.state === 'denied') void recheckGpsOnReturn();
+    else checkGps({ userGesture: true });
+  });
+  window.addEventListener('focus', recheckGpsOnReturn);
+  document.addEventListener('visibilitychange', recheckGpsOnReturn);
   window.addEventListener('online', refreshHostAccess);
 
   // Service-Worker for offline install (only on secure origins).
@@ -4440,6 +4630,16 @@ const App = (() => {
     offeredSession = null;
     $('rejoin-overlay').classList.add('hidden');
     if (!(await checkSavedSession(saved)) || state.socket) return;
+    ensureSocket();
+    tryRejoin(saved);
+  });
+  $('btn-device-rejoin').addEventListener('click', async () => {
+    const saved = recentSession();
+    if (!saved || saved.code !== $('join-code').value.trim().toUpperCase()) return;
+    if (!(await checkSavedSession(saved))) {
+      $('btn-device-rejoin').hidden = true;
+      return;
+    }
     ensureSocket();
     tryRejoin(saved);
   });
