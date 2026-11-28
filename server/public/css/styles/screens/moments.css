@@ -101,6 +101,14 @@
   cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .settings-card { max-height: 84dvh; }
 .settings-body { padding: var(--size-16px); display: flex; flex-direction: column; gap: var(--size-12px); }
+.settings-admin:not([hidden]) {
+  display: grid;
+  gap: var(--size-8px);
+  padding-top: var(--size-12px);
+  border-top: var(--size-1px) solid var(--tone-255-255-255-0p14);
+}
+.settings-admin h3, .settings-admin p { margin: 0; }
+.settings-admin button { min-height: var(--touch-target); }
 .settings-toggle { display: flex; align-items: center; gap: var(--size-10px); padding: var(--size-12px);
   background: var(--tone-255-255-255-0p05); border: var(--size-1px) solid var(--tone-255-255-255-0p1);
   border-radius: var(--size-12px); cursor: pointer; }

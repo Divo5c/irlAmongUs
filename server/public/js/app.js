@@ -35,6 +35,7 @@ const App = (() => {
   function setLang(lang) {
     browserStorage.setItem('rlaus_lang', lang === 'en' ? 'en' : 'de');
     applyStaticI18n();
+    renderAdminSabotage();
     if (state.role) renderRole(state.role);
     if (state.room) renderLobbyPlayers(state.room);
     refreshCachedMapButton();
@@ -350,6 +351,7 @@ const App = (() => {
         && state.room?.players?.some(({ id, isAlive }) => id === state.playerId && isAlive);
       if (state.room?.status === 'IN_GAME' && room.status !== 'IN_GAME') closeGameDialogs();
       state.room = room;
+      renderAdminSabotage();
       sabotagePanel.sync(room.sabotage?.panelStatus,
         room.players?.some(({ id, isAlive }) => id === state.playerId && isAlive));
       renderPanelMapWarning();
@@ -467,12 +469,15 @@ const App = (() => {
         syncRoomEditorFromServer(room);
       }
     });
-    socket.on('session:created', ({ code, playerId, token }) => {
-      Object.assign(state, { code, playerId, token });
+    socket.on('session:created', ({ code, playerId, token, canTriggerSabotage }) => {
+      Object.assign(state, { code, playerId, token, canTriggerSabotage });
+      renderAdminSabotage();
       state.sessionAttached = true;
       rememberSession();
     });
     socket.on('room:rejoined', (room) => {
+      state.canTriggerSabotage = room.canTriggerSabotage;
+      renderAdminSabotage();
       state.sessionAttached = true;
       rememberSession();
       if (['LOBBY', 'MAP_SETUP', 'MAP_READY'].includes(room.status)) {
@@ -581,7 +586,10 @@ const App = (() => {
       sabotagePanel.showStatus(status);
       renderSabotage();
     });
-    socket.on('disconnect', sabotagePanel.close);
+    socket.on('disconnect', () => {
+      sabotagePanel.close();
+      renderAdminSabotage();
+    });
     socket.on('game:sabotage_fixed', () => {
       renderSabotage();
       showToast(langActive() === 'en' ? 'Sabotage repaired' : 'Sabotage repariert');
@@ -1078,6 +1086,8 @@ const App = (() => {
     if (asHost && !state.canHost) return;
     const name = $('player-name').value.trim() || 'Spieler';
     state.name = name;
+    state.canTriggerSabotage = false;
+    renderAdminSabotage();
     browserStorage.setItem('rlaus_name', name);
     ensureSocket();
 
@@ -3830,6 +3840,43 @@ const App = (() => {
     openCal2();
   });
 
+  function adminSabotageBlockReason(type) {
+    if (!state.socket?.connected) return 'settings.adminDisconnected';
+    if (state.room?.status !== 'IN_GAME') return 'settings.adminRound';
+    if (state.room.sabotage) return 'settings.adminActive';
+    if (state.room.sabotageTypes?.includes(type.toUpperCase())) return null;
+    const roomTypes = state.room.map?.rooms?.map((room) => room.type) ?? [];
+    if (type === 'reactor' && roomTypes.includes('REACTOR')) return 'panel.reactorSmall';
+    if (type === 'o2' && roomTypes.includes('O2') && roomTypes.includes('ADMIN')) return 'panel.oxygenSmall';
+    return 'settings.adminUnavailable';
+  }
+
+  function renderAdminSabotage() {
+    const section = $('settings-admin');
+    section.hidden = state.canTriggerSabotage !== true;
+    if (section.hidden) return;
+    for (const type of ['reactor', 'o2']) {
+      const reason = adminSabotageBlockReason(type);
+      $(`btn-admin-${type}`).disabled = reason !== null;
+      const hint = $(`admin-${type}-reason`);
+      hint.hidden = reason === null;
+      hint.textContent = reason ? t(reason) : '';
+    }
+  }
+
+  for (const type of ['reactor', 'o2']) {
+    $(`btn-admin-${type}`).addEventListener('click', () => {
+      if (!state.canTriggerSabotage || adminSabotageBlockReason(type)) return;
+      const socket = state.socket;
+      socket.timeout(2500).emit('admin:sabotage_trigger', { code: state.code, type }, (error, reply) => {
+        if (state.socket !== socket || (!error && reply?.ok)) return;
+        const reason = adminSabotageBlockReason(type);
+        showToast(t(reason ?? 'settings.adminRejected'));
+        renderAdminSabotage();
+      });
+    });
+  }
+
   // EinstellungsMenü: DELEGATION auf Dokumentebene, damit der Zahnrad-
   // Button in keinem Fall verdeckt/blockiert sein kann (IRL-Bugfix).
   document.addEventListener('click', (event) => {
@@ -3847,6 +3894,7 @@ const App = (() => {
       $('opt-lang').value = langActive();
       refreshAnchorUi();
       showErrorLogUi();
+      renderAdminSabotage();
       $('settings-menu').classList.remove('hidden');
     } else if (target.id === 'btn-settings-close') {
       $('settings-menu').classList.add('hidden');
